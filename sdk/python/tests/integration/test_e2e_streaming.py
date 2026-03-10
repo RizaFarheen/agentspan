@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """E2E streaming tests — validate complete SSE event streams for all agent categories.
 
 These tests require a running Conductor server with LLM and streaming support.

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Semantic memory — long-term memory with similarity-based retrieval.
 
 Provides cross-session memory for agents, enabling them to recall

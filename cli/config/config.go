@@ -1,3 +1,6 @@
+// Copyright (c) 2025 AgentSpan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
 package config
 
 import (
@@ -7,8 +10,8 @@ import (
 )
 
 type Config struct {
-	ServerURL string `json:"server_url"`
-	AuthKey   string `json:"auth_key,omitempty"`
+	ServerURL  string `json:"server_url"`
+	AuthKey    string `json:"auth_key,omitempty"`
 	AuthSecret string `json:"auth_secret,omitempty"`
 }
 
@@ -18,13 +21,13 @@ func DefaultConfig() *Config {
 	}
 }
 
-func configDir() string {
+func ConfigDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".openagent")
+	return filepath.Join(home, ".agentspan")
 }
 
 func configPath() string {
-	return filepath.Join(configDir(), "config.json")
+	return filepath.Join(ConfigDir(), "config.json")
 }
 
 func Load() *Config {
@@ -63,7 +66,7 @@ func Load() *Config {
 }
 
 func Save(cfg *Config) error {
-	dir := configDir()
+	dir := ConfigDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}

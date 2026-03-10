@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Data Security Pipeline — controlled data flow with redaction.
 
 Demonstrates a sequential pipeline with data flow control where

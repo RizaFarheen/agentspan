@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Tier 1: Unit tests for SSE parsing — _parse_sse() and _sse_to_agent_event().
 
 Tests the static methods on AgentRuntime that parse SSE wire format

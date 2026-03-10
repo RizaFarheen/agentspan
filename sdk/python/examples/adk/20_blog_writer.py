@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Blog Writer — Sequential pipeline for content creation.
 
 Mirrors the blog-writer ADK sample. Sub-agents with output_key collaborate

@@ -1,3 +1,6 @@
+// Copyright (c) 2025 AgentSpan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
 package cmd
 
 import (
@@ -5,8 +8,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/agentspan/agentspan/cli/client"
 	"github.com/fatih/color"
-	"github.com/openagent/cli/client"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -72,15 +75,15 @@ func printSSEEvent(evt client.SSEEvent) {
 		color.New(color.FgCyan).Printf("  [tool] %s(%s)\n", dataStr(data, "toolName"), truncate(dataStr(data, "input"), 100))
 	case "tool_result":
 		result := truncate(dataStr(data, "result"), 200)
-		color.New(color.FgCyan).Printf("  [result] %s → %s\n", dataStr(data, "toolName"), result)
+		color.New(color.FgCyan).Printf("  [result] %s -> %s\n", dataStr(data, "toolName"), result)
 	case "handoff":
-		color.New(color.FgYellow).Printf("  [handoff] → %s\n", dataStr(data, "agentName"))
+		color.New(color.FgYellow).Printf("  [handoff] -> %s\n", dataStr(data, "agentName"))
 	case "waiting":
 		color.New(color.FgYellow, color.Bold).Printf("  [waiting] Human input required (workflow: %s)\n", dataStr(data, "workflowId"))
 	case "guardrail_pass":
-		color.New(color.FgGreen).Printf("  [guardrail] ✓ %s\n", dataStr(data, "guardrailName"))
+		color.New(color.FgGreen).Printf("  [guardrail] PASS %s\n", dataStr(data, "guardrailName"))
 	case "guardrail_fail":
-		color.New(color.FgRed).Printf("  [guardrail] ✗ %s: %s\n", dataStr(data, "guardrailName"), dataStr(data, "reason"))
+		color.New(color.FgRed).Printf("  [guardrail] FAIL %s: %s\n", dataStr(data, "guardrailName"), dataStr(data, "reason"))
 	case "error":
 		color.New(color.FgRed, color.Bold).Printf("  [error] %s\n", dataStr(data, "message"))
 	case "done":

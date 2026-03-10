@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Agent Introductions — agents introduce themselves before a discussion.
 
 Demonstrates the ``introduction`` parameter on Agent, which adds a

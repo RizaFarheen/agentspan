@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Simple agent guardrails — output validation without tools.
 
 Demonstrates guardrails on a **simple agent** (no tools, no sub-agents).

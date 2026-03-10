@@ -1,3 +1,6 @@
+// Copyright (c) 2025 AgentSpan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
 package client
 
 import (
@@ -7,10 +10,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/openagent/cli/config"
+	"github.com/agentspan/agentspan/cli/config"
 )
 
 type Client struct {
@@ -77,7 +81,7 @@ func (c *Client) HealthCheck() error {
 
 // StartRequest is the payload for starting an agent
 type StartRequest struct {
-	AgentConfig map[string]interface{} `json:"agentConfig"`
+	AgentConfig map[string]interface{} `json:"agentConfig,omitempty"`
 	Prompt      string                 `json:"prompt"`
 	SessionID   string                 `json:"sessionId,omitempty"`
 }
@@ -117,7 +121,146 @@ func (c *Client) Compile(agentConfig map[string]interface{}) (map[string]interfa
 	return result, nil
 }
 
-// Status gets the workflow execution status
+// AgentSummary represents a registered agent
+type AgentSummary struct {
+	Name        string   `json:"name"`
+	Version     int      `json:"version"`
+	Type        string   `json:"type"`
+	Tags        []string `json:"tags"`
+	CreateTime  *int64   `json:"createTime"`
+	UpdateTime  *int64   `json:"updateTime"`
+	Description string   `json:"description"`
+	Checksum    string   `json:"checksum"`
+}
+
+// ListAgents returns all registered agents
+func (c *Client) ListAgents() ([]AgentSummary, error) {
+	resp, err := c.doRequest("GET", "/api/agent/list", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result []AgentSummary
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return result, nil
+}
+
+// GetAgent returns the workflow definition for a named agent
+func (c *Client) GetAgent(name string, version *int) (map[string]interface{}, error) {
+	path := "/api/agent/get/" + url.PathEscape(name)
+	if version != nil {
+		path += fmt.Sprintf("?version=%d", *version)
+	}
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return result, nil
+}
+
+// DeleteAgent removes an agent workflow definition
+func (c *Client) DeleteAgent(name string, version *int) error {
+	path := "/api/agent/delete/" + url.PathEscape(name)
+	if version != nil {
+		path += fmt.Sprintf("?version=%d", *version)
+	}
+	resp, err := c.doRequest("DELETE", path, nil)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+// ExecutionSearchResult from the search endpoint
+type ExecutionSearchResult struct {
+	TotalHits int64                   `json:"totalHits"`
+	Results   []AgentExecutionSummary `json:"results"`
+}
+
+// AgentExecutionSummary represents one execution in search results
+type AgentExecutionSummary struct {
+	WorkflowID    string `json:"workflowId"`
+	AgentName     string `json:"agentName"`
+	Version       int    `json:"version"`
+	Status        string `json:"status"`
+	StartTime     string `json:"startTime"`
+	EndTime       string `json:"endTime"`
+	UpdateTime    string `json:"updateTime"`
+	ExecutionTime int64  `json:"executionTime"`
+	Input         string `json:"input"`
+	Output        string `json:"output"`
+	CreatedBy     string `json:"createdBy"`
+}
+
+// SearchExecutions searches agent executions with optional filters
+func (c *Client) SearchExecutions(start, size int, agentName, status, freeText string) (*ExecutionSearchResult, error) {
+	params := url.Values{}
+	params.Set("start", fmt.Sprintf("%d", start))
+	params.Set("size", fmt.Sprintf("%d", size))
+	params.Set("sort", "startTime:DESC")
+	if agentName != "" {
+		params.Set("agentName", agentName)
+	}
+	if status != "" {
+		params.Set("status", status)
+	}
+	if freeText != "" {
+		params.Set("freeText", freeText)
+	}
+	resp, err := c.doRequest("GET", "/api/agent/executions?"+params.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result ExecutionSearchResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
+// ExecutionDetail represents detailed execution status
+type ExecutionDetail struct {
+	WorkflowID  string                 `json:"workflowId"`
+	AgentName   string                 `json:"agentName"`
+	Version     int                    `json:"version"`
+	Status      string                 `json:"status"`
+	Input       map[string]interface{} `json:"input"`
+	Output      map[string]interface{} `json:"output"`
+	CurrentTask *CurrentTask           `json:"currentTask"`
+}
+
+type CurrentTask struct {
+	TaskRefName string                 `json:"taskRefName"`
+	TaskType    string                 `json:"taskType"`
+	Status      string                 `json:"status"`
+	InputData   map[string]interface{} `json:"inputData"`
+	OutputData  map[string]interface{} `json:"outputData"`
+}
+
+// GetExecutionDetail returns detailed status for an execution
+func (c *Client) GetExecutionDetail(executionId string) (*ExecutionDetail, error) {
+	resp, err := c.doRequest("GET", "/api/agent/executions/"+url.PathEscape(executionId), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result ExecutionDetail
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	return &result, nil
+}
+
+// Status gets the workflow execution status (legacy endpoint)
 func (c *Client) Status(workflowID string) (map[string]interface{}, error) {
 	resp, err := c.doRequest("GET", "/api/agent/"+workflowID+"/status", nil)
 	if err != nil {

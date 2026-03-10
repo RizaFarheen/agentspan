@@ -1,8 +1,11 @@
+// Copyright (c) 2025 AgentSpan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
 package cmd
 
 import (
-	"github.com/openagent/cli/client"
-	"github.com/openagent/cli/config"
+	"github.com/agentspan/agentspan/cli/client"
+	"github.com/agentspan/agentspan/cli/config"
 )
 
 func getConfig() *config.Config {

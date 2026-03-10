@@ -1,4 +1,4 @@
-module github.com/openagent/cli
+module github.com/agentspan/agentspan/cli
 
 go 1.25.6
 

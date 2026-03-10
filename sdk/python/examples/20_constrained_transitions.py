@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Constrained Speaker Transitions — control which agents can follow which.
 
 Demonstrates ``allowed_transitions`` which restricts which agent can

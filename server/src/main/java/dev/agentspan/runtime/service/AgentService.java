@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2025 AgentSpan
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
+ */
+
 package dev.agentspan.runtime.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +18,9 @@ import com.netflix.conductor.dao.MetadataDAO;
 import com.netflix.conductor.service.ExecutionService;
 import com.netflix.conductor.service.WorkflowService;
 
+import com.netflix.conductor.common.run.SearchResult;
+import com.netflix.conductor.common.run.WorkflowSummary;
+
 import dev.agentspan.runtime.compiler.AgentCompiler;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
@@ -23,7 +31,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import lombok.RequiredArgsConstructor;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -104,6 +116,173 @@ public class AgentService {
             .workflowId(workflowId)
             .workflowName(def.getName())
             .build();
+    }
+
+    // ── Agent discovery ─────────────────────────────────────────────
+
+    /**
+     * List all registered agents (workflow defs with agent_sdk metadata).
+     */
+    @SuppressWarnings("unchecked")
+    public List<AgentSummary> listAgents() {
+        List<WorkflowDef> allDefs = metadataDAO.getAllWorkflowDefsLatestVersions();
+        List<AgentSummary> agents = new ArrayList<>();
+
+        for (WorkflowDef def : allDefs) {
+            Map<String, Object> metadata = def.getMetadata();
+            if (metadata == null || !metadata.containsKey("agent_sdk")) {
+                continue;
+            }
+
+            String checksum;
+            try {
+                String json = MAPPER.writeValueAsString(def);
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                byte[] hash = digest.digest(json.getBytes(StandardCharsets.UTF_8));
+                StringBuilder hex = new StringBuilder();
+                for (byte b : hash) {
+                    hex.append(String.format("%02x", b));
+                }
+                checksum = hex.toString();
+            } catch (Exception e) {
+                log.warn("Failed to compute checksum for workflow {}", def.getName(), e);
+                checksum = null;
+            }
+
+            List<String> tags = null;
+            Object caps = metadata.get("agent_capabilities");
+            if (caps instanceof List) {
+                tags = (List<String>) caps;
+            }
+
+            agents.add(AgentSummary.builder()
+                    .name(def.getName())
+                    .version(def.getVersion())
+                    .type((String) metadata.get("agent_sdk"))
+                    .tags(tags)
+                    .createTime(def.getCreateTime())
+                    .updateTime(def.getUpdateTime())
+                    .description(def.getDescription())
+                    .checksum(checksum)
+                    .build());
+        }
+
+        return agents;
+    }
+
+    /**
+     * Search agent executions with optional filters.
+     */
+    public Map<String, Object> searchAgentExecutions(int start, int size, String sort,
+                                                      String freeText, String status,
+                                                      String agentName) {
+        // Determine which workflow types to query
+        List<String> workflowNames;
+        if (agentName != null && !agentName.isEmpty()) {
+            workflowNames = List.of(agentName);
+        } else {
+            workflowNames = listAgents().stream()
+                    .map(AgentSummary::getName)
+                    .collect(Collectors.toList());
+        }
+
+        if (workflowNames.isEmpty()) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("totalHits", 0L);
+            empty.put("results", List.of());
+            return empty;
+        }
+
+        // Build query string
+        String nameList = workflowNames.stream()
+                .map(n -> "'" + n + "'")
+                .collect(Collectors.joining(","));
+        StringBuilder query = new StringBuilder("workflowType IN (").append(nameList).append(")");
+        if (status != null && !status.isEmpty()) {
+            query.append(" AND status = '").append(status).append("'");
+        }
+
+        SearchResult<WorkflowSummary> searchResult = workflowService.searchWorkflows(
+                start, size, sort, freeText != null ? freeText : "*", query.toString());
+
+        List<AgentExecutionSummary> results = searchResult.getResults().stream()
+                .map(ws -> AgentExecutionSummary.builder()
+                        .workflowId(ws.getWorkflowId())
+                        .agentName(ws.getWorkflowType())
+                        .version(ws.getVersion())
+                        .status(ws.getStatus() != null ? ws.getStatus().name() : null)
+                        .startTime(ws.getStartTime())
+                        .endTime(ws.getEndTime())
+                        .updateTime(ws.getUpdateTime())
+                        .executionTime(ws.getExecutionTime())
+                        .input(ws.getInput())
+                        .output(ws.getOutput())
+                        .createdBy(ws.getCreatedBy())
+                        .build())
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("totalHits", searchResult.getTotalHits());
+        response.put("results", results);
+        return response;
+    }
+
+    /**
+     * Get detailed execution status for a single agent execution.
+     */
+    public AgentExecutionDetail getExecutionDetail(String executionId) {
+        Workflow workflow = executionService.getExecutionStatus(executionId, true);
+
+        // Find the last non-terminal task as the "current" task
+        AgentExecutionDetail.CurrentTask currentTask = null;
+        List<Task> tasks = workflow.getTasks();
+        for (int i = tasks.size() - 1; i >= 0; i--) {
+            Task task = tasks.get(i);
+            if (!task.getStatus().isTerminal()) {
+                currentTask = AgentExecutionDetail.CurrentTask.builder()
+                        .taskRefName(task.getReferenceTaskName())
+                        .taskType(task.getTaskType())
+                        .status(task.getStatus().name())
+                        .inputData(task.getInputData())
+                        .outputData(task.getOutputData())
+                        .build();
+                break;
+            }
+        }
+
+        return AgentExecutionDetail.builder()
+                .workflowId(executionId)
+                .agentName(workflow.getWorkflowName())
+                .version(workflow.getWorkflowVersion())
+                .status(workflow.getStatus().name())
+                .input(workflow.getInput())
+                .output(workflow.getOutput())
+                .currentTask(currentTask)
+                .build();
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getAgentDef(String name, Integer version) {
+        WorkflowDef def;
+        if (version != null) {
+            def = metadataDAO.getWorkflowDef(name, version)
+                    .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name + " v" + version));
+        } else {
+            def = metadataDAO.getLatestWorkflowDef(name)
+                    .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name));
+        }
+        return MAPPER.convertValue(def, Map.class);
+    }
+
+    public void deleteAgent(String name, Integer version) {
+        if (version != null) {
+            metadataDAO.removeWorkflowDef(name, version);
+        } else {
+            // Remove latest version
+            WorkflowDef def = metadataDAO.getLatestWorkflowDef(name)
+                    .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name));
+            metadataDAO.removeWorkflowDef(name, def.getVersion());
+        }
     }
 
     /**

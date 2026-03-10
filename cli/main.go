@@ -1,6 +1,9 @@
+// Copyright (c) 2025 AgentSpan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
 package main
 
-import "github.com/openagent/cli/cmd"
+import "github.com/agentspan/agentspan/cli/cmd"
 
 func main() {
 	cmd.Execute()

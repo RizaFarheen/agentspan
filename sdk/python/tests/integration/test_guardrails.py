@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Integration tests for guardrails against a real Conductor server.
 
 These tests require a running Conductor server with LLM support.

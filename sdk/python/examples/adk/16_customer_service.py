@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Customer Service — Real-world multi-tool agent pattern from ADK samples.
 
 Mirrors the customer-service ADK sample. A single agent with multiple

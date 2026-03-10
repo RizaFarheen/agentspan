@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """MCP tool discovery — discovers individual tools from MCP servers at compile time.
 
 Uses Conductor's ``LIST_MCP_TOOLS`` system task to query an MCP server and

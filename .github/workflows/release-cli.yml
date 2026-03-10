@@ -1,0 +1,163 @@
+name: Release CLI
+
+on:
+  push:
+    tags:
+      - 'cli-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23'
+
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/cli-}" >> $GITHUB_OUTPUT
+
+    - name: Build binaries for all platforms
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        COMMIT="${GITHUB_SHA}"
+        DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        LDFLAGS="-X github.com/agentspan/agentspan/cli/cmd.Version=${VERSION} -X github.com/agentspan/agentspan/cli/cmd.Commit=${COMMIT} -X github.com/agentspan/agentspan/cli/cmd.Date=${DATE}"
+
+        mkdir -p dist
+
+        GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/agentspan_linux_amd64
+        GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/agentspan_linux_arm64
+        GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/agentspan_darwin_amd64
+        GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/agentspan_darwin_arm64
+        GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/agentspan_windows_amd64.exe
+        GOOS=windows GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/agentspan_windows_arm64.exe
+
+        chmod +x dist/agentspan_*
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+
+        if [ -z "$PREV_TAG" ]; then
+          CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+        else
+          CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+        fi
+
+        echo "$CHANGELOG" > CHANGELOG.txt
+        cat CHANGELOG.txt
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: cli/CHANGELOG.txt
+        files: |
+          cli/dist/agentspan_linux_amd64
+          cli/dist/agentspan_linux_arm64
+          cli/dist/agentspan_darwin_amd64
+          cli/dist/agentspan_darwin_arm64
+          cli/dist/agentspan_windows_amd64.exe
+          cli/dist/agentspan_windows_arm64.exe
+        draft: false
+        prerelease: ${{ contains(steps.get_version.outputs.VERSION, '-') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Update package.json version
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        NPM_VERSION="${VERSION#v}"
+        npm version $NPM_VERSION --no-git-tag-version --allow-same-version
+
+    - name: Publish to npm
+      run: npm publish --access public
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    - name: Checkout Homebrew tap
+      if: "!contains(steps.get_version.outputs.VERSION, '-')"
+      uses: actions/checkout@v4
+      with:
+        repository: agentspan/homebrew-agentspan
+        token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        path: homebrew-tap
+
+    - name: Update Homebrew formula
+      if: "!contains(steps.get_version.outputs.VERSION, '-')"
+      run: |
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+        BREW_VERSION="${VERSION#v}"
+
+        SHA256_DARWIN_AMD64=$(shasum -a 256 dist/agentspan_darwin_amd64 | awk '{print $1}')
+        SHA256_DARWIN_ARM64=$(shasum -a 256 dist/agentspan_darwin_arm64 | awk '{print $1}')
+        SHA256_LINUX_AMD64=$(shasum -a 256 dist/agentspan_linux_amd64 | awk '{print $1}')
+        SHA256_LINUX_ARM64=$(shasum -a 256 dist/agentspan_linux_arm64 | awk '{print $1}')
+
+        cd ../homebrew-tap
+
+        mkdir -p Formula
+
+        cat > Formula/agentspan.rb << EOF
+        class Agentspan < Formula
+          desc "CLI for AgentSpan - Build, run, and manage AI agents"
+          homepage "https://github.com/agentspan/agentspan"
+          version "$BREW_VERSION"
+
+          on_macos do
+            if Hardware::CPU.arm?
+              url "https://github.com/agentspan/agentspan/releases/download/cli-v${BREW_VERSION}/agentspan_darwin_arm64"
+              sha256 "$SHA256_DARWIN_ARM64"
+            else
+              url "https://github.com/agentspan/agentspan/releases/download/cli-v${BREW_VERSION}/agentspan_darwin_amd64"
+              sha256 "$SHA256_DARWIN_AMD64"
+            end
+          end
+
+          on_linux do
+            if Hardware::CPU.arm?
+              url "https://github.com/agentspan/agentspan/releases/download/cli-v${BREW_VERSION}/agentspan_linux_arm64"
+              sha256 "$SHA256_LINUX_ARM64"
+            else
+              url "https://github.com/agentspan/agentspan/releases/download/cli-v${BREW_VERSION}/agentspan_linux_amd64"
+              sha256 "$SHA256_LINUX_AMD64"
+            end
+          end
+
+          def install
+            bin.install "agentspan_darwin_arm64" => "agentspan" if Hardware::CPU.arm? && OS.mac?
+            bin.install "agentspan_darwin_amd64" => "agentspan" if Hardware::CPU.intel? && OS.mac?
+            bin.install "agentspan_linux_arm64" => "agentspan" if Hardware::CPU.arm? && OS.linux?
+            bin.install "agentspan_linux_amd64" => "agentspan" if Hardware::CPU.intel? && OS.linux?
+          end
+
+          test do
+            system "#{bin}/agentspan", "version"
+          end
+        end
+        EOF
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add Formula/agentspan.rb
+        git commit -m "Update agentspan to $BREW_VERSION"
+        git push

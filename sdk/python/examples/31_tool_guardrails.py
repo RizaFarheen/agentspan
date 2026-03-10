@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Tool guardrails — pre-execution validation on tool inputs.
 
 Demonstrates a guardrail attached to a specific tool that blocks dangerous

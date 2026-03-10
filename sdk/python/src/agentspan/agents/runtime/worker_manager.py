@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Worker manager — auto-registers @tool functions as Conductor workers.
 
 Bridges ``@tool``-decorated Python functions to Conductor's

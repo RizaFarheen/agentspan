@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """First-class local code execution — agents that write and run code.
 
 Demonstrates three ways to enable code execution on an agent:

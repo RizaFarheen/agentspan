@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Standalone guardrails — use as plain callables or as Conductor workers.
 
 The ``@guardrail`` decorator produces a plain callable.  You can:

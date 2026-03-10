@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Fix guardrail — auto-correct output instead of retrying.
 
 Demonstrates ``on_fail="fix"``: when the guardrail fails, it provides a

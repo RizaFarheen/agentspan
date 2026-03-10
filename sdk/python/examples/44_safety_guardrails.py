@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Safety Guardrails Pipeline — PII detection and sanitization.
 
 Demonstrates a sequential pipeline where a safety checker agent scans

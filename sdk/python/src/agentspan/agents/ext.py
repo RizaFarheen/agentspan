@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Extended agent types — specialised agent classes for common patterns.
 
 - :class:`UserProxyAgent` — a human stand-in agent that pauses for real input.

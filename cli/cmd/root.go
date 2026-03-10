@@ -1,3 +1,6 @@
+// Copyright (c) 2025 AgentSpan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
 package cmd
 
 import (
@@ -7,12 +10,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var serverURL string
+var (
+	serverURL string
+	Version   = "dev"
+	Commit    = "none"
+	Date      = "unknown"
+)
 
 var rootCmd = &cobra.Command{
-	Use:   "openagent",
-	Short: "CLI for the OpenAgent runtime",
-	Long:  "Create, run, and manage AI agents powered by the OpenAgent runtime.",
+	Use:   "agentspan",
+	Short: "CLI for the AgentSpan runtime",
+	Long:  "Create, run, and manage AI agents powered by the AgentSpan runtime.",
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the CLI version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("agentspan %s (commit: %s, built: %s)\n", Version, Commit, Date)
+	},
 }
 
 func Execute() {
@@ -24,4 +40,5 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server", "", "Runtime server URL (default: http://localhost:8080)")
+	rootCmd.AddCommand(versionCmd)
 }

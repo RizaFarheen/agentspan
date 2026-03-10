@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Financial Advisor — Multi-agent with specialized tool-using sub-agents.
 
 Mirrors the financial-advisor ADK sample. A coordinator agent delegates

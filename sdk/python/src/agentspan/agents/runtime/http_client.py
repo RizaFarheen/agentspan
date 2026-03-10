@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Async HTTP client for the Agent Runtime API.
 
 Centralizes all ``httpx`` usage for the 5 agent API endpoints:

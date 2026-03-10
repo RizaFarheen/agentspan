@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Prompt Templates — reusable, versioned prompts stored on the server.
 
 Demonstrates using Conductor's prompt template system for agent instructions

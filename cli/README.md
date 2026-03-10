@@ -1,27 +1,49 @@
-# OpenAgent CLI
+# AgentSpan CLI
 
-Go CLI for the OpenAgent runtime — start the server, create agents, run them, and stream results.
+Command-line interface for building, running, and managing AI agents powered by the AgentSpan runtime.
 
 ## Install
 
+### npm (recommended)
+
 ```bash
-cd cli
-go build -o openagent .
-# optionally move to PATH
-mv openagent /usr/local/bin/
+npm install -g @agentspan/agentspan
 ```
 
-## Quick Start
+### Homebrew
 
 ```bash
-# 1. Start the runtime server
-openagent server start --model openai/gpt-4o
+brew tap agentspan/agentspan
+brew install agentspan
+```
 
-# 2. Create an agent config
-openagent agent init my-assistant --model openai/gpt-4o
+### Shell script
 
-# 3. Run the agent with a prompt
-openagent agent run my-assistant.yaml "What is the capital of France?"
+```bash
+curl -fsSL https://raw.githubusercontent.com/agentspan/agentspan/main/cli/install.sh | sh
+```
+
+### From source
+
+```bash
+cd cli
+go build -o agentspan .
+```
+
+## Quickstart
+
+```bash
+# Start the runtime server (downloads automatically)
+agentspan server start
+
+# Create an agent config
+agentspan agent init mybot
+
+# Run an agent from a config file
+agentspan agent run --config mybot.yaml "What is the weather in NYC?"
+
+# Run a registered agent by name
+agentspan agent run --name mybot "What is the weather in NYC?"
 ```
 
 ## Commands
@@ -29,39 +51,115 @@ openagent agent run my-assistant.yaml "What is the capital of France?"
 ### Server Management
 
 ```bash
-openagent server start              # Build & start the runtime
-openagent server start -p 9090      # Custom port
-openagent server start -m openai/gpt-4o  # Set default model
-openagent server build              # Build the JAR only
-openagent server status             # Check if server is running
+# Start the server (downloads latest JAR if needed)
+agentspan server start
+
+# Start a specific version
+agentspan server start --version 0.1.0
+
+# Start on a custom port with a default model
+agentspan server start --port 9090 --model openai/gpt-4o
+
+# Stop the server
+agentspan server stop
+
+# View server logs
+agentspan server logs
+
+# Follow server logs in real-time
+agentspan server logs -f
 ```
+
+The server JAR is downloaded from GitHub releases and cached in `~/.agentspan/server/`. On each `server start`, the CLI checks GitHub for updates and re-downloads if a newer version is available.
 
 ### Agent Operations
 
 ```bash
-openagent agent init <name>                    # Create agent config file
-openagent agent init <name> -f json            # JSON format
-openagent agent run <config> <prompt>          # Start + stream
-openagent agent run <config> <prompt> --no-stream  # Start only
-openagent agent compile <config>               # Compile to workflow def
-openagent agent status <workflow-id>           # Check execution status
-openagent agent stream <workflow-id>           # Stream events
-openagent agent respond <workflow-id> --approve    # HITL approve
-openagent agent respond <workflow-id> --deny -m "reason"  # HITL deny
+# Create a new agent config file
+agentspan agent init mybot
+agentspan agent init mybot --model anthropic/claude-sonnet-4-20250514 --format json
+
+# Run an agent
+agentspan agent run --name mybot "Hello, what can you do?"
+agentspan agent run --config mybot.yaml "Hello, what can you do?"
+agentspan agent run --name mybot --no-stream "Fire and forget"
+
+# List all registered agents
+agentspan agent list
+
+# Get agent definition as JSON
+agentspan agent get mybot
+agentspan agent get mybot --version 2
+
+# Delete an agent
+agentspan agent delete mybot
+agentspan agent delete mybot --version 1
+
+# Check execution status
+agentspan agent status <execution-id>
+
+# Search execution history
+agentspan agent execution
+agentspan agent execution --name mybot
+agentspan agent execution --status COMPLETED --since 1h
+agentspan agent execution --since 7d
+agentspan agent execution --window now-30m
+
+# Stream events from a running agent
+agentspan agent stream <execution-id>
+
+# Respond to human-in-the-loop tasks
+agentspan agent respond <execution-id> --approve
+agentspan agent respond <execution-id> --deny --reason "Amount too high"
+
+# Compile agent config to workflow definition (inspect only)
+agentspan agent compile mybot.yaml
+```
+
+### Time Filters
+
+The `--since` and `--window` flags accept human-readable time specs:
+
+| Format | Meaning |
+|--------|---------|
+| `30s` | 30 seconds |
+| `5m` | 5 minutes |
+| `1h` | 1 hour |
+| `1d` | 1 day |
+| `7d` | 7 days |
+| `1mo` | 1 month (30 days) |
+| `1y` | 1 year (365 days) |
+
+### CLI Self-Update
+
+```bash
+agentspan update
 ```
 
 ### Configuration
 
 ```bash
-openagent configure --url http://localhost:8080
-openagent configure --auth-key KEY --auth-secret SECRET
+# Set server URL and auth credentials
+agentspan configure --url http://myserver:8080
+agentspan configure --auth-key KEY --auth-secret SECRET
+
+# Override server URL for a single command
+agentspan --server http://other:8080 agent list
 ```
 
-Config is stored in `~/.openagent/config.json`. Environment variables take precedence:
+Configuration is stored in `~/.agentspan/config.json`. Environment variables take precedence:
 
-- `AGENT_SERVER_URL` — runtime URL
-- `CONDUCTOR_AUTH_KEY` — auth key
-- `CONDUCTOR_AUTH_SECRET` — auth secret
+| Variable | Description |
+|----------|-------------|
+| `AGENT_SERVER_URL` | Server URL (default: `http://localhost:8080`) |
+| `CONDUCTOR_AUTH_KEY` | Auth key |
+| `CONDUCTOR_AUTH_SECRET` | Auth secret |
+
+### Version
+
+```bash
+agentspan version
+```
 
 ## Agent Config Format
 
@@ -77,3 +175,53 @@ tools:
   - name: web_search
     type: worker
 ```
+
+## Distribution
+
+The CLI is distributed through three channels:
+
+1. **npm** (`@agentspan/agentspan`) -- Node.js wrapper downloads the Go binary on install
+2. **Homebrew** (`agentspan/agentspan` tap) -- Pre-built binaries for macOS and Linux
+3. **Shell installer** -- Direct binary download to `/usr/local/bin`
+4. **GitHub Releases** -- Pre-built binaries for all platforms
+
+### Supported Platforms
+
+| OS | Architecture |
+|----|-------------|
+| macOS | x86_64, ARM64 (Apple Silicon) |
+| Linux | x86_64, ARM64 |
+| Windows | x86_64, ARM64 |
+
+## Development
+
+### Building
+
+```bash
+cd cli
+go build -o agentspan .
+```
+
+### Cross-platform build
+
+```bash
+cd cli
+VERSION=0.1.0 ./build.sh
+```
+
+Produces binaries in `cli/dist/` for all 6 platform/arch combinations.
+
+### Release
+
+Push a tag matching `cli-v*` to trigger the release workflow:
+
+```bash
+git tag cli-v0.1.0
+git push origin cli-v0.1.0
+```
+
+This builds all binaries, creates a GitHub release, publishes to npm, and updates the Homebrew tap.
+
+## License
+
+Apache 2.0

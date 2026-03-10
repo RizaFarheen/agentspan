@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Unit tests for the dispatch module workers.
 
 Tests cover the native-FC workers: check_approval_worker and make_tool_worker.

@@ -1,0 +1,43 @@
+{
+  "name": "@agentspan/agentspan",
+  "version": "0.0.0",
+  "description": "CLI for AgentSpan - Build, run, and manage AI agents",
+  "main": "index.js",
+  "bin": {
+    "agentspan": "./cli.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agentspan/agentspan.git"
+  },
+  "keywords": [
+    "agentspan",
+    "agent",
+    "ai",
+    "llm",
+    "orchestration",
+    "workflow",
+    "cli"
+  ],
+  "author": "AgentSpan",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/agentspan/agentspan/issues"
+  },
+  "homepage": "https://github.com/agentspan/agentspan#readme",
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=14"
+  }
+}

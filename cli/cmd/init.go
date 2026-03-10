@@ -1,3 +1,6 @@
+// Copyright (c) 2025 AgentSpan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
 package cmd
 
 import (
@@ -29,12 +32,12 @@ var initCmd = &cobra.Command{
 		}
 
 		agentConfig := map[string]interface{}{
-			"name":        name,
-			"description": fmt.Sprintf("%s agent", name),
-			"model":       model,
+			"name":         name,
+			"description":  fmt.Sprintf("%s agent", name),
+			"model":        model,
 			"instructions": fmt.Sprintf("You are %s, a helpful AI assistant.", name),
-			"maxTurns":    25,
-			"tools":       []interface{}{},
+			"maxTurns":     25,
+			"tools":        []interface{}{},
 		}
 
 		if initStrategy != "" {
@@ -63,7 +66,7 @@ var initCmd = &cobra.Command{
 
 		color.Green("Created %s", filename)
 		fmt.Println("\nEdit the file to add tools, instructions, and other settings.")
-		fmt.Printf("Run with: openagent agent run %s \"your prompt here\"\n", filename)
+		fmt.Printf("Run with: agentspan agent run --name %s \"your prompt here\"\n", name)
 		return nil
 	},
 }

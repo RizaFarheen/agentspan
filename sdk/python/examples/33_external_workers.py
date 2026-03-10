@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """External Worker Tools — reference workers running in other services.
 
 Demonstrates ``@tool(external=True)`` for referencing Conductor workers that

@@ -200,19 +200,133 @@ Before merging any change:
 
 ## Runtime Server (Java)
 
-The `runtime/` directory contains the Agent Runtime — a Spring Boot server that embeds Conductor. See `runtime/AGENTS.md` for full details.
+The `server/` directory contains the Agent Runtime — a Spring Boot server that embeds Conductor.
 
-### Testing Requirements
+### Server Key Source Files
+
+| File | Purpose |
+|---|---|
+| `server/src/.../controller/AgentController.java` | REST endpoints for agent lifecycle |
+| `server/src/.../service/AgentService.java` | Core service: compile, start, list, search, get, delete agents |
+| `server/src/.../compiler/AgentCompiler.java` | Compiles AgentConfig into Conductor WorkflowDef |
+| `server/src/.../model/*.java` | DTOs: AgentConfig, AgentSummary, AgentExecutionSummary, AgentExecutionDetail, etc. |
+
+### Server API Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/agent/start` | POST | Compile, register, and start an agent workflow |
+| `/api/agent/compile` | POST | Compile agent config (inspect only) |
+| `/api/agent/list` | GET | List all registered agents (filtered by `agent_sdk` metadata) |
+| `/api/agent/executions` | GET | Search agent executions (with `start`, `size`, `sort`, `freeText`, `status`, `agentName` params) |
+| `/api/agent/executions/{id}` | GET | Get detailed execution status (agent name, version, status, input, output, current task) |
+| `/api/agent/get/{name}` | GET | Get agent workflow definition (`?version=` optional) |
+| `/api/agent/delete/{name}` | DELETE | Delete agent workflow definition (`?version=` optional) |
+| `/api/agent/stream/{id}` | GET | SSE event stream for a running workflow |
+| `/api/agent/{id}/respond` | POST | Respond to HITL task |
+| `/api/agent/{id}/status` | GET | Get workflow status (legacy) |
+
+### Server Testing Requirements
 
 **All runtime features MUST have real E2E integration tests.** Do not rely solely on mocked unit tests for HTTP endpoints or SSE streaming. E2E tests boot the full Spring context (`@SpringBootTest` with `RANDOM_PORT`) and test over real HTTP connections.
 
 ```bash
-# Run runtime tests
-cd runtime && ./gradlew test
+# Run server tests
+cd server && ./gradlew test
 
-# SSE E2E tests specifically
-cd runtime && ./gradlew test --tests "org.openagent.runtime.controller.AgentControllerSSEIntegrationTest"
+# Build server
+cd server && ./gradlew build
 ```
+
+## CLI (Go)
+
+The `cli/` directory contains the AgentSpan CLI — a Go binary built with Cobra that manages the server and agents.
+
+### CLI Key Source Files
+
+| File | Purpose |
+|---|---|
+| `cli/main.go` | Entry point |
+| `cli/cmd/root.go` | Root command, version vars, `--server` flag |
+| `cli/cmd/server.go` | `server start/stop/logs` — JAR download, PID management |
+| `cli/cmd/server_unix.go` | Unix-specific process management (SIGTERM, Setpgid) |
+| `cli/cmd/server_windows.go` | Windows-specific process management |
+| `cli/cmd/run.go` | `agent run` — start agent by `--name` or `--config` |
+| `cli/cmd/list.go` | `agent list` — table display of registered agents |
+| `cli/cmd/get.go` | `agent get` — fetch agent definition as JSON |
+| `cli/cmd/delete.go` | `agent delete` — remove agent workflow definition |
+| `cli/cmd/execution.go` | `agent execution` — search history with time parsing |
+| `cli/cmd/status.go` | `agent status` — detailed execution status |
+| `cli/cmd/update.go` | `update` — CLI self-update from GitHub releases |
+| `cli/cmd/agent.go` | Agent parent command, SSE event formatting helpers |
+| `cli/cmd/compile.go` | `agent compile` — compile config to workflow def |
+| `cli/cmd/init.go` | `agent init` — generate starter config file |
+| `cli/cmd/stream.go` | `agent stream` — stream SSE events from running agent |
+| `cli/cmd/respond.go` | `agent respond` — HITL approval/denial |
+| `cli/cmd/configure.go` | `configure` — set server URL and auth |
+| `cli/cmd/helpers.go` | Config/client factory helpers |
+| `cli/client/client.go` | HTTP client for all server API calls |
+| `cli/config/config.go` | Config loading (file + env vars), `~/.agentspan/` dir |
+
+### CLI Build and Test
+
+```bash
+# Build locally
+cd cli && go build -o agentspan .
+
+# Verify
+./agentspan version
+./agentspan --help
+./agentspan agent --help
+./agentspan server --help
+
+# Cross-platform build (all 6 targets)
+cd cli && VERSION=0.1.0 ./build.sh
+```
+
+### CLI Coding Conventions
+
+- **Language:** Go 1.25+
+- **CLI framework:** Cobra (`github.com/spf13/cobra`)
+- **Module path:** `github.com/agentspan/agentspan/cli`
+- **Binary name:** `agentspan`
+- **Config directory:** `~/.agentspan/`
+- **No third-party HTTP clients** — use stdlib `net/http`
+- **Platform-specific code** goes in `_unix.go` / `_windows.go` files with build tags
+- **Build-time version** is injected via `-ldflags` (see `build.sh`)
+
+### CLI Testing Checklist
+
+When modifying CLI commands:
+
+1. **Build succeeds:** `cd cli && go build -o /dev/null .`
+2. **Cross-platform build succeeds:** `cd cli && VERSION=test ./build.sh` (all 6 targets)
+3. **Help text is correct:** `./agentspan <command> --help`
+4. **Manual smoke test** against a running server:
+   - `agentspan server start` (downloads JAR, starts server)
+   - `agentspan server logs -f` (follows log output)
+   - `agentspan agent list` (returns `[]` or agent list)
+   - `agentspan agent init testbot && agentspan agent run --config testbot.yaml "hello"`
+   - `agentspan server stop` (sends SIGTERM, cleans PID file)
+
+### CLI Distribution
+
+Published via three channels (triggered by `cli-v*` git tags):
+
+1. **GitHub Releases** — 6 platform binaries (`agentspan_{os}_{arch}`)
+2. **npm** (`@agentspan/agentspan`) — JS wrapper downloads Go binary on `postinstall`
+3. **Homebrew** (`agentspan/homebrew-agentspan` tap) — macOS/Linux formula
+
+Release workflow: `.github/workflows/release-cli.yml`
+
+### Adding a New CLI Command
+
+1. Create `cli/cmd/<command>.go`
+2. Define a `*cobra.Command` with `Use`, `Short`, `Args`, `RunE`
+3. Register under the appropriate parent in `init()` (`agentCmd` for agent subcommands, `rootCmd` for top-level)
+4. If the command calls a new API endpoint, add the client method in `cli/client/client.go`
+5. If the endpoint doesn't exist, add it to `AgentService.java` + `AgentController.java`
+6. Test: build, help text, manual smoke test
 
 ## Python SDK SSE Testing
 

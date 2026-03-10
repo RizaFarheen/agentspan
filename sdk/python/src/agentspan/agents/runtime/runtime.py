@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """AgentRuntime — the execution engine for running agents on Conductor.
 
 This is the core orchestrator that:

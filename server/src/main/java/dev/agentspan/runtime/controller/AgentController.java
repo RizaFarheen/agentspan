@@ -1,5 +1,12 @@
+/*
+ * Copyright (c) 2025 AgentSpan
+ * Licensed under the MIT License. See LICENSE file in the project root for details.
+ */
+
 package dev.agentspan.runtime.controller;
 
+import dev.agentspan.runtime.model.AgentExecutionDetail;
+import dev.agentspan.runtime.model.AgentSummary;
 import dev.agentspan.runtime.model.CompileResponse;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
@@ -11,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import lombok.RequiredArgsConstructor;
 
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -78,6 +86,50 @@ public class AgentController {
             @PathVariable String workflowId,
             @RequestBody Map<String, Object> output) {
         agentService.respond(workflowId, output);
+    }
+
+    /**
+     * List all registered agents (workflow defs with agent_sdk metadata).
+     */
+    @GetMapping("/list")
+    public List<AgentSummary> listAgents() {
+        return agentService.listAgents();
+    }
+
+    /**
+     * Search agent executions with optional filters.
+     */
+    @GetMapping("/executions")
+    public Map<String, Object> searchAgentExecutions(
+            @RequestParam(defaultValue = "0") int start,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "startTime:DESC") String sort,
+            @RequestParam(required = false) String freeText,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String agentName) {
+        return agentService.searchAgentExecutions(start, size, sort, freeText, status, agentName);
+    }
+
+    @GetMapping("/get/{name}")
+    public Map<String, Object> getAgentDef(
+            @PathVariable String name,
+            @RequestParam(required = false) Integer version) {
+        return agentService.getAgentDef(name, version);
+    }
+
+    @DeleteMapping("/delete/{name}")
+    public void deleteAgent(
+            @PathVariable String name,
+            @RequestParam(required = false) Integer version) {
+        agentService.deleteAgent(name, version);
+    }
+
+    /**
+     * Get detailed execution status for a single agent execution.
+     */
+    @GetMapping("/executions/{executionId}")
+    public AgentExecutionDetail getExecutionDetail(@PathVariable String executionId) {
+        return agentService.getExecutionDetail(executionId);
     }
 
     /**

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Guardrails — output validation with tool calls.
 
 Demonstrates a guardrail that catches PII leaking from tool results into

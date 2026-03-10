@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Memory — session and conversation history management.
 
 Conversation state is persisted in Conductor workflow variables, surviving

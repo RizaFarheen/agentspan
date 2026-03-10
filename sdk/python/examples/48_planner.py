@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Planner — agent that plans before executing.
 
 When ``planner=True``, the server enhances the system prompt with planning

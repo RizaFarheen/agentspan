@@ -1,3 +1,6 @@
+// Copyright (c) 2025 AgentSpan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
 package cmd
 
 import (
@@ -8,28 +11,24 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status <workflow-id>",
-	Short: "Get the status of a running agent",
+	Use:   "status <execution-id>",
+	Short: "Get the detailed status of an agent execution",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := getConfig()
 		c := newClient(cfg)
 
-		status, err := c.Status(args[0])
+		detail, err := c.GetExecutionDetail(args[0])
 		if err != nil {
 			return fmt.Errorf("failed to get status: %w", err)
 		}
 
-		wfStatus, _ := status["status"].(string)
-		isRunning, _ := status["isRunning"].(bool)
-		isComplete, _ := status["isComplete"].(bool)
-		isWaiting, _ := status["isWaiting"].(bool)
-
 		bold := color.New(color.Bold)
-		bold.Printf("Workflow: %s\n", args[0])
+		bold.Printf("Execution: %s\n", detail.WorkflowID)
+		fmt.Printf("  Agent:   %s (v%d)\n", detail.AgentName, detail.Version)
 
 		statusColor := color.FgWhite
-		switch wfStatus {
+		switch detail.Status {
 		case "RUNNING":
 			statusColor = color.FgYellow
 		case "COMPLETED":
@@ -37,26 +36,31 @@ var statusCmd = &cobra.Command{
 		case "FAILED", "TERMINATED", "TIMED_OUT":
 			statusColor = color.FgRed
 		}
-		color.New(statusColor, color.Bold).Printf("Status: %s\n", wfStatus)
+		color.New(statusColor, color.Bold).Printf("  Status:  %s\n", detail.Status)
 
-		if isRunning {
-			fmt.Println("  Running: yes")
-		}
-		if isComplete {
-			fmt.Println("  Complete: yes")
-		}
-		if isWaiting {
-			color.Yellow("  Waiting for human input")
+		if detail.Input != nil {
+			fmt.Printf("\nInput:\n")
+			printJSON(detail.Input)
 		}
 
-		if output, ok := status["output"]; ok && output != nil {
+		if detail.Output != nil {
 			fmt.Printf("\nOutput:\n")
-			printJSON(output)
+			printJSON(detail.Output)
 		}
 
-		if pending, ok := status["pendingTool"]; ok && pending != nil {
-			fmt.Printf("\nPending Tool:\n")
-			printJSON(pending)
+		if detail.CurrentTask != nil {
+			fmt.Printf("\nCurrent Task:\n")
+			fmt.Printf("  Name:   %s\n", detail.CurrentTask.TaskRefName)
+			fmt.Printf("  Type:   %s\n", detail.CurrentTask.TaskType)
+			fmt.Printf("  Status: %s\n", detail.CurrentTask.Status)
+			if detail.CurrentTask.InputData != nil {
+				fmt.Printf("  Input:\n")
+				printJSON(detail.CurrentTask.InputData)
+			}
+			if detail.CurrentTask.OutputData != nil {
+				fmt.Printf("  Output:\n")
+				printJSON(detail.CurrentTask.OutputData)
+			}
 		}
 
 		return nil

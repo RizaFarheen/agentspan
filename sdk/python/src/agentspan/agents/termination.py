@@ -1,3 +1,6 @@
+# Copyright (c) 2025 AgentSpan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
 """Termination conditions — composable rules that decide when an agent should stop.
 
 Conditions can be combined with ``&`` (AND — all must trigger) and ``|``
