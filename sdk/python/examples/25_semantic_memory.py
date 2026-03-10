@@ -1,0 +1,73 @@
+"""Semantic Memory — long-term memory with similarity-based retrieval.
+
+Demonstrates ``SemanticMemory`` for persisting facts across sessions
+and retrieving relevant context based on semantic similarity.
+
+The memory is injected into the agent's system prompt at runtime,
+giving the agent access to relevant past knowledge.
+
+Requirements:
+    - Conductor server with LLM support
+    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+"""
+
+from agentspan.agents import Agent, AgentRuntime, tool
+from model_config import get_model
+from agentspan.agents.semantic_memory import SemanticMemory
+
+# ── Build up a knowledge base ────────────────────────────────────────
+
+memory = SemanticMemory(max_results=3)
+
+# Simulate storing facts from previous sessions
+memory.add("The customer's name is Alice and she prefers email communication.")
+memory.add("Alice's account is on the Enterprise plan since March 2021.")
+memory.add("Last interaction: Alice reported a billing discrepancy on invoice #1042.")
+memory.add("Alice's preferred language is English.")
+memory.add("Company policy: Enterprise customers get priority support with 1-hour SLA.")
+memory.add("Alice's timezone is US/Pacific.")
+
+# ── Tool that uses memory for context ────────────────────────────────
+
+@tool
+def get_customer_context(query: str) -> str:
+    """Retrieve relevant customer context from memory."""
+    return memory.get_context(query)
+
+# ── Agent with memory-backed context ─────────────────────────────────
+
+agent = Agent(
+    name="memory_agent",
+    model=get_model(),
+    tools=[get_customer_context],
+    instructions=(
+        "You are a customer support agent with access to a memory system. "
+        "Use the get_customer_context tool to recall relevant information "
+        "about the customer before responding. Always personalize your response."
+    ),
+)
+
+with AgentRuntime() as runtime:
+    print("--- Query 1: Billing question ---")
+    result = runtime.run(
+        agent,
+        "I have a question about my billing — is there an issue with my account?",
+    )
+    result.print_result()
+
+    print("\n--- Query 2: Plan question ---")
+    result2 = runtime.run(
+        agent,
+        "What plan am I on and when did I sign up?",
+    )
+    result2.print_result()
+
+# ── Direct memory operations ─────────────────────────────────────────
+
+print("\n--- Memory contents ---")
+for entry in memory.list_all():
+    print(f"  [{entry.id[:8]}] {entry.content}")
+
+print(f"\n--- Search for 'billing' ---")
+for result in memory.search("billing invoice"):
+    print(f"  → {result}")

@@ -1,0 +1,60 @@
+name: Release Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build bootJar
+        run: ./gradlew bootJar
+
+      - name: Prepare release asset
+        run: |
+          cp build/libs/agentspan-runtime.jar ../agentspan-runtime-${{ inputs.version }}.jar
+          cp build/libs/agentspan-runtime.jar ../agentspan-runtime.jar
+
+      - name: Create versioned release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "server-v${{ inputs.version }}" \
+            ../agentspan-runtime-${{ inputs.version }}.jar \
+            --repo "${{ github.repository }}" \
+            --title "Server v${{ inputs.version }}" \
+            --generate-notes
+
+      - name: Update rolling latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Delete existing latest release and tag if they exist
+          gh release delete latest --repo "${{ github.repository }}" --yes 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+
+          gh release create latest \
+            ../agentspan-runtime.jar \
+            --repo "${{ github.repository }}" \
+            --title "Server Latest" \
+            --notes "Rolling release tracking the latest server build (v${{ inputs.version }})."

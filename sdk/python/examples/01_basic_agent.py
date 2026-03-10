@@ -1,0 +1,18 @@
+"""Basic Agent — 5-line hello world.
+
+Demonstrates the simplest possible agent: a single LLM with no tools.
+
+Requirements:
+    - Conductor server with LLM support
+    - LLM provider "openai" configured
+    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+"""
+
+from agentspan.agents import Agent, AgentRuntime
+from model_config import get_model
+
+agent = Agent(name="greeter", model=get_model())
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "Say hello and tell me a fun fact about Python programming.")
+    result.print_result()

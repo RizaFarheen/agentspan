@@ -1,0 +1,52 @@
+"""Google ADK Include Contents — control context passed to sub-agents.
+
+When ``include_contents="none"``, a sub-agent starts fresh without
+the parent's conversation history.
+
+Requirements:
+    - pip install google-adk
+    - Conductor server with include_contents support
+    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+"""
+
+from google.adk.agents import Agent
+
+from agentspan.agents import AgentRuntime
+
+# Sub-agent with no parent context
+independent_summarizer = Agent(
+    name="independent_summarizer",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You are a summarizer. Summarize any text given to you concisely."
+    ),
+    include_contents="none",  # No parent context
+)
+
+# Sub-agent that sees parent context (default)
+context_aware_helper = Agent(
+    name="context_aware_helper",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You are a helpful assistant that builds on prior conversation context."
+    ),
+)
+
+coordinator = Agent(
+    name="coordinator",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You coordinate tasks. Route summarization to independent_summarizer "
+        "and general questions to context_aware_helper."
+    ),
+    sub_agents=[independent_summarizer, context_aware_helper],
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(
+        coordinator,
+        "Please summarize this: 'The quick brown fox jumps over the lazy dog. "
+        "This sentence contains every letter of the alphabet and is commonly "
+        "used for typography testing.'",
+    )
+    result.print_result()

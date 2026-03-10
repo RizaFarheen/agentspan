@@ -1,0 +1,74 @@
+"""Google ADK Transfer Control — restricted agent handoffs.
+
+Demonstrates:
+    - disallow_transfer_to_parent: prevents sub-agent from returning to parent
+    - disallow_transfer_to_peers: prevents sub-agent from transferring to siblings
+    - These map to allowedTransitions in the Conductor workflow
+
+Architecture:
+    coordinator (parent)
+      sub_agents:
+        - specialist_a (can only talk to specialist_b, not parent)
+        - specialist_b (can talk to anyone)
+        - specialist_c (can only talk to parent, not peers)
+
+Requirements:
+    - pip install google-adk
+    - Conductor server with transfer control support
+    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+"""
+
+from google.adk.agents import LlmAgent
+
+from agentspan.agents import AgentRuntime
+
+specialist_a = LlmAgent(
+    name="data_collector",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You are a data collection specialist. Gather relevant data points "
+        "about the topic and pass them to the analyst for analysis. "
+        "You should NOT return to the coordinator directly."
+    ),
+    disallow_transfer_to_parent=True,
+)
+
+specialist_b = LlmAgent(
+    name="analyst",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You are a data analyst. Take the data collected and provide "
+        "a concise analysis with insights. You can transfer to any agent."
+    ),
+)
+
+specialist_c = LlmAgent(
+    name="summarizer",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You are a summarizer. Take the analysis and create a brief "
+        "executive summary. Return the summary to the coordinator. "
+        "Do NOT transfer to other specialists."
+    ),
+    disallow_transfer_to_peers=True,
+)
+
+coordinator = LlmAgent(
+    name="research_coordinator",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You are a research coordinator managing a team of specialists:\n"
+        "- data_collector: gathers raw data (cannot return to you directly)\n"
+        "- analyst: analyzes data (can transfer freely)\n"
+        "- summarizer: creates executive summaries (cannot transfer to peers)\n\n"
+        "Route the user's request through the appropriate workflow."
+    ),
+    sub_agents=[specialist_a, specialist_b, specialist_c],
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(
+        coordinator,
+        "Research the current state of renewable energy adoption worldwide.",
+    )
+    result.print_result()

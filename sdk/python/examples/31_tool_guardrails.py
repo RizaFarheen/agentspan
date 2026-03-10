@@ -1,0 +1,86 @@
+"""Tool guardrails — pre-execution validation on tool inputs.
+
+Demonstrates a guardrail attached to a specific tool that blocks dangerous
+inputs (like SQL injection) before the tool function executes.
+
+Tool guardrails use Python-level wrapping: the guardrail check runs inside
+the tool worker, before (``position="input"``) or after (``position="output"``)
+the tool function itself.
+
+Requirements:
+    - Conductor server with LLM support
+    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+"""
+
+import re
+
+from agentspan.agents import (
+    Agent,
+    AgentRuntime,
+    Guardrail,
+    GuardrailResult,
+    OnFail,
+    Position,
+    guardrail,
+    tool,
+)
+from model_config import get_model
+
+
+# ── Guardrail ────────────────────────────────────────────────────────────
+
+@guardrail
+def no_sql_injection(content: str) -> GuardrailResult:
+    """Block inputs that contain SQL injection patterns."""
+    patterns = [r"DROP\s+TABLE", r"DELETE\s+FROM", r";\s*--", r"UNION\s+SELECT"]
+    for pat in patterns:
+        if re.search(pat, content, re.IGNORECASE):
+            return GuardrailResult(
+                passed=False,
+                message=f"Blocked: potential SQL injection detected ({pat})",
+            )
+    return GuardrailResult(passed=True)
+
+
+sql_guard = Guardrail(
+    no_sql_injection,
+    position=Position.INPUT,    # Check BEFORE tool execution
+    on_fail=OnFail.RAISE,       # Hard block — don't retry
+    name="sql_injection_guard",
+)
+
+
+# ── Tool with guardrail ─────────────────────────────────────────────────
+
+@tool(guardrails=[sql_guard])
+def run_query(query: str) -> str:
+    """Execute a read-only database query and return results."""
+    # In a real app this would hit a database
+    return f"Results for: {query} → [('Alice', 30), ('Bob', 25)]"
+
+
+# ── Agent ────────────────────────────────────────────────────────────────
+
+agent = Agent(
+    name="db_assistant",
+    model=get_model(),
+    tools=[run_query],
+    instructions=(
+        "You help users query the database. Use the run_query tool. "
+        "Only execute SELECT queries."
+    ),
+)
+
+with AgentRuntime() as runtime:
+    # Safe query — should work fine
+    print("=== Safe Query ===")
+    result = runtime.run(agent, "Find all users older than 25.")
+    result.print_result()
+
+    # Dangerous query — the tool guardrail should block it
+    print("\n=== Dangerous Query (should be blocked) ===")
+    result = runtime.run(
+        agent,
+        "Run this exact query: SELECT * FROM users; DROP TABLE users; --",
+    )
+    result.print_result()

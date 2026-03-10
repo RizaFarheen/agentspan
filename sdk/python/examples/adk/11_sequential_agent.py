@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Sequential Agent Pipeline — SequentialAgent runs sub-agents in fixed order.
+
+Mirrors the pattern from Google ADK samples (story_teller, llm-auditor).
+Each agent in the pipeline runs in order, with outputs flowing to the next.
+"""
+
+from google.adk.agents import Agent, SequentialAgent
+
+from agentspan.agents import AgentRuntime
+
+
+def main():
+    # Step 1: Research agent gathers facts
+    researcher = Agent(
+        name="researcher",
+        model="gemini-2.0-flash",
+        instruction=(
+            "You are a research assistant. Given the user's topic, "
+            "provide 3 key facts about it in a numbered list. Be concise."
+        ),
+    )
+
+    # Step 2: Writer agent takes the research and writes a summary
+    writer = Agent(
+        name="writer",
+        model="gemini-2.0-flash",
+        instruction=(
+            "You are a skilled writer. Take the research provided in the conversation "
+            "and write a single engaging paragraph summarizing the key points. "
+            "Keep it under 100 words."
+        ),
+    )
+
+    # Step 3: Editor agent polishes the summary
+    editor = Agent(
+        name="editor",
+        model="gemini-2.0-flash",
+        instruction=(
+            "You are an editor. Review the paragraph from the writer and improve it. "
+            "Fix any issues with clarity, grammar, or flow. Output only the final polished paragraph."
+        ),
+    )
+
+    # Pipeline: researcher → writer → editor
+    pipeline = SequentialAgent(
+        name="content_pipeline",
+        sub_agents=[researcher, writer, editor],
+    )
+
+    with AgentRuntime() as runtime:
+        result = runtime.run(pipeline, "The history of the Internet")
+        print(f"Status: {result.status}")
+        print(f"Output: {result.output}")
+
+
+if __name__ == "__main__":
+    main()

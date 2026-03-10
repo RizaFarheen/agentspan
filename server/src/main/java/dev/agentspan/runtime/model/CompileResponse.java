@@ -1,0 +1,23 @@
+package dev.agentspan.runtime.model;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.Map;
+
+/**
+ * Response DTO for POST /api/agent/compile.
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class CompileResponse {
+
+    /** The compiled workflow definition as a JSON map. */
+    private Map<String, Object> workflowDef;
+}

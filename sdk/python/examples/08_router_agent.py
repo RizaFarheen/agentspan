@@ -1,0 +1,51 @@
+"""Router Agent — LLM-based routing to specialists.
+
+Demonstrates the router strategy where a parent agent routes
+to the appropriate sub-agent based on the user's request.
+
+Requirements:
+    - Conductor server with LLM support
+    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+"""
+
+from agentspan.agents import Agent, AgentRuntime, Strategy
+from model_config import get_model
+
+# ── Specialist agents ───────────────────────────────────────────────
+
+planner = Agent(
+    name="planner",
+    model=get_model(),
+    instructions="You create implementation plans. Break down tasks into clear numbered steps.",
+)
+
+coder = Agent(
+    name="coder",
+    model=get_model(),
+    instructions="You write code. Output clean, well-documented Python code.",
+)
+
+reviewer = Agent(
+    name="reviewer",
+    model=get_model(),
+    instructions="You review code. Check for bugs, style issues, and suggest improvements.",
+)
+
+# ── Router (LLM decides who to use) ────────────────────────────────
+
+team = Agent(
+    name="dev_team",
+    model=get_model(),
+    instructions=(
+        "You are the tech lead. Route requests to the right team member: "
+        "planner for design/architecture, coder for implementation, "
+        "reviewer for code review."
+    ),
+    agents=[planner, coder, reviewer],
+    strategy=Strategy.ROUTER,
+    router=planner,  # Required for router strategy
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(team, "Write a Python function to validate email addresses using regex")
+    result.print_result()

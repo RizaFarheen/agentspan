@@ -1,0 +1,87 @@
+"""UserProxyAgent — human stand-in for interactive conversations.
+
+Demonstrates ``UserProxyAgent`` which acts as a human proxy in
+multi-agent conversations.  When it's the proxy's turn, the workflow
+pauses for real human input.
+
+Modes:
+    - ALWAYS: always pause for human input
+    - TERMINATE: pause only when conversation would end
+    - NEVER: auto-respond (useful for testing)
+
+Requirements:
+    - Conductor server with LLM support
+    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+"""
+
+import time
+
+from agentspan.agents import Agent, AgentRuntime, Strategy
+from model_config import get_model
+from agentspan.agents.ext import UserProxyAgent
+
+# ── Human proxy ──────────────────────────────────────────────────────
+
+human = UserProxyAgent(
+    name="human",
+    human_input_mode="ALWAYS",
+)
+
+# ── AI assistant ─────────────────────────────────────────────────────
+
+assistant = Agent(
+    name="assistant",
+    model=get_model(),
+    instructions=(
+        "You are a helpful coding assistant. Help the user write Python code. "
+        "Ask clarifying questions when needed."
+    ),
+)
+
+# ── Round-robin conversation: human and assistant take turns ─────────
+
+conversation = Agent(
+    name="pair_programming",
+    model=get_model(),
+    agents=[human, assistant],
+    strategy=Strategy.ROUND_ROBIN,
+    max_turns=4,  # 2 exchanges (human, assistant, human, assistant)
+)
+
+with AgentRuntime() as runtime:
+    # Start async to interact with human tasks
+    handle = runtime.start(
+        conversation,
+        "Let's write a Python function to sort a list of dictionaries by a key.",
+    )
+    print(f"Conversation started: {handle.workflow_id}")
+
+    # Simulate human responses
+    human_messages = [
+        "The function should accept a list of dicts and a key name. "
+        "It should handle missing keys gracefully.",
+        "Looks good! Can you add type hints and a docstring?",
+    ]
+
+    for i, msg in enumerate(human_messages):
+        # Wait for human task
+        for _ in range(30):
+            status = handle.get_status()
+            if status.is_waiting or status.is_complete:
+                break
+            time.sleep(1)
+
+        if status.is_complete:
+            break
+
+        if status.is_waiting:
+            print(f"\n[Human turn {i + 1}]: {msg}")
+            handle.respond({"message": msg})
+
+    # Wait for completion
+    for _ in range(30):
+        status = handle.get_status()
+        if status.is_complete:
+            print(f"\nFinal conversation:\n{status.output}")
+            break
+        time.sleep(1)

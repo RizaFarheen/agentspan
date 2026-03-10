@@ -1,0 +1,64 @@
+"""Google ADK Agent with Structured Output — enforced JSON schema response.
+
+Demonstrates:
+    - Using output_schema for structured, validated responses
+    - The server normalizer maps ADK's output_schema to AgentConfig.outputType
+    - Generation config for controlling model behavior
+
+Requirements:
+    - pip install google-adk pydantic
+    - Conductor server with Google Gemini LLM integration configured
+    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+"""
+
+from typing import List
+
+from google.adk.agents import Agent
+from pydantic import BaseModel
+
+from agentspan.agents import AgentRuntime
+
+
+class Ingredient(BaseModel):
+    name: str
+    quantity: str
+    unit: str
+
+
+class RecipeStep(BaseModel):
+    step_number: int
+    instruction: str
+    duration_minutes: int
+
+
+class Recipe(BaseModel):
+    name: str
+    servings: int
+    prep_time_minutes: int
+    cook_time_minutes: int
+    ingredients: List[Ingredient]
+    steps: List[RecipeStep]
+    difficulty: str
+
+
+agent = Agent(
+    name="recipe_generator",
+    model="gemini-2.0-flash",
+    instruction=(
+        "You are a professional chef assistant. When asked for a recipe, "
+        "provide a complete, well-structured recipe with precise measurements, "
+        "clear step-by-step instructions, and accurate timing."
+    ),
+    output_schema=Recipe,
+    generate_content_config={
+        "temperature": 0.3,
+        "max_output_tokens": 1500,
+    },
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(
+        agent,
+        "Give me a recipe for classic Italian carbonara pasta.",
+    )
+    result.print_result()

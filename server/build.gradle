@@ -1,0 +1,88 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.5'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+
+    // Conductor core
+    implementation 'org.conductoross:conductor-core:3.22.2'
+    implementation 'org.conductoross:conductor-rest:3.22.2'
+    implementation 'org.conductoross:conductor-common:3.22.2'
+    implementation 'org.conductoross:conductor-ai:3.22.2'
+
+    // PostgreSQL persistence + queue + indexing + locking
+    implementation 'org.conductoross:conductor-postgres-persistence:3.22.2'
+    implementation 'org.conductoross:conductor-postgres-external-storage:3.22.2'
+
+    // SQLite persistence (activate with conductor.db.type=sqlite)
+    implementation 'org.conductoross:conductor-sqlite-persistence:3.22.2'
+
+    // Common system tasks
+    implementation 'org.conductoross:conductor-http-task:3.22.2'
+    implementation 'org.conductoross:conductor-json-jq-task:3.22.2'
+
+    // Events
+    implementation 'org.conductoross:conductor-amqp:3.22.2'
+    implementation 'org.conductoross:conductor-nats:3.22.2'
+    implementation 'org.conductoross:conductor-nats-streaming:3.22.2'
+    implementation 'org.conductoross:conductor-awssqs-event-queue:3.22.2'
+    implementation 'org.conductoross:conductor-kafka-event-queue:3.22.2'
+    implementation 'org.conductoross:conductor-kafka:3.22.2'
+
+    // Metrics
+    implementation 'org.conductoross:conductor-metrics:3.22.2'
+
+    // Spring Boot
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.retry:spring-retry'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // Logging
+    implementation 'org.springframework.boot:spring-boot-starter-log4j2'
+    implementation 'org.apache.logging.log4j:log4j-web'
+
+    compileOnly 'org.projectlombok:lombok:1.18.42'
+    annotationProcessor 'org.projectlombok:lombok:1.18.42'
+
+    // JSON Schema
+    implementation 'com.networknt:json-schema-validator:1.0.73'
+
+    // Test dependencies
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.assertj:assertj-core:3.25.1'
+    testImplementation 'org.mockito:mockito-core:5.10.0'
+    testCompileOnly 'org.projectlombok:lombok:1.18.42'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.42'
+
+    // Logging
+    implementation('org.apache.logging.log4j:log4j-core')
+    implementation('org.apache.logging.log4j:log4j-api')
+    implementation('org.apache.logging.log4j:log4j-slf4j-impl')
+    implementation('org.apache.logging.log4j:log4j-jul')
+    implementation('org.apache.logging.log4j:log4j-web')
+
+}
+
+configurations.all {
+    exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
+}
+
+test {
+    useJUnitPlatform()
+}

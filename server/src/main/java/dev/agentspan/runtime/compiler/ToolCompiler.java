@@ -1,0 +1,1229 @@
+package dev.agentspan.runtime.compiler;
+
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.model.ToolConfig;
+import dev.agentspan.runtime.util.JavaScriptBuilder;
+import dev.agentspan.runtime.util.ModelParser;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Compiles tool definitions into Conductor workflow task structures.
+ *
+ * <p>Mirrors the Python {@code tool_compiler.py}. Produces raw Conductor
+ * {@link WorkflowTask} objects for tool routing, dynamic forking, enrichment,
+ * and tool filtering.</p>
+ */
+public class ToolCompiler {
+
+    private static final Logger logger = LoggerFactory.getLogger(ToolCompiler.class);
+
+    /** Tool types whose execution is handled server-side (not by a worker). */
+    private static final Set<String> MEDIA_TOOL_TYPES = Set.of(
+            "generate_image", "generate_audio", "generate_video", "generate_pdf"
+    );
+
+    /** Maps SDK tool type strings to Conductor task type strings. */
+    private static final Map<String, String> TYPE_MAP = Map.ofEntries(
+            Map.entry("worker", "SIMPLE"),
+            Map.entry("http", "HTTP"),
+            Map.entry("mcp", "CALL_MCP_TOOL"),
+            Map.entry("agent_tool", "SUB_WORKFLOW"),
+            Map.entry("generate_image", "GENERATE_IMAGE"),
+            Map.entry("generate_audio", "GENERATE_AUDIO"),
+            Map.entry("generate_video", "GENERATE_VIDEO")
+    );
+
+    // ── Public API ───────────────────────────────────────────────────────
+
+    /**
+     * Compile a list of {@link ToolConfig} definitions into tool spec maps
+     * suitable for passing to the LLM's {@code tools} parameter.
+     *
+     * <p>Each returned map contains: {@code name}, {@code type}, {@code description},
+     * {@code inputSchema}, {@code outputSchema}, and optionally {@code configParams}
+     * (for MCP tools).</p>
+     *
+     * @param tools the tool definitions to compile
+     * @return list of tool spec maps
+     */
+    public List<Map<String, Object>> compileToolSpecs(List<ToolConfig> tools) {
+        List<Map<String, Object>> specs = new ArrayList<>();
+
+        for (ToolConfig tool : tools) {
+            String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
+            String conductorType = TYPE_MAP.getOrDefault(toolType, "SIMPLE");
+
+            Map<String, Object> spec = new LinkedHashMap<>();
+            spec.put("name", tool.getName());
+            spec.put("type", conductorType);
+            spec.put("description", tool.getDescription());
+
+            if (tool.getInputSchema() != null) {
+                spec.put("inputSchema", tool.getInputSchema());
+            }
+            if (tool.getOutputSchema() != null) {
+                spec.put("outputSchema", tool.getOutputSchema());
+            }
+
+            // MCP tools need configParams with server info
+            if ("mcp".equals(toolType) && tool.getConfig() != null) {
+                Map<String, Object> configParams = new LinkedHashMap<>();
+                configParams.put("mcpServer", tool.getConfig().getOrDefault("server_url", ""));
+                Object headers = tool.getConfig().get("headers");
+                if (headers != null) {
+                    configParams.put("headers", headers);
+                }
+                spec.put("configParams", configParams);
+            }
+
+            specs.add(spec);
+        }
+
+        logger.debug("Compiled {} tool specs", specs.size());
+        return specs;
+    }
+
+    /**
+     * Build a SwitchTask that routes based on the LLM's native {@code toolCalls} output.
+     *
+     * <p>The switch has two paths:</p>
+     * <ul>
+     *   <li>{@code "tool_call"} — tool calls present: enrich + dynamic fork</li>
+     *   <li><em>default</em> — no tool calls (final answer): no-op</li>
+     * </ul>
+     *
+     * @param agentName   name of the owning agent (used for task reference names)
+     * @param llmRef      task reference name of the LLM_CHAT_COMPLETE task
+     * @param hasApproval if true, an approval check is inserted before tool execution
+     * @param model       model string (e.g. "openai/gpt-4o") for approval normalization
+     * @return the configured SwitchTask
+     */
+    public WorkflowTask buildToolCallRouting(String agentName, String llmRef,
+                                             boolean hasApproval, String model) {
+        return buildToolCallRouting(agentName, llmRef, null, hasApproval, model);
+    }
+
+    /**
+     * Build a SwitchTask that routes based on the LLM's native {@code toolCalls} output.
+     *
+     * <p>Overload that accepts tool definitions for enrichment.</p>
+     *
+     * @param agentName   name of the owning agent
+     * @param llmRef      task reference name of the LLM_CHAT_COMPLETE task
+     * @param tools       tool definitions (used for enrichment config); may be null
+     * @param hasApproval if true, an approval check is inserted before tool execution
+     * @param model       model string for approval normalization
+     * @return the configured SwitchTask
+     */
+    public WorkflowTask buildToolCallRouting(String agentName, String llmRef,
+                                             List<ToolConfig> tools,
+                                             boolean hasApproval, String model) {
+        String switchExpr = "$.toolCalls != null && $.toolCalls.length > 0 "
+                + "? 'tool_call' : 'none'";
+
+        WorkflowTask switchTask = new WorkflowTask();
+        switchTask.setName("SWITCH");
+        switchTask.setTaskReferenceName(agentName + "_tool_router");
+        switchTask.setType("SWITCH");
+        switchTask.setExpression(switchExpr);
+        switchTask.setEvaluatorType("graaljs");
+
+        Map<String, Object> switchInput = new LinkedHashMap<>();
+        switchInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
+        switchTask.setInputParameters(switchInput);
+
+        // "tool_call" case
+        List<ToolConfig> effectiveTools = tools != null ? tools : Collections.emptyList();
+        List<WorkflowTask> toolCallTasks = buildToolCallCase(
+                agentName, llmRef, hasApproval, model, effectiveTools);
+        Map<String, List<WorkflowTask>> decisionCases = new LinkedHashMap<>();
+        decisionCases.put("tool_call", toolCallTasks);
+        switchTask.setDecisionCases(decisionCases);
+
+        // default case: empty (final answer, no-op)
+        switchTask.setDefaultCase(Collections.emptyList());
+
+        logger.debug("Built tool call routing switch for agent '{}'", agentName);
+        return switchTask;
+    }
+
+    /**
+     * Build an InlineTask that enriches HTTP/MCP/media tool calls with server-side
+     * configuration baked in at compile time.
+     *
+     * <p>Returns a two-element array: {@code [enrichTask, outputRef]} where
+     * {@code outputRef} is the expression string pointing to the enriched
+     * dynamic tasks list.</p>
+     *
+     * @param agentName name of the owning agent
+     * @param llmRef    task reference name of the LLM task
+     * @param tools     the tool definitions (used to build config maps)
+     * @param prefix    optional prefix for task reference names
+     * @return {@code Object[]{WorkflowTask enrichTask, String outputRef}}
+     */
+    public Object[] buildEnrichTask(String agentName, String llmRef,
+                                    List<ToolConfig> tools, String prefix) {
+        String p = (prefix != null && !prefix.isEmpty()) ? prefix : "";
+
+        // Build config maps from tool definitions at compile time
+        Map<String, Object> httpConfig = new LinkedHashMap<>();
+        Map<String, Object> mcpConfig = new LinkedHashMap<>();
+        Map<String, Object> mediaConfig = new LinkedHashMap<>();
+        Map<String, Object> agentToolConfig = new LinkedHashMap<>();
+
+        if (tools != null) {
+            Set<String> serverSideTypes = Set.of("http", "mcp", "agent_tool",
+                    "generate_image", "generate_audio", "generate_video", "generate_pdf");
+
+            for (ToolConfig tool : tools) {
+                String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
+                if (!serverSideTypes.contains(toolType)) {
+                    continue;
+                }
+
+                Map<String, Object> cfg = tool.getConfig() != null
+                        ? tool.getConfig()
+                        : Collections.emptyMap();
+
+                if ("http".equals(toolType)) {
+                    httpConfig.put(tool.getName(), cfg);
+                } else if ("mcp".equals(toolType)) {
+                    Map<String, Object> mcpEntry = new LinkedHashMap<>();
+                    mcpEntry.put("mcpServer", cfg.getOrDefault("server_url", ""));
+                    mcpEntry.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                    mcpConfig.put(tool.getName(), mcpEntry);
+                } else if ("agent_tool".equals(toolType)) {
+                    // workflowName is set by AgentService.registerAgentToolWorkflows()
+                    String workflowName = (String) cfg.getOrDefault("workflowName",
+                            tool.getName() + "_agent_wf");
+                    Map<String, Object> atEntry = new LinkedHashMap<>();
+                    atEntry.put("workflowName", workflowName);
+                    agentToolConfig.put(tool.getName(), atEntry);
+                } else if (MEDIA_TOOL_TYPES.contains(toolType)) {
+                    Map<String, Object> cfgCopy = new LinkedHashMap<>(cfg);
+                    String taskType = cfgCopy.containsKey("taskType")
+                            ? (String) cfgCopy.remove("taskType")
+                            : toolType.toUpperCase();
+                    Map<String, Object> mediaEntry = new LinkedHashMap<>();
+                    mediaEntry.put("taskType", taskType);
+                    mediaEntry.put("defaults", cfgCopy);
+                    mediaConfig.put(tool.getName(), mediaEntry);
+                }
+            }
+        }
+
+        String httpJson = JavaScriptBuilder.toJson(httpConfig);
+        String mcpJson = JavaScriptBuilder.toJson(mcpConfig);
+        String mediaJson = JavaScriptBuilder.toJson(mediaConfig);
+        String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
+
+        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson);
+
+        String enrichRef = agentName + "_" + p + "enrich_tools";
+
+        WorkflowTask enrichTask = new WorkflowTask();
+        enrichTask.setTaskReferenceName(enrichRef);
+        enrichTask.setType("INLINE");
+
+        Map<String, Object> enrichInput = new LinkedHashMap<>();
+        enrichInput.put("evaluatorType", "graaljs");
+        enrichInput.put("expression", script);
+        enrichInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
+        enrichInput.put("agentState", "${workflow.variables._agent_state}");
+        enrichTask.setInputParameters(enrichInput);
+
+        // InlineTask output is at output.result.*
+        String outputRef = "${" + enrichRef + ".output.result.dynamicTasks}";
+
+        return new Object[]{enrichTask, outputRef};
+    }
+
+    /**
+     * Build a FORK_JOIN_DYNAMIC task wired to the given tool calls reference.
+     *
+     * <p>Uses the new-style {@code dynamicForkTasksParam} so the server reads
+     * {@code inputParameters} directly from each task object. Each dynamic task
+     * carries its own input, so no separate inputs map is needed.</p>
+     *
+     * @param agentName    name of the owning agent
+     * @param toolCallsRef expression string pointing to the enriched dynamic tasks list
+     * @param prefix       optional prefix for task reference names
+     * @return the configured FORK_JOIN_DYNAMIC WorkflowTask (with JOIN as a child)
+     */
+    public WorkflowTask buildDynamicFork(String agentName, String toolCallsRef, String prefix) {
+        String p = (prefix != null && !prefix.isEmpty()) ? prefix : "";
+
+        // Fork task
+        WorkflowTask fork = new WorkflowTask();
+        fork.setName("FORK_JOIN_DYNAMIC");
+        fork.setTaskReferenceName(agentName + "_" + p + "fork");
+        fork.setType("FORK_JOIN_DYNAMIC");
+        fork.setDynamicForkTasksParam("dynamicTasks");
+        fork.setDynamicForkTasksInputParamName("dynamicTasksInputs");
+
+        Map<String, Object> forkInput = new LinkedHashMap<>();
+        forkInput.put("dynamicTasks", toolCallsRef);
+        forkInput.put("dynamicTasksInputs", new HashMap<>());
+        fork.setInputParameters(forkInput);
+
+        // Join task
+        WorkflowTask join = new WorkflowTask();
+        join.setName("JOIN");
+        join.setTaskReferenceName(agentName + "_" + p + "fork_join");
+        join.setType("JOIN");
+
+        // Wire join as the join task for the fork
+        fork.getDefaultCase();  // ensure initialized
+        // The fork and join are returned together; caller adds both to the task list.
+        // By convention, Conductor expects fork followed by join in the task list.
+        // We set the join on the fork so the server knows the join reference.
+
+        logger.debug("Built dynamic fork '{}' with join '{}'",
+                fork.getTaskReferenceName(), join.getTaskReferenceName());
+
+        // Return both fork and join as a single fork task with defaultCase containing join
+        // Actually, for FORK_JOIN_DYNAMIC, fork and join must be sequential in the parent list.
+        // We return the fork; the caller should also add the join.
+        // Store the join reference so callers can retrieve it.
+        // Use a wrapper approach: return fork, and add join to fork's output via convention.
+
+        // Per Conductor convention, we embed the join in fork's defaultCase or
+        // return it separately. The simplest pattern: return the fork and let
+        // buildForkChain append the join.
+        // Store the join in a temporary holder.
+        fork.setDefaultCase(List.of(join));
+
+        return fork;
+    }
+
+    /**
+     * Build the complete chain of tasks for executing tool calls: enrich + dynamic fork + join.
+     *
+     * @param agentName name of the owning agent
+     * @param llmRef    task reference name of the LLM task
+     * @param tools     the tool definitions
+     * @param prefix    optional prefix for task reference names
+     * @return ordered list of WorkflowTasks (enrich, fork, join)
+     */
+    public List<WorkflowTask> buildForkChain(String agentName, String llmRef,
+                                             List<ToolConfig> tools, String prefix) {
+        String p = (prefix != null && !prefix.isEmpty()) ? prefix + "_" : "";
+
+        Object[] enrichResult = buildEnrichTask(agentName, llmRef, tools, p);
+        WorkflowTask enrichTask = (WorkflowTask) enrichResult[0];
+        String toolCallsRef = (String) enrichResult[1];
+
+        WorkflowTask forkTask = buildDynamicFork(agentName, toolCallsRef, p);
+
+        // Extract the join from the fork's defaultCase
+        List<WorkflowTask> joinList = forkTask.getDefaultCase();
+        WorkflowTask joinTask = (joinList != null && !joinList.isEmpty()) ? joinList.get(0) : null;
+        forkTask.setDefaultCase(Collections.emptyList());
+
+        List<WorkflowTask> chain = new ArrayList<>();
+        chain.add(enrichTask);
+        chain.add(forkTask);
+        if (joinTask != null) {
+            chain.add(joinTask);
+            // Merge _state_updates from tool outputs and persist to workflow variable
+            chain.addAll(buildStateMergeTasks(agentName, joinTask.getTaskReferenceName(), p));
+        }
+
+        return chain;
+    }
+
+    /**
+     * Build runtime LLM filtering tasks for large tool sets.
+     *
+     * <p>When an MCP server exposes more tools than {@code maxTools}, this creates
+     * a two-task pre-loop sequence:</p>
+     * <ol>
+     *   <li><b>FilterLLM</b> — asks a lightweight LLM to select the most relevant
+     *       tools given the user's prompt.</li>
+     *   <li><b>FilterInline</b> — filters the full tool spec list by the
+     *       selected names (server-side JavaScript).</li>
+     * </ol>
+     *
+     * @param agentName name of the owning agent
+     * @param toolSpecs the full list of tool spec maps
+     * @param provider  LLM provider name (e.g. "openai")
+     * @param model     LLM model name (e.g. "gpt-4o")
+     * @param maxTools  maximum number of tools to select
+     * @return {@code Object[]{List<WorkflowTask> tasks, String toolsRef}}
+     */
+    public Object[] buildToolFilter(String agentName, List<Map<String, Object>> toolSpecs,
+                                    String provider, String model, int maxTools) {
+        // Build tool catalog for the FilterLLM prompt
+        StringBuilder catalogBuilder = new StringBuilder();
+        for (Map<String, Object> spec : toolSpecs) {
+            String name = (String) spec.get("name");
+            String desc = spec.get("description") != null ? spec.get("description").toString() : "";
+            catalogBuilder.append("- ").append(name).append(": ").append(desc).append("\n");
+        }
+        String catalogText = catalogBuilder.toString();
+
+        String systemPrompt = "You are a tool selection assistant. Given a user query and a catalog "
+                + "of available tools, select the most relevant tools the AI agent will "
+                + "need.  Select at most " + maxTools + " tools.\n\n"
+                + "TOOL CATALOG:\n" + catalogText + "\n"
+                + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
+
+        // ── FilterLLM: LLM_CHAT_COMPLETE task ────────────────────────────
+        String filterLlmRef = agentName + "_filter_llm";
+
+        WorkflowTask filterLlm = new WorkflowTask();
+        filterLlm.setName("LLM_CHAT_COMPLETE");
+        filterLlm.setTaskReferenceName(filterLlmRef);
+        filterLlm.setType("LLM_CHAT_COMPLETE");
+
+        Map<String, Object> systemMsg = new LinkedHashMap<>();
+        systemMsg.put("role", "system");
+        systemMsg.put("message", systemPrompt);
+
+        Map<String, Object> userMsg = new LinkedHashMap<>();
+        userMsg.put("role", "user");
+        userMsg.put("message", "${workflow.input.prompt}");
+
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(systemMsg);
+        messages.add(userMsg);
+
+        Map<String, Object> filterLlmInput = new LinkedHashMap<>();
+        filterLlmInput.put("llmProvider", provider);
+        filterLlmInput.put("model", model);
+        filterLlmInput.put("messages", messages);
+        filterLlmInput.put("temperature", 0);
+        filterLlmInput.put("jsonOutput", true);
+        filterLlm.setInputParameters(filterLlmInput);
+
+        // ── FilterInline: InlineTask to filter specs by selected names ───
+        String allSpecsJson = JavaScriptBuilder.toJson(toolSpecs);
+        String filterScript = JavaScriptBuilder.filterToolsScript(allSpecsJson);
+
+        String filterInlineRef = agentName + "_filter_inline";
+
+        WorkflowTask filterInline = new WorkflowTask();
+        filterInline.setTaskReferenceName(filterInlineRef);
+        filterInline.setType("INLINE");
+
+        Map<String, Object> filterInlineInput = new LinkedHashMap<>();
+        filterInlineInput.put("evaluatorType", "graaljs");
+        filterInlineInput.put("expression", filterScript);
+        filterInlineInput.put("selectedNames", "${" + filterLlmRef + ".output.result}");
+        filterInline.setInputParameters(filterInlineInput);
+
+        // InlineTask output is at output.result.*
+        String toolsRef = "${" + filterInlineRef + ".output.result.tools}";
+
+        List<WorkflowTask> tasks = new ArrayList<>();
+        tasks.add(filterLlm);
+        tasks.add(filterInline);
+
+        return new Object[]{tasks, toolsRef};
+    }
+
+    // ── MCP Discovery ────────────────────────────────────────────────────
+
+    /**
+     * Result of building MCP discovery tasks.
+     */
+    public static class McpDiscoveryResult {
+        private final List<WorkflowTask> preTasks;
+        private final String toolsRef;
+        private final String mcpConfigRef;
+
+        public McpDiscoveryResult(List<WorkflowTask> preTasks, String toolsRef, String mcpConfigRef) {
+            this.preTasks = preTasks;
+            this.toolsRef = toolsRef;
+            this.mcpConfigRef = mcpConfigRef;
+        }
+
+        public List<WorkflowTask> getPreTasks() { return preTasks; }
+        public String getToolsRef() { return toolsRef; }
+        public String getMcpConfigRef() { return mcpConfigRef; }
+    }
+
+    /**
+     * Build pre-loop workflow tasks for MCP tool discovery.
+     *
+     * <p>Creates:</p>
+     * <ol>
+     *   <li>One {@code LIST_MCP_TOOLS} task per unique MCP server</li>
+     *   <li>An {@code INLINE} prepare task that merges static specs with discovered MCP tools</li>
+     *   <li>A {@code SWITCH} task for threshold-based LLM filtering</li>
+     *   <li>An {@code INLINE} resolve task that normalizes the final tools reference</li>
+     * </ol>
+     *
+     * @param agentName       agent name for task reference prefixes
+     * @param mcpTools        MCP tool configs (toolType="mcp")
+     * @param staticToolSpecs compiled specs for non-MCP tools (baked into prepare script)
+     * @param model           model string for the filter LLM (e.g. "openai/gpt-4o")
+     * @return discovery result with pre-tasks, tools ref, and mcpConfig ref
+     */
+    public McpDiscoveryResult buildMcpDiscoveryTasks(
+            String agentName, List<ToolConfig> mcpTools,
+            List<Map<String, Object>> staticToolSpecs, String model) {
+
+        List<WorkflowTask> preTasks = new ArrayList<>();
+
+        // ── 1. LIST_MCP_TOOLS tasks (one per unique server) ──────────
+        // Deduplicate by server_url
+        Map<String, Map<String, Object>> serverMap = new LinkedHashMap<>();
+        int maxTools = 32; // default threshold
+        for (ToolConfig tool : mcpTools) {
+            Map<String, Object> cfg = tool.getConfig() != null ? tool.getConfig() : Collections.emptyMap();
+            String serverUrl = (String) cfg.getOrDefault("server_url", "");
+            if (!serverUrl.isEmpty() && !serverMap.containsKey(serverUrl)) {
+                Map<String, Object> serverInfo = new LinkedHashMap<>();
+                serverInfo.put("serverUrl", serverUrl);
+                serverInfo.put("headers", cfg.getOrDefault("headers", Collections.emptyMap()));
+                serverMap.put(serverUrl, serverInfo);
+            }
+            Object mt = cfg.get("max_tools");
+            if (mt instanceof Number) {
+                maxTools = ((Number) mt).intValue();
+            }
+        }
+
+        List<Map<String, Object>> servers = new ArrayList<>(serverMap.values());
+        List<String> listTaskRefs = new ArrayList<>();
+
+        for (int i = 0; i < servers.size(); i++) {
+            Map<String, Object> server = servers.get(i);
+            String listRef = agentName + "_list_mcp_" + i;
+            listTaskRefs.add(listRef);
+
+            WorkflowTask listTask = new WorkflowTask();
+            listTask.setName("LIST_MCP_TOOLS");
+            listTask.setTaskReferenceName(listRef);
+            listTask.setType("LIST_MCP_TOOLS");
+
+            Map<String, Object> listInputs = new LinkedHashMap<>();
+            listInputs.put("mcpServer", server.get("serverUrl"));
+            Object headers = server.get("headers");
+            if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
+                listInputs.put("headers", headers);
+            }
+            listTask.setInputParameters(listInputs);
+            preTasks.add(listTask);
+        }
+
+        // ── 2. INLINE prepare task ───────────────────────────────────
+        String prepareRef = agentName + "_mcp_prepare";
+        String staticSpecsJson = JavaScriptBuilder.toJson(staticToolSpecs);
+        String serversJson = JavaScriptBuilder.toJson(servers);
+        String prepareScript = JavaScriptBuilder.mcpPrepareScript(
+                staticSpecsJson, servers.size(), serversJson, maxTools);
+
+        WorkflowTask prepareTask = new WorkflowTask();
+        prepareTask.setTaskReferenceName(prepareRef);
+        prepareTask.setType("INLINE");
+
+        Map<String, Object> prepareInputs = new LinkedHashMap<>();
+        prepareInputs.put("evaluatorType", "graaljs");
+        prepareInputs.put("expression", prepareScript);
+        for (int i = 0; i < listTaskRefs.size(); i++) {
+            prepareInputs.put("discovered_" + i,
+                    "${" + listTaskRefs.get(i) + ".output.tools}");
+        }
+        prepareTask.setInputParameters(prepareInputs);
+        preTasks.add(prepareTask);
+
+        // ── 3. SWITCH task for threshold check ───────────────────────
+        String switchRef = agentName + "_mcp_threshold";
+        WorkflowTask thresholdSwitch = new WorkflowTask();
+        thresholdSwitch.setType("SWITCH");
+        thresholdSwitch.setTaskReferenceName(switchRef);
+        thresholdSwitch.setEvaluatorType("graaljs");
+        thresholdSwitch.setExpression("$.needsFilter == true ? 'filter' : 'direct'");
+
+        Map<String, Object> switchInputs = new LinkedHashMap<>();
+        switchInputs.put("needsFilter", "${" + prepareRef + ".output.result.needsFilter}");
+        thresholdSwitch.setInputParameters(switchInputs);
+
+        // "filter" case: catalog → filter LLM → filter inline
+        List<WorkflowTask> filterTasks = buildDynamicFilterChain(
+                agentName, prepareRef, model, maxTools);
+
+        Map<String, List<WorkflowTask>> switchCases = new LinkedHashMap<>();
+        switchCases.put("filter", filterTasks);
+        thresholdSwitch.setDecisionCases(switchCases);
+
+        // default: noop
+        WorkflowTask noop = new WorkflowTask();
+        noop.setType("SET_VARIABLE");
+        noop.setTaskReferenceName(agentName + "_mcp_direct_noop");
+        noop.setInputParameters(Map.of("_mcp_direct", true));
+        thresholdSwitch.setDefaultCase(List.of(noop));
+
+        preTasks.add(thresholdSwitch);
+
+        // ── 4. INLINE resolve task ───────────────────────────────────
+        String resolveRef = agentName + "_mcp_resolve";
+        WorkflowTask resolveTask = new WorkflowTask();
+        resolveTask.setTaskReferenceName(resolveRef);
+        resolveTask.setType("INLINE");
+
+        String filterInlineRef = agentName + "_mcp_filter_inline";
+        Map<String, Object> resolveInputs = new LinkedHashMap<>();
+        resolveInputs.put("evaluatorType", "graaljs");
+        resolveInputs.put("expression", JavaScriptBuilder.mcpResolveScript());
+        resolveInputs.put("filtered_tools",
+                "${" + filterInlineRef + ".output.result.tools}");
+        resolveInputs.put("prepared_tools",
+                "${" + prepareRef + ".output.result.tools}");
+        resolveInputs.put("mcpConfig",
+                "${" + prepareRef + ".output.result.mcpConfig}");
+        resolveTask.setInputParameters(resolveInputs);
+        preTasks.add(resolveTask);
+
+        String toolsRef = "${" + resolveRef + ".output.result.tools}";
+        String mcpConfigRef = "${" + resolveRef + ".output.result.mcpConfig}";
+
+        logger.debug("Built MCP discovery tasks for agent '{}': {} servers, threshold={}",
+                agentName, servers.size(), maxTools);
+
+        return new McpDiscoveryResult(preTasks, toolsRef, mcpConfigRef);
+    }
+
+    /**
+     * Build a dynamic filter chain that reads tools from a runtime reference.
+     */
+    private List<WorkflowTask> buildDynamicFilterChain(
+            String agentName, String prepareRef, String model, int maxTools) {
+
+        List<WorkflowTask> tasks = new ArrayList<>();
+
+        // 1. Catalog inline: build catalog text from runtime tools
+        String catalogRef = agentName + "_mcp_filter_catalog";
+        WorkflowTask catalogTask = new WorkflowTask();
+        catalogTask.setTaskReferenceName(catalogRef);
+        catalogTask.setType("INLINE");
+        Map<String, Object> catalogInputs = new LinkedHashMap<>();
+        catalogInputs.put("evaluatorType", "graaljs");
+        catalogInputs.put("expression", JavaScriptBuilder.filterCatalogScript(maxTools));
+        catalogInputs.put("tools", "${" + prepareRef + ".output.result.tools}");
+        catalogTask.setInputParameters(catalogInputs);
+        tasks.add(catalogTask);
+
+        // 2. Filter LLM
+        String filterLlmRef = agentName + "_mcp_filter_llm";
+        WorkflowTask filterLlm = new WorkflowTask();
+        filterLlm.setName("LLM_CHAT_COMPLETE");
+        filterLlm.setTaskReferenceName(filterLlmRef);
+        filterLlm.setType("LLM_CHAT_COMPLETE");
+
+        Map<String, Object> filterLlmInputs = new LinkedHashMap<>();
+        if (model != null && !model.isEmpty()) {
+            ModelParser.ParsedModel parsed = ModelParser.parse(model);
+            filterLlmInputs.put("llmProvider", parsed.getProvider());
+            filterLlmInputs.put("model", parsed.getModel());
+        }
+
+        String systemPrompt =
+            "You are a tool selection assistant. Given a user query and a catalog "
+            + "of available tools, select the most relevant tools the AI agent will "
+            + "need. Select at most " + maxTools + " tools.\n\n"
+            + "TOOL CATALOG:\n${" + catalogRef + ".output.result.catalog}\n\n"
+            + "Respond with ONLY a JSON object: {\"selected_tools\": [\"tool_name_1\", \"tool_name_2\", ...]}";
+
+        filterLlmInputs.put("messages", List.of(
+            Map.of("role", "system", "message", systemPrompt),
+            Map.of("role", "user", "message", "${workflow.input.prompt}")
+        ));
+        filterLlmInputs.put("temperature", 0);
+        filterLlmInputs.put("jsonOutput", true);
+        filterLlm.setInputParameters(filterLlmInputs);
+        tasks.add(filterLlm);
+
+        // 3. Filter inline: filter tools by selected names
+        String filterInlineRef = agentName + "_mcp_filter_inline";
+        WorkflowTask filterInline = new WorkflowTask();
+        filterInline.setTaskReferenceName(filterInlineRef);
+        filterInline.setType("INLINE");
+        Map<String, Object> filterInlineInputs = new LinkedHashMap<>();
+        filterInlineInputs.put("evaluatorType", "graaljs");
+        filterInlineInputs.put("expression", JavaScriptBuilder.filterToolsScriptDynamic());
+        filterInlineInputs.put("selectedNames", "${" + filterLlmRef + ".output.result}");
+        filterInlineInputs.put("allTools", "${" + prepareRef + ".output.result.tools}");
+        filterInline.setInputParameters(filterInlineInputs);
+        tasks.add(filterInline);
+
+        return tasks;
+    }
+
+    /**
+     * Build tool call routing with dynamic MCP config from a runtime reference.
+     *
+     * <p>Like {@link #buildToolCallRouting} but the enrichment task reads
+     * {@code mcpConfig} from a runtime reference instead of baking it in.</p>
+     */
+    public WorkflowTask buildToolCallRoutingDynamic(String agentName, String llmRef,
+                                                     List<ToolConfig> tools,
+                                                     boolean hasApproval, String model,
+                                                     String mcpConfigRef) {
+        String switchExpr = "$.toolCalls != null && $.toolCalls.length > 0 "
+                + "? 'tool_call' : 'none'";
+
+        WorkflowTask switchTask = new WorkflowTask();
+        switchTask.setName("SWITCH");
+        switchTask.setTaskReferenceName(agentName + "_tool_router");
+        switchTask.setType("SWITCH");
+        switchTask.setExpression(switchExpr);
+        switchTask.setEvaluatorType("graaljs");
+
+        Map<String, Object> switchInput = new LinkedHashMap<>();
+        switchInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
+        switchTask.setInputParameters(switchInput);
+
+        List<WorkflowTask> toolCallTasks;
+        if (hasApproval) {
+            toolCallTasks = buildToolCallWithApprovalDynamic(agentName, llmRef, model, tools, mcpConfigRef);
+        } else {
+            toolCallTasks = buildForkChainDynamic(agentName, llmRef, tools, "", mcpConfigRef);
+        }
+
+        Map<String, List<WorkflowTask>> decisionCases = new LinkedHashMap<>();
+        decisionCases.put("tool_call", toolCallTasks);
+        switchTask.setDecisionCases(decisionCases);
+        switchTask.setDefaultCase(Collections.emptyList());
+
+        return switchTask;
+    }
+
+    /**
+     * Build fork chain with dynamic MCP config.
+     */
+    public List<WorkflowTask> buildForkChainDynamic(String agentName, String llmRef,
+                                                     List<ToolConfig> tools, String prefix,
+                                                     String mcpConfigRef) {
+        String p = (prefix != null && !prefix.isEmpty()) ? prefix + "_" : "";
+
+        Object[] enrichResult = buildEnrichTaskDynamic(agentName, llmRef, tools, p, mcpConfigRef);
+        WorkflowTask enrichTask = (WorkflowTask) enrichResult[0];
+        String toolCallsRef = (String) enrichResult[1];
+
+        WorkflowTask forkTask = buildDynamicFork(agentName, toolCallsRef, p);
+
+        List<WorkflowTask> joinList = forkTask.getDefaultCase();
+        WorkflowTask joinTask = (joinList != null && !joinList.isEmpty()) ? joinList.get(0) : null;
+        forkTask.setDefaultCase(Collections.emptyList());
+
+        List<WorkflowTask> chain = new ArrayList<>();
+        chain.add(enrichTask);
+        chain.add(forkTask);
+        if (joinTask != null) {
+            chain.add(joinTask);
+            chain.addAll(buildStateMergeTasks(agentName, joinTask.getTaskReferenceName(), p));
+        }
+        return chain;
+    }
+
+    /**
+     * Build enrich task with dynamic MCP config from a runtime reference.
+     */
+    public Object[] buildEnrichTaskDynamic(String agentName, String llmRef,
+                                            List<ToolConfig> tools, String p,
+                                            String mcpConfigRef) {
+        // Build static configs (HTTP, media, agent_tool) at compile time — same as buildEnrichTask
+        Map<String, Object> httpConfig = new LinkedHashMap<>();
+        Map<String, Object> mediaConfig = new LinkedHashMap<>();
+        Map<String, Object> agentToolConfig = new LinkedHashMap<>();
+
+        if (tools != null) {
+            for (ToolConfig tool : tools) {
+                String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
+                Map<String, Object> cfg = tool.getConfig() != null
+                        ? tool.getConfig() : Collections.emptyMap();
+
+                if ("http".equals(toolType)) {
+                    httpConfig.put(tool.getName(), cfg);
+                } else if ("agent_tool".equals(toolType)) {
+                    String workflowName = (String) cfg.getOrDefault("workflowName",
+                            tool.getName() + "_agent_wf");
+                    Map<String, Object> atEntry = new LinkedHashMap<>();
+                    atEntry.put("workflowName", workflowName);
+                    agentToolConfig.put(tool.getName(), atEntry);
+                } else if (MEDIA_TOOL_TYPES.contains(toolType)) {
+                    Map<String, Object> cfgCopy = new LinkedHashMap<>(cfg);
+                    String taskType = cfgCopy.containsKey("taskType")
+                            ? (String) cfgCopy.remove("taskType")
+                            : toolType.toUpperCase();
+                    Map<String, Object> mediaEntry = new LinkedHashMap<>();
+                    mediaEntry.put("taskType", taskType);
+                    mediaEntry.put("defaults", cfgCopy);
+                    mediaConfig.put(tool.getName(), mediaEntry);
+                }
+                // MCP config comes from runtime — skip here
+            }
+        }
+
+        String httpJson = JavaScriptBuilder.toJson(httpConfig);
+        String mediaJson = JavaScriptBuilder.toJson(mediaConfig);
+        String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
+        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson);
+
+        String enrichRef = agentName + "_" + p + "enrich_tools";
+
+        WorkflowTask enrichTask = new WorkflowTask();
+        enrichTask.setTaskReferenceName(enrichRef);
+        enrichTask.setType("INLINE");
+
+        Map<String, Object> enrichInput = new LinkedHashMap<>();
+        enrichInput.put("evaluatorType", "graaljs");
+        enrichInput.put("expression", script);
+        enrichInput.put("toolCalls", "${" + llmRef + ".output.toolCalls}");
+        enrichInput.put("mcpConfig", mcpConfigRef);
+        enrichInput.put("agentState", "${workflow.variables._agent_state}");
+        enrichTask.setInputParameters(enrichInput);
+
+        String outputRef = "${" + enrichRef + ".output.result.dynamicTasks}";
+        return new Object[]{enrichTask, outputRef};
+    }
+
+    /**
+     * Build tool-call case with approval gate using dynamic MCP config.
+     */
+    private List<WorkflowTask> buildToolCallWithApprovalDynamic(String agentName, String llmRef,
+                                                                  String model, List<ToolConfig> tools,
+                                                                  String mcpConfigRef) {
+        // Reuse the same approval logic but with dynamic fork chains
+        // (simplified: delegate to existing approval logic, replacing fork chain builders)
+
+        StringBuilder approvalJson = new StringBuilder("{");
+        boolean first = true;
+        for (ToolConfig tool : tools) {
+            if (tool.isApprovalRequired()) {
+                if (!first) approvalJson.append(",");
+                approvalJson.append("\"").append(tool.getName()).append("\":true");
+                first = false;
+            }
+        }
+        approvalJson.append("}");
+
+        String checkRef = agentName + "_check_approval";
+        WorkflowTask checkTask = new WorkflowTask();
+        checkTask.setTaskReferenceName(checkRef);
+        checkTask.setType("INLINE");
+        Map<String, Object> checkInputs = new LinkedHashMap<>();
+        checkInputs.put("evaluatorType", "graaljs");
+        checkInputs.put("expression",
+            "(function() {"
+            + "var approvalTools = " + approvalJson + ";"
+            + "var tcs = $.tool_calls || [];"
+            + "for (var i = 0; i < tcs.length; i++) {"
+            + "  if (approvalTools[tcs[i].name]) return {needs_approval: true};"
+            + "}"
+            + "return {needs_approval: false};"
+            + "})()");
+        checkInputs.put("tool_calls", "${" + llmRef + ".output.toolCalls}");
+        checkTask.setInputParameters(checkInputs);
+
+        WorkflowTask approvalSwitch = new WorkflowTask();
+        approvalSwitch.setType("SWITCH");
+        approvalSwitch.setTaskReferenceName(agentName + "_approval_gate");
+        approvalSwitch.setEvaluatorType("graaljs");
+        approvalSwitch.setExpression("$.needs_approval == true ? 'needs_approval' : 'direct'");
+        Map<String, Object> gateInputs = new LinkedHashMap<>();
+        gateInputs.put("needs_approval", "${" + checkRef + ".output.result.needs_approval}");
+        approvalSwitch.setInputParameters(gateInputs);
+
+        Map<String, List<WorkflowTask>> gateCases = new LinkedHashMap<>();
+
+        // needs_approval case: same as buildToolCallWithApproval but with dynamic fork chains
+        List<WorkflowTask> approvalCaseTasks = buildApprovalCaseTasksDynamic(
+                agentName, llmRef, model, tools, mcpConfigRef);
+        gateCases.put("needs_approval", approvalCaseTasks);
+        approvalSwitch.setDecisionCases(gateCases);
+
+        List<WorkflowTask> directChain = buildForkChainDynamic(agentName, llmRef, tools, "direct", mcpConfigRef);
+        approvalSwitch.setDefaultCase(directChain);
+
+        return List.of(checkTask, approvalSwitch);
+    }
+
+    /**
+     * Build the approval case tasks with dynamic MCP config (human task → validate → normalize → check → route).
+     */
+    private List<WorkflowTask> buildApprovalCaseTasksDynamic(String agentName, String llmRef,
+                                                               String model, List<ToolConfig> tools,
+                                                               String mcpConfigRef) {
+        // This mirrors buildToolCallWithApproval's needs_approval case
+        // but uses buildForkChainDynamic for the fork chains
+        List<WorkflowTask> tasks = new ArrayList<>();
+
+        String humanRef = agentName + "_approval_human";
+        WorkflowTask humanTask = new WorkflowTask();
+        humanTask.setType("HUMAN");
+        humanTask.setTaskReferenceName(humanRef);
+        Map<String, Object> humanInputs = new LinkedHashMap<>();
+        humanInputs.put("__humanTaskDefinition", Map.of(
+            "assignmentCompletionStrategy", "LEAVE_OPEN",
+            "displayName", agentName + " Tool Approval",
+            "userFormTemplate", Map.of("version", 0)
+        ));
+        humanInputs.put("tool_calls", "${" + llmRef + ".output.toolCalls}");
+        humanTask.setInputParameters(humanInputs);
+        tasks.add(humanTask);
+
+        String validateRef = agentName + "_approval_validate";
+        WorkflowTask validateTask = new WorkflowTask();
+        validateTask.setTaskReferenceName(validateRef);
+        validateTask.setType("INLINE");
+        Map<String, Object> validateInputs = new LinkedHashMap<>();
+        validateInputs.put("evaluatorType", "graaljs");
+        validateInputs.put("expression", JavaScriptBuilder.approvalValidateScript());
+        validateInputs.put("human_output", "${" + humanRef + ".output}");
+        validateTask.setInputParameters(validateInputs);
+        tasks.add(validateTask);
+
+        // Normalize switch
+        WorkflowTask normalizeSwitch = new WorkflowTask();
+        normalizeSwitch.setType("SWITCH");
+        normalizeSwitch.setTaskReferenceName(agentName + "_approval_normalize_switch");
+        normalizeSwitch.setEvaluatorType("graaljs");
+        normalizeSwitch.setExpression("$.needs_normalize == true ? 'needs_normalize' : 'skip'");
+        normalizeSwitch.setInputParameters(Map.of("needs_normalize",
+            "${" + validateRef + ".output.result.needs_normalize}"));
+
+        String normalizerRef = agentName + "_approval_normalizer";
+        WorkflowTask normalizerTask = new WorkflowTask();
+        normalizerTask.setName("LLM_CHAT_COMPLETE");
+        normalizerTask.setTaskReferenceName(normalizerRef);
+        normalizerTask.setType("LLM_CHAT_COMPLETE");
+        Map<String, Object> normalizerInputs = new LinkedHashMap<>();
+        if (model != null && !model.isEmpty()) {
+            ModelParser.ParsedModel parsed = ModelParser.parse(model);
+            normalizerInputs.put("llmProvider", parsed.getProvider());
+            normalizerInputs.put("model", parsed.getModel());
+        }
+        normalizerInputs.put("messages", List.of(
+            Map.of("role", "system", "message",
+                "Convert the human's response into a JSON object:\n"
+                + "{\"approved\": <boolean>, \"reason\": <string or null>}\n\n"
+                + "Output ONLY the JSON object."),
+            Map.of("role", "user", "message", "${" + validateRef + ".output.result.raw_text}")
+        ));
+        normalizerInputs.put("temperature", 0);
+        normalizerInputs.put("jsonOutput", true);
+        normalizerTask.setInputParameters(normalizerInputs);
+
+        normalizeSwitch.setDecisionCases(Map.of("needs_normalize", List.of(normalizerTask)));
+        WorkflowTask noop = new WorkflowTask();
+        noop.setType("SET_VARIABLE");
+        noop.setTaskReferenceName(agentName + "_approval_normalize_noop");
+        noop.setInputParameters(Map.of("_normalize_skipped", true));
+        normalizeSwitch.setDefaultCase(List.of(noop));
+        tasks.add(normalizeSwitch);
+
+        String approvalCheckRef = agentName + "_approval_check";
+        WorkflowTask approvalCheckTask = new WorkflowTask();
+        approvalCheckTask.setTaskReferenceName(approvalCheckRef);
+        approvalCheckTask.setType("INLINE");
+        Map<String, Object> checkResultInputs = new LinkedHashMap<>();
+        checkResultInputs.put("evaluatorType", "graaljs");
+        checkResultInputs.put("expression", JavaScriptBuilder.approvalCheckScript());
+        checkResultInputs.put("validated", "${" + validateRef + ".output.result}");
+        checkResultInputs.put("normalized", "${" + normalizerRef + ".output.result}");
+        approvalCheckTask.setInputParameters(checkResultInputs);
+        tasks.add(approvalCheckTask);
+
+        WorkflowTask approvalRoute = new WorkflowTask();
+        approvalRoute.setType("SWITCH");
+        approvalRoute.setTaskReferenceName(agentName + "_approval_route");
+        approvalRoute.setEvaluatorType("graaljs");
+        approvalRoute.setExpression("$.approved == true ? 'approved' : 'rejected'");
+        approvalRoute.setInputParameters(Map.of("approved",
+            "${" + approvalCheckRef + ".output.result.approved}"));
+
+        List<WorkflowTask> approvedChain = buildForkChainDynamic(agentName, llmRef, tools, "approved", mcpConfigRef);
+        approvalRoute.setDecisionCases(Map.of("approved", approvedChain));
+
+        WorkflowTask rejectTerminate = new WorkflowTask();
+        rejectTerminate.setType("TERMINATE");
+        rejectTerminate.setTaskReferenceName(agentName + "_approval_reject");
+        rejectTerminate.setInputParameters(Map.of(
+            "terminationReason", "${" + approvalCheckRef + ".output.result.reason}",
+            "terminationStatus", "FAILED"));
+        approvalRoute.setDefaultCase(List.of(rejectTerminate));
+        tasks.add(approvalRoute);
+
+        return tasks;
+    }
+
+    // ── State merge helpers ─────────────────────────────────────────────
+
+    /**
+     * Build merge + persist tasks for ToolContext.state.
+     *
+     * <p>After a FORK_JOIN_DYNAMIC + JOIN, this creates:</p>
+     * <ol>
+     *   <li>An INLINE task that merges {@code _state_updates} from all forked tool outputs</li>
+     *   <li>A SET_VARIABLE task that persists the merged state to {@code workflow.variables._agent_state}</li>
+     * </ol>
+     *
+     * @param agentName name of the owning agent
+     * @param joinRef   task reference name of the JOIN task
+     * @param prefix    optional prefix for task reference names
+     * @return list of two tasks: [mergeInline, setVariable]
+     */
+    public List<WorkflowTask> buildStateMergeTasks(String agentName, String joinRef, String prefix) {
+        String p = (prefix != null && !prefix.isEmpty()) ? prefix : "";
+
+        // 1. INLINE merge task
+        String mergeRef = agentName + "_" + p + "merge_state";
+        WorkflowTask mergeTask = new WorkflowTask();
+        mergeTask.setTaskReferenceName(mergeRef);
+        mergeTask.setType("INLINE");
+
+        Map<String, Object> mergeInput = new LinkedHashMap<>();
+        mergeInput.put("evaluatorType", "graaljs");
+        mergeInput.put("expression", JavaScriptBuilder.stateMergeScript());
+        mergeInput.put("currentState", "${workflow.variables._agent_state}");
+        mergeInput.put("joinOutput", "${" + joinRef + ".output}");
+        mergeTask.setInputParameters(mergeInput);
+
+        // 2. SET_VARIABLE to persist merged state
+        String setRef = agentName + "_" + p + "set_state";
+        WorkflowTask setTask = new WorkflowTask();
+        setTask.setType("SET_VARIABLE");
+        setTask.setTaskReferenceName(setRef);
+        setTask.setInputParameters(Map.of(
+            "_agent_state", "${" + mergeRef + ".output.result.mergedState}"
+        ));
+
+        return List.of(mergeTask, setTask);
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────
+
+    /**
+     * Build the task chain for the "tool_call" case of the routing switch.
+     *
+     * <p>If {@code hasApproval} is true, inserts a check-approval worker and
+     * a nested SwitchTask that gates execution behind a HumanTask.</p>
+     */
+    private List<WorkflowTask> buildToolCallCase(String agentName, String llmRef,
+                                                  boolean hasApproval, String model,
+                                                  List<ToolConfig> tools) {
+        if (hasApproval) {
+            return buildToolCallWithApproval(agentName, llmRef, model, tools);
+        }
+        return buildForkChain(agentName, llmRef, tools, "");
+    }
+
+    /**
+     * Build tool-call case with an approval gate.
+     * Flow: check_approval → SwitchTask:
+     *   "needs_approval": HumanTask → validate → normalize → approval_check → route
+     *   default: enrich → DynamicFork+Join
+     */
+    private List<WorkflowTask> buildToolCallWithApproval(String agentName, String llmRef,
+                                                          String model, List<ToolConfig> tools) {
+        // 1. check_approval INLINE task (server-side JS)
+        StringBuilder approvalJson = new StringBuilder("{");
+        boolean first = true;
+        for (ToolConfig tool : tools) {
+            if (tool.isApprovalRequired()) {
+                if (!first) approvalJson.append(",");
+                approvalJson.append("\"").append(tool.getName()).append("\":true");
+                first = false;
+            }
+        }
+        approvalJson.append("}");
+
+        String checkRef = agentName + "_check_approval";
+        WorkflowTask checkTask = new WorkflowTask();
+        checkTask.setTaskReferenceName(checkRef);
+        checkTask.setType("INLINE");
+        Map<String, Object> checkInputs = new LinkedHashMap<>();
+        checkInputs.put("evaluatorType", "graaljs");
+        checkInputs.put("expression",
+            "(function() {"
+            + "var approvalTools = " + approvalJson + ";"
+            + "var tcs = $.tool_calls || [];"
+            + "for (var i = 0; i < tcs.length; i++) {"
+            + "  if (approvalTools[tcs[i].name]) return {needs_approval: true};"
+            + "}"
+            + "return {needs_approval: false};"
+            + "})()");
+        checkInputs.put("tool_calls", "${" + llmRef + ".output.toolCalls}");
+        checkTask.setInputParameters(checkInputs);
+
+        // 2. Outer SwitchTask: needs_approval vs direct execution
+        WorkflowTask approvalSwitch = new WorkflowTask();
+        approvalSwitch.setType("SWITCH");
+        approvalSwitch.setTaskReferenceName(agentName + "_approval_gate");
+        approvalSwitch.setEvaluatorType("graaljs");
+        approvalSwitch.setExpression("$.needs_approval == true ? 'needs_approval' : 'direct'");
+        Map<String, Object> gateInputs = new LinkedHashMap<>();
+        gateInputs.put("needs_approval", "${" + checkRef + ".output.result.needs_approval}");
+        approvalSwitch.setInputParameters(gateInputs);
+
+        Map<String, List<WorkflowTask>> gateCases = new LinkedHashMap<>();
+
+        // ── "needs_approval" case ──
+        List<WorkflowTask> approvalCaseTasks = new ArrayList<>();
+
+        // HumanTask
+        String humanRef = agentName + "_approval_human";
+        WorkflowTask humanTask = new WorkflowTask();
+        humanTask.setType("HUMAN");
+        humanTask.setTaskReferenceName(humanRef);
+        Map<String, Object> humanInputs = new LinkedHashMap<>();
+        humanInputs.put("__humanTaskDefinition", Map.of(
+            "assignmentCompletionStrategy", "LEAVE_OPEN",
+            "displayName", agentName + " Tool Approval",
+            "userFormTemplate", Map.of("version", 0)
+        ));
+        humanInputs.put("response_schema", Map.of(
+            "type", "object",
+            "required", List.of("approved"),
+            "properties", Map.of(
+                "approved", Map.of(
+                    "type", "boolean",
+                    "title", "Approved",
+                    "description", "Approve or reject the tool execution"
+                ),
+                "reason", Map.of(
+                    "type", "string",
+                    "title", "Reason",
+                    "description", "Reason for rejection"
+                )
+            )
+        ));
+        humanInputs.put("response_ui_schema", Map.of(
+            "ui:order", List.of("approved", "reason"),
+            "approved", Map.of("ui:widget", "radio"),
+            "reason", Map.of("ui:widget", "textarea")
+        ));
+        humanInputs.put("tool_calls", "${" + llmRef + ".output.toolCalls}");
+        humanTask.setInputParameters(humanInputs);
+        approvalCaseTasks.add(humanTask);
+
+        // Validate InlineTask
+        String validateRef = agentName + "_approval_validate";
+        WorkflowTask validateTask = new WorkflowTask();
+        validateTask.setTaskReferenceName(validateRef);
+        validateTask.setType("INLINE");
+        Map<String, Object> validateInputs = new LinkedHashMap<>();
+        validateInputs.put("evaluatorType", "graaljs");
+        validateInputs.put("expression", JavaScriptBuilder.approvalValidateScript());
+        validateInputs.put("human_output", "${" + humanRef + ".output}");
+        validateTask.setInputParameters(validateInputs);
+        approvalCaseTasks.add(validateTask);
+
+        // Normalize SwitchTask
+        String normalizeSwitchRef = agentName + "_approval_normalize_switch";
+        WorkflowTask normalizeSwitch = new WorkflowTask();
+        normalizeSwitch.setType("SWITCH");
+        normalizeSwitch.setTaskReferenceName(normalizeSwitchRef);
+        normalizeSwitch.setEvaluatorType("graaljs");
+        normalizeSwitch.setExpression("$.needs_normalize == true ? 'needs_normalize' : 'skip'");
+        Map<String, Object> normalizeSwitchInputs = new LinkedHashMap<>();
+        normalizeSwitchInputs.put("needs_normalize",
+            "${" + validateRef + ".output.result.needs_normalize}");
+        normalizeSwitch.setInputParameters(normalizeSwitchInputs);
+
+        // needs_normalize case: LLM normalizer
+        String normalizerRef = agentName + "_approval_normalizer";
+        WorkflowTask normalizerTask = new WorkflowTask();
+        normalizerTask.setName("LLM_CHAT_COMPLETE");
+        normalizerTask.setTaskReferenceName(normalizerRef);
+        normalizerTask.setType("LLM_CHAT_COMPLETE");
+        Map<String, Object> normalizerInputs = new LinkedHashMap<>();
+        if (model != null && !model.isEmpty()) {
+            ModelParser.ParsedModel parsed = ModelParser.parse(model);
+            normalizerInputs.put("llmProvider", parsed.getProvider());
+            normalizerInputs.put("model", parsed.getModel());
+        }
+        normalizerInputs.put("messages", List.of(
+            Map.of("role", "system", "message",
+                "Convert the human's response into a JSON object:\n"
+                + "{\"approved\": <boolean>, \"reason\": <string or null>}\n\n"
+                + "Rules:\n"
+                + "- approved=true for: approve, yes, ok, LGTM, looks good, go ahead, etc.\n"
+                + "- approved=false for: reject, no, deny, not approved, etc.\n"
+                + "- If they give a reason, put it in reason.\n"
+                + "- If input is already valid JSON with these fields, return as-is.\n"
+                + "Output ONLY the JSON object."),
+            Map.of("role", "user", "message",
+                "${" + validateRef + ".output.result.raw_text}")
+        ));
+        normalizerInputs.put("temperature", 0);
+        normalizerInputs.put("jsonOutput", true);
+        normalizerTask.setInputParameters(normalizerInputs);
+
+        Map<String, List<WorkflowTask>> normalizeCases = new LinkedHashMap<>();
+        normalizeCases.put("needs_normalize", List.of(normalizerTask));
+        normalizeSwitch.setDecisionCases(normalizeCases);
+
+        // default: no-op
+        WorkflowTask normalizeNoop = new WorkflowTask();
+        normalizeNoop.setType("SET_VARIABLE");
+        normalizeNoop.setTaskReferenceName(agentName + "_approval_normalize_noop");
+        normalizeNoop.setInputParameters(Map.of("_normalize_skipped", true));
+        normalizeSwitch.setDefaultCase(List.of(normalizeNoop));
+        approvalCaseTasks.add(normalizeSwitch);
+
+        // Approval check InlineTask
+        String approvalCheckRef = agentName + "_approval_check";
+        WorkflowTask approvalCheckTask = new WorkflowTask();
+        approvalCheckTask.setTaskReferenceName(approvalCheckRef);
+        approvalCheckTask.setType("INLINE");
+        Map<String, Object> checkResultInputs = new LinkedHashMap<>();
+        checkResultInputs.put("evaluatorType", "graaljs");
+        checkResultInputs.put("expression", JavaScriptBuilder.approvalCheckScript());
+        checkResultInputs.put("validated", "${" + validateRef + ".output.result}");
+        checkResultInputs.put("normalized", "${" + normalizerRef + ".output.result}");
+        approvalCheckTask.setInputParameters(checkResultInputs);
+        approvalCaseTasks.add(approvalCheckTask);
+
+        // Approval routing SwitchTask
+        WorkflowTask approvalRoute = new WorkflowTask();
+        approvalRoute.setType("SWITCH");
+        approvalRoute.setTaskReferenceName(agentName + "_approval_route");
+        approvalRoute.setEvaluatorType("graaljs");
+        approvalRoute.setExpression("$.approved == true ? 'approved' : 'rejected'");
+        Map<String, Object> routeInputs = new LinkedHashMap<>();
+        routeInputs.put("approved", "${" + approvalCheckRef + ".output.result.approved}");
+        approvalRoute.setInputParameters(routeInputs);
+
+        // "approved" case: execute tools
+        List<WorkflowTask> approvedChain = buildForkChain(agentName, llmRef, tools, "approved");
+        Map<String, List<WorkflowTask>> routeCases = new LinkedHashMap<>();
+        routeCases.put("approved", approvedChain);
+        approvalRoute.setDecisionCases(routeCases);
+
+        // default (rejected): terminate
+        WorkflowTask rejectTerminate = new WorkflowTask();
+        rejectTerminate.setType("TERMINATE");
+        rejectTerminate.setTaskReferenceName(agentName + "_approval_reject");
+        Map<String, Object> rejectInputs = new LinkedHashMap<>();
+        rejectInputs.put("terminationReason", "${" + approvalCheckRef + ".output.result.reason}");
+        rejectInputs.put("terminationStatus", "FAILED");
+        rejectTerminate.setInputParameters(rejectInputs);
+        approvalRoute.setDefaultCase(List.of(rejectTerminate));
+        approvalCaseTasks.add(approvalRoute);
+
+        gateCases.put("needs_approval", approvalCaseTasks);
+        approvalSwitch.setDecisionCases(gateCases);
+
+        // ── default (no approval needed) case: direct execution ──
+        List<WorkflowTask> directChain = buildForkChain(agentName, llmRef, tools, "direct");
+        approvalSwitch.setDefaultCase(directChain);
+
+        return List.of(checkTask, approvalSwitch);
+    }
+}

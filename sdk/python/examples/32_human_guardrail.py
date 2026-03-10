@@ -1,0 +1,111 @@
+"""Human-in-the-loop guardrail — ``on_fail="human"``.
+
+Demonstrates a guardrail that pauses the workflow for human review when
+the output fails validation.  The human can approve, reject, or edit.
+
+Since the workflow pauses at a HumanTask, this example uses ``start()``
+(async) instead of ``run()`` (blocking).
+
+Requirements:
+    - Conductor server with LLM support
+    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+"""
+
+import time
+
+from agentspan.agents import (
+    Agent,
+    AgentRuntime,
+    Guardrail,
+    GuardrailResult,
+    OnFail,
+    Position,
+    guardrail,
+    tool,
+)
+from model_config import get_model
+
+
+# ── Guardrail ────────────────────────────────────────────────────────────
+
+@guardrail
+def compliance_check(content: str) -> GuardrailResult:
+    """Flag any response that mentions specific financial terms for review."""
+    flagged_terms = ["investment advice", "guaranteed returns", "risk-free"]
+    for term in flagged_terms:
+        if term.lower() in content.lower():
+            return GuardrailResult(
+                passed=False,
+                message=f"Response contains flagged term: '{term}'. Needs human review.",
+            )
+    return GuardrailResult(passed=True)
+
+
+# ── Tool ─────────────────────────────────────────────────────────────────
+
+@tool
+def get_market_data(ticker: str) -> dict:
+    """Get current market data for a stock ticker."""
+    return {
+        "ticker": ticker,
+        "price": 185.42,
+        "change": "+2.3%",
+        "volume": "45.2M",
+    }
+
+
+# ── Agent ────────────────────────────────────────────────────────────────
+
+agent = Agent(
+    name="finance_agent",
+    model=get_model(),
+    tools=[get_market_data],
+    instructions=(
+        "You are a financial information assistant. Provide market data "
+        "and general financial information. You may discuss investment "
+        "strategies and returns."
+    ),
+    guardrails=[
+        Guardrail(
+            compliance_check,
+            position=Position.OUTPUT,
+            on_fail=OnFail.HUMAN,
+            name="compliance",
+        ),
+    ],
+)
+
+
+with AgentRuntime() as runtime:
+    # Start the agent (async — doesn't block)
+    handle = runtime.start(
+        agent,
+        "Look up AAPL and explain whether it's a good investment. "
+        "Include your opinion on potential returns.",
+    )
+    print(f"Workflow started: {handle.workflow_id}")
+
+    # Poll for status
+    for i in range(60):
+        status = handle.get_status()
+        print(f"  Status: {status.status} (waiting={status.is_waiting})")
+
+        if status.is_waiting:
+            print("\n--- Workflow paused for human review ---")
+            print("The guardrail flagged the response for compliance review.")
+            print("Options: approve(), reject(reason), or respond(output)")
+
+            # In a real app, a human would review in the Conductor UI.
+            # Here we auto-approve for the demo.
+            print("Auto-approving for demo...")
+            runtime.approve(handle.workflow_id)
+            print("Approved! Resuming workflow...\n")
+
+        if status.is_complete:
+            print(f"\nFinal output: {status.output}")
+            break
+
+        time.sleep(1)
+    else:
+        print("Timed out waiting for workflow to complete")
+        runtime.cancel(handle.workflow_id)

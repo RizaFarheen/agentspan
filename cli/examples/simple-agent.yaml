@@ -1,0 +1,7 @@
+name: simple-assistant
+description: A simple conversational assistant
+model: openai/gpt-4o
+instructions: |
+  You are a helpful AI assistant. Answer questions clearly and concisely.
+maxTurns: 10
+tools: []

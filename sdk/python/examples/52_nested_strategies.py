@@ -1,0 +1,60 @@
+"""Nested Strategies — parallel agents inside a sequential pipeline.
+
+Demonstrates composing strategies: a ParallelAgent phase runs multiple
+research agents concurrently, followed by a sequential summarizer.
+
+    pipeline = parallel_research >> summarizer
+
+Requirements:
+    - Conductor server
+    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+"""
+
+from agentspan.agents import Agent, AgentRuntime
+from model_config import get_model
+
+# ── Parallel research phase ────────────────────────────────────────
+
+market_analyst = Agent(
+    name="market_analyst_52",
+    model=get_model(),
+    instructions=(
+        "You are a market analyst. Analyze the market size, growth rate, "
+        "and key players for the given topic. Be concise (3-4 bullet points)."
+    ),
+)
+
+risk_analyst = Agent(
+    name="risk_analyst_52",
+    model=get_model(),
+    instructions=(
+        "You are a risk analyst. Identify the top 3 risks: regulatory, "
+        "technical, and competitive. Be concise."
+    ),
+)
+
+# Both analysts run concurrently
+parallel_research = Agent(
+    name="research_phase_52",
+    model=get_model(),
+    agents=[market_analyst, risk_analyst],
+    strategy="parallel",
+)
+
+# ── Sequential summarizer ──────────────────────────────────────────
+
+summarizer = Agent(
+    name="summarizer_52",
+    model=get_model(),
+    instructions=(
+        "You are an executive briefing writer. Synthesize the market analysis "
+        "and risk assessment into a concise executive summary (1 paragraph)."
+    ),
+)
+
+# ── Pipeline: parallel research → summary ──────────────────────────
+pipeline = parallel_research >> summarizer
+
+with AgentRuntime() as runtime:
+    result = runtime.run(pipeline, "Launching an AI-powered healthcare diagnostics tool in the US")
+    result.print_result()

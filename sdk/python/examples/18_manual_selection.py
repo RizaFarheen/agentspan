@@ -1,0 +1,86 @@
+"""Manual Selection — human picks which agent speaks next.
+
+Demonstrates ``strategy="manual"`` where the workflow pauses each turn
+to let a human select which agent should respond.  The human interacts
+via the ``AgentHandle.respond()`` API.
+
+Flow:
+    1. Workflow pauses with a HumanTask showing available agents
+    2. Human picks an agent (e.g. {"selected": "writer"})
+    3. Selected agent responds
+    4. Repeat until max_turns
+
+Requirements:
+    - Conductor server with LLM support
+    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+"""
+
+import time
+
+from agentspan.agents import Agent, AgentRuntime, Strategy
+from model_config import get_model
+
+writer = Agent(
+    name="writer",
+    model=get_model(),
+    instructions="You are a creative writer. Expand on ideas with vivid prose.",
+)
+
+editor = Agent(
+    name="editor",
+    model=get_model(),
+    instructions="You are a strict editor. Improve clarity, fix issues, tighten prose.",
+)
+
+fact_checker = Agent(
+    name="fact_checker",
+    model=get_model(),
+    instructions="You verify claims and flag anything inaccurate or unsupported.",
+)
+
+# Manual strategy: human picks who speaks each turn
+team = Agent(
+    name="editorial_team",
+    model=get_model(),
+    agents=[writer, editor, fact_checker],
+    strategy=Strategy.MANUAL,
+    max_turns=3,
+)
+
+with AgentRuntime() as runtime:
+    # Start async so we can interact with the human tasks
+    handle = runtime.start(
+        team,
+        "Write a short paragraph about the history of artificial intelligence.",
+    )
+    print(f"Started workflow: {handle.workflow_id}")
+
+    # In a real app, a UI would show the agent options and the human would pick.
+    # Here we simulate by selecting agents programmatically:
+    selections = ["writer", "editor", "fact_checker"]
+
+    for i, agent_name in enumerate(selections):
+        # Wait for the workflow to pause at the HumanTask
+        for _ in range(30):
+            status = handle.get_status()
+            if status.is_waiting:
+                break
+            if status.is_complete:
+                break
+            time.sleep(1)
+
+        if status.is_complete:
+            print(f"Workflow completed after {i} turns")
+            break
+
+        if status.is_waiting:
+            print(f"Turn {i + 1}: Selecting '{agent_name}'")
+            handle.respond({"selected": agent_name})
+
+    # Wait for final completion
+    for _ in range(30):
+        status = handle.get_status()
+        if status.is_complete:
+            print(f"\nFinal output:\n{status.output}")
+            break
+        time.sleep(1)

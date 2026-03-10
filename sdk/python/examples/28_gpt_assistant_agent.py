@@ -1,0 +1,49 @@
+"""GPTAssistantAgent — wrap OpenAI Assistants API as a Conductor agent.
+
+Demonstrates ``GPTAssistantAgent`` which uses the OpenAI Assistants API
+(with threads, runs, and built-in tools like code_interpreter) as a
+Conductor agent.
+
+Two modes:
+    1. Use an existing assistant by ID
+    2. Create a new assistant on-the-fly with model + instructions
+
+Requirements:
+    - pip install openai
+    - Conductor server with LLM support
+    - export OPENAI_API_KEY=sk-...
+    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+"""
+
+from agentspan.agents import AgentRuntime
+from agentspan.agents.ext import GPTAssistantAgent
+
+# ── Example 1: Create assistant on the fly ───────────────────────────
+
+data_analyst = GPTAssistantAgent(
+    name="data_analyst",
+    model="gpt-4o",
+    instructions=(
+        "You are a data analyst. Use the code interpreter to analyze data, "
+        "create charts, and perform calculations."
+    ),
+    openai_tools=[{"type": "code_interpreter"}],
+)
+
+# ── Example 2: Use an existing assistant ─────────────────────────────
+
+# If you already have an assistant created in the OpenAI dashboard:
+# existing_assistant = GPTAssistantAgent(
+#     name="my_assistant",
+#     assistant_id="asst_abc123def456",
+# )
+
+# ── Run ─────────────────────────────────────────────────────────────
+
+with AgentRuntime() as runtime:
+    print("--- GPT Assistant with Code Interpreter ---")
+    result = runtime.run(
+        data_analyst,
+        "Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42",
+    )
+    result.print_result()

@@ -1,0 +1,51 @@
+name: Release Python SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (must match pyproject.toml)"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify version matches pyproject.toml
+        run: |
+          TOML_VERSION=$(python3 -c "
+          import re, pathlib
+          text = pathlib.Path('pyproject.toml').read_text()
+          m = re.search(r'^version\s*=\s*\"([^\"]+)\"', text, re.MULTILINE)
+          print(m.group(1))
+          ")
+          if [ "$TOML_VERSION" != "${{ inputs.version }}" ]; then
+            echo "::error::Version mismatch: input=${{ inputs.version }}, pyproject.toml=$TOML_VERSION"
+            exit 1
+          fi
+          echo "Version verified: $TOML_VERSION"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/python/dist/

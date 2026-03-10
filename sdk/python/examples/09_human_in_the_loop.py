@@ -1,0 +1,66 @@
+"""Human-in-the-Loop — approval workflows.
+
+Demonstrates how tools with approval_required=True pause the workflow
+until a human approves or rejects the action.  A Conductor HumanTask is
+inserted into the compiled workflow so the loop pauses at the right point
+and resumes after the reviewer decides.
+
+Requirements:
+    - Conductor server with LLM support
+    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+"""
+
+from agentspan.agents import Agent, AgentRuntime, EventType, tool
+from model_config import get_model
+
+
+@tool
+def check_balance(account_id: str) -> dict:
+    """Check the balance of an account."""
+    return {"account_id": account_id, "balance": 15000.00}
+
+
+@tool(approval_required=True)
+def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
+    """Transfer funds between accounts. Requires human approval."""
+    return {"status": "completed", "from": from_acct, "to": to_acct, "amount": amount}
+
+
+agent = Agent(
+    name="banker",
+    model=get_model(),
+    tools=[check_balance, transfer_funds],
+    instructions="You are a banking assistant. Help with balance inquiries and transfers.",
+)
+
+with AgentRuntime() as runtime:
+    # start() returns a handle; handle.stream() streams events with HITL support
+    handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456")
+    print(f"Workflow started: {handle.workflow_id}\n")
+
+    for event in handle.stream():
+        if event.type == EventType.THINKING:
+            print(f"  [thinking] {event.content}")
+
+        elif event.type == EventType.TOOL_CALL:
+            print(f"  [tool_call] {event.tool_name}({event.args})")
+
+        elif event.type == EventType.TOOL_RESULT:
+            print(f"  [tool_result] {event.tool_name} -> {event.result}")
+
+        elif event.type == EventType.WAITING:
+            print(f"\n--- Human approval required ---")
+            choice = input("  Approve? (y/n): ").strip().lower()
+            if choice == "y":
+                handle.approve()
+                print("  Approved!\n")
+            else:
+                reason = input("  Rejection reason: ").strip()
+                handle.reject(reason or "Rejected by user")
+                print("  Rejected.\n")
+
+        elif event.type == EventType.ERROR:
+            print(f"  [error] {event.content}")
+
+        elif event.type == EventType.DONE:
+            print(f"\nResult: {event.output}")

@@ -1,0 +1,260 @@
+# AGENTS.md — Guide for AI Agents Working on This Codebase
+
+This file provides context for AI coding agents (Claude Code, Copilot, Cursor, etc.) working on the Conductor Agentic SDK.
+
+## Project Overview
+
+The `conductor-agentic` Python SDK compiles Python `Agent` definitions into durable [Conductor](https://github.com/conductor-oss/conductor) workflows. Agents survive process crashes, tools scale as distributed workers, and human-in-the-loop approvals can pause for days.
+
+**Package name:** `conductor-agentic`
+**Import path:** `from conductor.agentic import ...`
+**Python:** 3.9+
+**License:** Apache 2.0
+
+## Architecture
+
+### Core Design Principles
+
+1. **Everything is an Agent.** One class for single agents, multi-agent teams, and nested hierarchies. No Team, Network, or Swarm classes.
+2. **Server-first execution.** Tools execute as distributed Conductor tasks. The agent survives process crashes.
+3. **Compile, don't interpret.** Agent definitions are compiled into static Conductor workflow JSON at registration time.
+4. **Zero config for simple cases.** `Agent + tool + run` works in 5 lines.
+5. **Conductor-native.** Every SDK concept maps directly to a Conductor primitive.
+
+### Compilation Pipeline
+
+```
+Agent(Python) → AgentCompiler.compile() → ConductorWorkflow(JSON) → execute on server
+```
+
+When `run(agent, prompt)` is called:
+1. Agent is compiled into a Conductor workflow definition
+2. Worker processes are started for `@tool` functions
+3. Workflow is executed on the Conductor server
+4. Result is extracted and returned as `AgentResult`
+
+### Key Source Files
+
+| File | Purpose |
+|---|---|
+| `src/conductor/agentic/agent.py` | `Agent` class — the single orchestration primitive |
+| `src/conductor/agentic/tool.py` | `@tool` decorator, `ToolDef`, `http_tool()`, `mcp_tool()` |
+| `src/conductor/agentic/run.py` | Top-level `run()`, `start()`, `stream()`, `run_async()`, `plan()` with singleton runtime |
+| `src/conductor/agentic/result.py` | `AgentResult`, `AgentHandle`, `AgentStatus`, `AgentEvent`, `EventType` |
+| `src/conductor/agentic/guardrail.py` | `Guardrail`, `GuardrailResult`, `RegexGuardrail`, `LLMGuardrail` |
+| `src/conductor/agentic/memory.py` | `ConversationMemory` — session message history |
+| `src/conductor/agentic/semantic_memory.py` | `SemanticMemory`, `MemoryStore`, `MemoryEntry` — long-term memory |
+| `src/conductor/agentic/termination.py` | `TerminationCondition` and composable subclasses (`&`, `|` operators) |
+| `src/conductor/agentic/handoff.py` | `HandoffCondition`, `OnToolResult`, `OnTextMention`, `OnCondition` |
+| `src/conductor/agentic/code_executor.py` | `CodeExecutor` — Local, Docker, Jupyter, Serverless |
+| `src/conductor/agentic/ext.py` | `UserProxyAgent`, `GPTAssistantAgent` |
+| `src/conductor/agentic/tracing.py` | Optional OpenTelemetry integration |
+| `src/conductor/agentic/__init__.py` | Public API surface — all exports |
+| `src/conductor/agentic/compiler/agent_compiler.py` | Single agent compilation (DoWhile loops, tool dispatch) |
+| `src/conductor/agentic/compiler/multi_agent_compiler.py` | Multi-agent strategies (handoff, sequential, parallel, router) |
+| `src/conductor/agentic/compiler/tool_compiler.py` | `@tool` → TaskDef + ToolSpec + dispatch registration |
+| `src/conductor/agentic/compiler/_dispatch.py` | Universal dispatch worker (fuzzy parsing, circuit breaker) |
+| `src/conductor/agentic/runtime/runtime.py` | `AgentRuntime` — compile + execute + stream |
+| `src/conductor/agentic/runtime/worker_manager.py` | Auto-register `@tool` as Conductor workers |
+| `src/conductor/agentic/runtime/config.py` | `AgentConfig` — environment variable configuration |
+| `src/conductor/agentic/_internal/model_parser.py` | Parse `"provider/model"` strings |
+| `src/conductor/agentic/_internal/schema_utils.py` | JSON Schema generation from type hints |
+
+### Conductor Primitive Mapping
+
+| SDK Concept | Conductor Primitive |
+|---|---|
+| `Agent` | `ConductorWorkflow` |
+| `@tool` function | Task definition + `@worker_task` |
+| `http_tool` | `HttpTask` (server-side) |
+| `mcp_tool` | `ListMcpTools` + `CallMcpTool` |
+| Agentic loop | `DoWhileTask` |
+| LLM call | `LlmChatComplete` (system task) |
+| Handoff | `InlineSubWorkflowTask` |
+| Sequential | Chain of `SubWorkflowTask` |
+| Parallel | `ForkTask` + `JoinTask` |
+| Human approval | `WaitTask` |
+| Conversation state | `workflow.variables` |
+
+## Coding Conventions
+
+### Style
+
+- **Linter:** ruff (`target-version = "py39"`, `line-length = 100`)
+- **Type checker:** mypy (`python_version = "3.9"`, `ignore_missing_imports = true`)
+- **Imports:** isort via ruff (`"I"` rule)
+- **Python target:** 3.9+ (use `from __future__ import annotations` for newer typing syntax)
+
+### Module-Level Patterns
+
+- Every module uses `logging.getLogger("conductor.agentic.xxx")` for structured logging
+- The dispatch worker (`_dispatch.py`) deliberately does NOT use `from __future__ import annotations` because Conductor's worker framework needs real type objects for parameter resolution
+- The dispatch worker uses `object` type annotations (not `dict`/`list`) to avoid Conductor's `convert_from_dict_or_list()` issues
+- Tool functions, error counts, and approval flags are stored in module-level registries (`_tool_registry`, `_tool_error_counts`, `_tool_approval_flags`)
+
+### Public API
+
+All public exports are listed in `src/conductor/agentic/__init__.py` and its `__all__` list. When adding a new public class or function, add it to both the imports and `__all__`.
+
+### Agent Strategies
+
+Valid strategies are defined in `agent.py`:
+```
+"handoff", "sequential", "parallel", "router", "round_robin", "random", "swarm", "manual"
+```
+
+### Guardrail `on_fail` Modes
+
+```
+"retry", "raise", "fix", "human"
+```
+
+`"human"` is only valid for `position="output"` (input guardrails are client-side).
+
+## Testing
+
+### Running Tests
+
+```bash
+# Unit tests (no server required)
+python3 -m pytest tests/unit/ -v
+
+# Integration tests (require running Conductor server)
+python3 -m pytest tests/integration/ -v
+
+# Lint
+ruff check src/
+
+# Type check
+mypy src/conductor/agentic/ --ignore-missing-imports --no-strict-optional
+```
+
+### Test Files
+
+| File | Scope |
+|---|---|
+| `tests/unit/test_agent.py` | Agent creation, validation, chaining, repr |
+| `tests/unit/test_tool.py` | `@tool`, `http_tool`, `mcp_tool`, `get_tool_def`, `@worker_task` |
+| `tests/unit/test_compiler.py` | Model parser, schema gen, tool compiler, DoWhile structure |
+| `tests/unit/test_dispatch_advanced.py` | Fuzzy parsing, circuit breaker, approval, trimming, ToolContext |
+| `tests/unit/test_multi_agent_compiler.py` | Handoff, sequential, parallel, router, hybrid |
+| `tests/unit/test_result.py` | AgentResult, AgentStatus, AgentEvent, EventType |
+| `tests/unit/test_termination.py` | Termination conditions and composable operators |
+| `tests/integration/test_basic_execution.py` | End-to-end single agent execution |
+| `tests/integration/test_multi_agent.py` | End-to-end multi-agent execution |
+
+### Writing Tests
+
+- Unit tests must run without a Conductor server (mock all external calls)
+- Place unit tests in `tests/unit/`, integration tests in `tests/integration/`
+- Follow existing naming: `test_{module}.py`
+- Use `pytest` fixtures and parametrize where appropriate
+- do NOT use mocks.  Mocks considered harmful.  Write tests that uses the actual server
+- SDK e2e tests MUST rely on the server to ensure we are testing the actual communication
+
+### Examples
+- Every feature MUST have an example in all the supported sdks (python/ etc)
+- If the feature requires multiple examples, then write multiple examples to demonstrate how to use that feature
+- Examples MUST be very clear and to the point.  Do not overload them with many features - one feature one examples.  Ofcourse you can use other features as required, but that is not a substitute for not writing examples for those features.
+
+## Validation Checklist
+
+Before merging any change:
+
+1. **Unit tests pass:** `python3 -m pytest tests/unit/ -v`
+2. **Lint clean:** `ruff check src/`
+3. **Type check clean:** `mypy src/conductor/agentic/ --ignore-missing-imports --no-strict-optional`
+4. **Public API unchanged** (or intentionally extended): check `__init__.py` `__all__`
+5. **Examples still work** for affected features (run against a live Conductor server)
+
+## Common Patterns
+
+### Adding a New Tool Type
+
+1. Add a constructor function in `tool.py` (like `http_tool()`, `mcp_tool()`)
+2. Return a `ToolDef` with the appropriate `tool_type`
+3. Handle the new type in `compiler/tool_compiler.py`
+4. Export from `__init__.py`
+5. Add a test in `tests/unit/test_tool.py`
+6. Add an example in `examples/`
+
+### Adding a New Multi-Agent Strategy
+
+1. Add the strategy name to `_VALID_STRATEGIES` in `agent.py`
+2. Implement the compilation in `compiler/multi_agent_compiler.py`
+3. Add a test in `tests/unit/test_multi_agent_compiler.py`
+4. Add an example in `examples/`
+
+### Adding a New Guardrail Type
+
+1. Subclass `Guardrail` in `guardrail.py` (see `RegexGuardrail`, `LLMGuardrail`)
+2. Export from `__init__.py`
+3. Add an example in `examples/`
+
+### Adding a New Termination Condition
+
+1. Subclass `TerminationCondition` in `termination.py`
+2. Implement `should_terminate(self, context) -> TerminationResult`
+3. Export from `__init__.py`
+4. Add a test in `tests/unit/test_termination.py`
+
+## Runtime Server (Java)
+
+The `runtime/` directory contains the Agent Runtime — a Spring Boot server that embeds Conductor. See `runtime/AGENTS.md` for full details.
+
+### Testing Requirements
+
+**All runtime features MUST have real E2E integration tests.** Do not rely solely on mocked unit tests for HTTP endpoints or SSE streaming. E2E tests boot the full Spring context (`@SpringBootTest` with `RANDOM_PORT`) and test over real HTTP connections.
+
+```bash
+# Run runtime tests
+cd runtime && ./gradlew test
+
+# SSE E2E tests specifically
+cd runtime && ./gradlew test --tests "org.openagent.runtime.controller.AgentControllerSSEIntegrationTest"
+```
+
+## Python SDK SSE Testing
+
+SSE streaming tests are organized in three tiers:
+
+1. **Tier 1 — SSE parsing unit tests** (`tests/unit/test_sse_parsing.py`): Tests `_parse_sse()` and `_sse_to_agent_event()` as pure functions. Zero dependencies, runs in CI.
+2. **Tier 2 — Mock SSE server tests** (`tests/unit/test_sse_client.py`): Spins up a real HTTP server in a thread, tests the full `_stream_sse()` code path. No Java server or LLM needed.
+3. **Tier 3 — Real server SSE tests** (`tests/integration/test_e2e_sse.py`): Full Python SDK → Runtime → Conductor → SSE path. Requires `CONDUCTOR_STREAMING_ENABLED=true`.
+
+```bash
+# Tier 1 + 2 (no server needed, always run in CI)
+cd python && python3 -m pytest tests/unit/test_sse_parsing.py tests/unit/test_sse_client.py -v
+
+# Tier 3 (requires running runtime server + LLM key)
+cd python && CONDUCTOR_STREAMING_ENABLED=true python3 -m pytest tests/integration/test_e2e_sse.py -v
+```
+
+**When adding SSE features:** Add tests at all three tiers. Tier 1+2 are mandatory for CI. Tier 3 validates the real cross-process path.
+
+## CI/CD
+
+GitHub Actions workflow at `.github/workflows/ci.yml`:
+- Unit tests on Python 3.9-3.13
+- Lint with ruff
+- Type check with mypy
+
+## Configuration
+
+Environment variables:
+
+| Variable | Description | Default |
+|---|---|---|
+| `CONDUCTOR_SERVER_URL` | Conductor server API URL | (required) |
+| `CONDUCTOR_AUTH_KEY` | Auth key (Orkes Cloud) | None |
+| `CONDUCTOR_AUTH_SECRET` | Auth secret (Orkes Cloud) | None |
+| `CONDUCTOR_AGENT_TIMEOUT` | Default workflow timeout (seconds) | 300 |
+| `CONDUCTOR_LLM_RETRY_COUNT` | LLM task retry count | 3 |
+| `CONDUCTOR_WORKER_POLL_INTERVAL` | Worker poll interval (ms) | 100 |
+| `CONDUCTOR_WORKER_THREADS` | Worker threads per tool | 1 |
+
+## Dependencies
+
+- **Required:** `conductor-python>=1.1.10`
+- **Optional:** `pydantic` (structured output), `openai` (GPTAssistantAgent), `litellm` (LLMGuardrail), `opentelemetry-api` + `opentelemetry-sdk` (tracing), `jupyter_client` + `ipykernel` (JupyterCodeExecutor)
+- **Dev:** `pytest>=7.0`, `pytest-asyncio>=0.21`, `ruff>=0.4`, `mypy>=1.10`

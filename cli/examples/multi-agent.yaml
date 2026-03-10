@@ -1,0 +1,22 @@
+name: research-team
+description: A multi-agent research team
+model: openai/gpt-4o
+instructions: Route user requests to the appropriate specialist agent.
+strategy: handoff
+agents:
+  - name: researcher
+    description: Finds and summarizes information
+    model: openai/gpt-4o
+    instructions: |
+      You are a research specialist. Find relevant information and provide
+      well-sourced summaries.
+    tools:
+      - name: web_search
+        type: worker
+  - name: writer
+    description: Writes polished content
+    model: openai/gpt-4o
+    instructions: |
+      You are a writing specialist. Take research findings and produce
+      clear, well-structured content.
+    tools: []
