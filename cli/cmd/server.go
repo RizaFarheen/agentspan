@@ -20,9 +20,8 @@ import (
 )
 
 const (
-	githubRepo = "agentspan/agentspan"
-	latestTag  = "latest"
-	jarName    = "agentspan-runtime.jar"
+	s3Bucket = "https://agentspan.s3.us-east-2.amazonaws.com"
+	jarName  = "agentspan-runtime.jar"
 )
 
 var (
@@ -296,12 +295,12 @@ func ensureVersionedJAR(jarPath, version string) error {
 		return nil
 	}
 
-	downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", githubRepo, version, jarName)
+	downloadURL := fmt.Sprintf("%s/agentspan-server-%s.jar", s3Bucket, version)
 	return downloadJAR(downloadURL, jarPath)
 }
 
 func ensureLatestJAR(jarPath string) error {
-	downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", githubRepo, latestTag, jarName)
+	downloadURL := fmt.Sprintf("%s/agentspan-server-latest.jar", s3Bucket)
 
 	// If we already have a cached JAR, do a HEAD request to check if remote has changed
 	if info, err := os.Stat(jarPath); err == nil {

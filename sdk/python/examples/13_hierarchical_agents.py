@@ -112,7 +112,3 @@ with AgentRuntime() as runtime:
     result = runtime.run(ceo, "Design a REST API for a user management system with authentication "
                               "and then come up with a marketing campaign for the system")
     result.print_result()
-
-    print("\n--- Marketing question (CEO -> Marketing -> SEO) ---")
-    result2 = runtime.run(ceo, "How should we optimize our product page for search engines?")
-    result2.print_result()

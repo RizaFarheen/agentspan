@@ -76,21 +76,13 @@ configurations.all {
 
     // GraalVM polyglot engines — Python (~144MB), JS (~62MB), Truffle runtime
     // Conductor uses these for inline script evaluation; agents use HTTP instead
-    exclude group: 'org.graalvm.polyglot'
     exclude group: 'org.graalvm.python'
-    exclude group: 'org.graalvm.truffle'
-    exclude group: 'org.graalvm.regex'
-    exclude group: 'org.graalvm.shadowed'
-    exclude group: 'org.graalvm.sdk'
 
     // Oracle Coherence vector store (~22MB) — not used
     exclude group: 'com.oracle.coherence.ce'
 
     // Google Cloud Vertex AI / gRPC protos (~69MB) — not used
-    //exclude group: 'com.google.cloud', module: 'google-cloud-aiplatform'
-    //exclude group: 'com.google.api.grpc'
-    //exclude group: 'io.grpc'
-
+    exclude group: 'com.google.cloud', module: 'google-cloud-aiplatform'
 
     // Azure Application Insights (~7MB) — not used
     exclude group: 'com.microsoft.azure', module: 'applicationinsights-core'
@@ -102,7 +94,7 @@ configurations.all {
     exclude group: 'org.openjdk.nashorn'
 
     // ICU4J (~14MB) — Unicode library pulled by Groovy, JDK handles this
-    exclude group: 'com.ibm.icu', module: 'icu4j'
+    exclude group: 'com.ibm.icu'
 
     // BouncyCastle (~9MB) — crypto provider, JDK built-in is sufficient
     exclude group: 'org.bouncycastle'
@@ -113,6 +105,9 @@ configurations.all {
 
     // Swagger UI (~3.5MB) — API docs not needed in production
     exclude group: 'org.webjars', module: 'swagger-ui'
+
+    // Groovy
+    exclude group: 'org.apache.groovy'
 }
 
 test {

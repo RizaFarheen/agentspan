@@ -1,12 +1,8 @@
 name: Release Server
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to release"
-        required: true
-        type: string
+  release:
+    types: [created]
 
 permissions:
   contents: write
@@ -14,6 +10,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Only run for vX.Y.Z tags (skip cli-v* or other prefixed tags)
+    if: startsWith(github.event.release.tag_name, 'v') && !contains(github.event.release.tag_name, '-')
     defaults:
       run:
         working-directory: server
@@ -30,29 +28,37 @@ jobs:
       - name: Build bootJar
         run: ./gradlew bootJar
 
-      - name: Prepare release asset
-        run: cp build/libs/agentspan-runtime.jar ../agentspan-runtime.jar
+      - name: Determine version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          # Strip leading 'v' from tag (v1.0.0 -> 1.0.0)
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Create versioned release
+      - name: Prepare release assets
+        run: |
+          cp build/libs/agentspan-runtime.jar ../agentspan-server-${{ steps.version.outputs.version }}.jar
+
+      - name: Upload JAR to GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ inputs.version }}" \
-            ../agentspan-runtime.jar \
-            --repo "${{ github.repository }}" \
-            --title "Server v${{ inputs.version }}" \
-            --generate-notes
+          gh release upload "${{ steps.version.outputs.tag }}" \
+            ../agentspan-server-${{ steps.version.outputs.version }}.jar \
+            --repo "${{ github.repository }}"
 
-      - name: Update rolling latest release
+      - name: Upload to S3 (versioned and latest)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          # Delete existing latest release and tag if they exist
-          gh release delete latest --repo "${{ github.repository }}" --yes 2>/dev/null || true
-          git push origin :refs/tags/latest 2>/dev/null || true
+          # Upload versioned artifact
+          aws s3 cp ../agentspan-server-${{ steps.version.outputs.version }}.jar \
+            s3://agentspan/agentspan-server-${{ steps.version.outputs.version }}.jar
 
-          gh release create latest \
-            ../agentspan-runtime.jar \
-            --repo "${{ github.repository }}" \
-            --title "Server Latest" \
-            --notes "Rolling release tracking the latest server build (v${{ inputs.version }})."
+          # Upload as latest
+          aws s3 cp ../agentspan-server-${{ steps.version.outputs.version }}.jar \
+            s3://agentspan/agentspan-server-latest.jar
