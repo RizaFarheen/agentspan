@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-REPO="agentspan/agentspan"
+S3_BUCKET="https://agentspan.s3.us-east-2.amazonaws.com"
 BINARY_NAME="agentspan"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
@@ -39,17 +39,8 @@ detect_arch() {
     esac
 }
 
-get_latest_version() {
-    VERSION=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$VERSION" ]; then
-        echo "${RED}Failed to get latest version${NC}"
-        exit 1
-    fi
-    echo "${GREEN}Latest version: $VERSION${NC}"
-}
-
 install_binary() {
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/${BINARY_NAME}_${OS}_${ARCH}"
+    DOWNLOAD_URL="${S3_BUCKET}/cli/latest/${BINARY_NAME}_${OS}_${ARCH}"
 
     if [ "$OS" = "windows" ]; then
         DOWNLOAD_URL="${DOWNLOAD_URL}.exe"
@@ -106,7 +97,6 @@ main() {
     echo "Detected Architecture: $ARCH"
     echo ""
 
-    get_latest_version
     install_binary
     verify_installation
 }

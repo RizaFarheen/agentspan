@@ -30,3 +30,8 @@ func processRunning(pid int) bool {
 	}
 	return true
 }
+
+func getFreeDiskMB(path string) int64 {
+	// Not easily available on Windows without unsafe; skip check
+	return -1
+}

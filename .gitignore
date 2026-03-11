@@ -13,3 +13,6 @@ server/agent-runtime.db-wal
 cli/aspan
 .db-shm
 .db
+*.db
+*.db-shm
+*.db-wal

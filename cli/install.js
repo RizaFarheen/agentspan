@@ -8,7 +8,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const REPO = 'agentspan/agentspan';
+const S3_BUCKET = 'https://agentspan.s3.us-east-2.amazonaws.com';
 const BINARY_NAME = 'agentspan';
 
 // Detect platform and architecture
@@ -91,7 +91,7 @@ async function install() {
 
     const binaryName = isWindows ? `${BINARY_NAME}.exe` : BINARY_NAME;
     const downloadName = isWindows ? `${BINARY_NAME}_${os}_${arch}.exe` : `${BINARY_NAME}_${os}_${arch}`;
-    const downloadUrl = `https://github.com/${REPO}/releases/latest/download/${downloadName}`;
+    const downloadUrl = `${S3_BUCKET}/cli/latest/${downloadName}`;
 
     console.log(`Downloading from: ${downloadUrl}`);
 

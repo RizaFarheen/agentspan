@@ -29,31 +29,47 @@ Every other agent SDK runs agents in-memory. When the process dies, the agent di
 
 ## Quickstart
 
-### Prerequisites
-
-- Python 3.9+
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
-- A running Conductor server with LLM support
-- An LLM provider (e.g., `openai`) configured in Conductor
-
 ### Install
 
 ```bash
-# Create and activate a virtual environment
-uv venv
-source .venv/bin/activate
+# Install the CLI
+brew install agentspan/agentspan/agentspan
+# or: npm install -g @agentspan/agentspan
+# or: curl -fsSL https://raw.githubusercontent.com/agentspan/agentspan/main/cli/install.sh | sh
 
-# Install from the local python/ directory
-uv pip install -e "./python[dev]"
+# Check that all dependencies are met
+agentspan doctor
 ```
 
 ### Configure
 
+Set at least one AI provider API key:
+
 ```bash
-export CONDUCTOR_SERVER_URL=http://localhost:7001/api
-# For Orkes Cloud:
-# export CONDUCTOR_AUTH_KEY=your_key
-# export CONDUCTOR_AUTH_SECRET=your_secret
+# OpenAI
+export OPENAI_API_KEY=sk-...
+
+# Anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Google Gemini (requires both)
+export GEMINI_API_KEY=AI...
+export GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+
+# See all providers: docs/ai-models.md
+```
+
+### Start the server
+
+```bash
+agentspan server start
+```
+
+### Install the Python SDK
+
+```bash
+uv venv && source .venv/bin/activate
+uv pip install -e "./python[dev]"
 ```
 
 ### Hello World

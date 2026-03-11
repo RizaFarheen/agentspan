@@ -11,11 +11,12 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/agentspan/agentspan/cli/internal/progress"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
-const cliRepo = "agentspan/agentspan"
+const cliS3Bucket = "https://agentspan.s3.us-east-2.amazonaws.com"
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
@@ -29,7 +30,7 @@ var updateCmd = &cobra.Command{
 			binaryName += ".exe"
 		}
 
-		downloadURL := fmt.Sprintf("https://github.com/%s/releases/latest/download/%s", cliRepo, binaryName)
+		downloadURL := fmt.Sprintf("%s/cli/latest/%s", cliS3Bucket, binaryName)
 
 		color.Yellow("Downloading latest CLI...")
 		fmt.Printf("  URL: %s\n", downloadURL)
@@ -51,15 +52,17 @@ var updateCmd = &cobra.Command{
 			return fmt.Errorf("find executable path: %w", err)
 		}
 
-		// Write to temp file
+		// Write to temp file with progress bar
 		tmpPath := execPath + ".new"
 		f, err := os.Create(tmpPath)
 		if err != nil {
 			return fmt.Errorf("create temp file: %w", err)
 		}
 
-		_, err = io.Copy(f, resp.Body)
+		pr, bar := progress.NewReader(resp.Body, resp.ContentLength, "Downloading")
+		_, err = io.Copy(f, pr)
 		f.Close()
+		bar.Finish()
 		if err != nil {
 			os.Remove(tmpPath)
 			return fmt.Errorf("write binary: %w", err)

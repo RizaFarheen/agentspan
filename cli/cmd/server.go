@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan/agentspan/cli/internal/progress"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -132,6 +133,8 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 		// Stale PID file
 		os.Remove(pidFile())
 	}
+
+	checkAIProviderKeys()
 
 	bold := color.New(color.Bold)
 	bold.Printf("Starting agent runtime on port %s...\n", serverPort)
@@ -353,8 +356,10 @@ func downloadJAR(downloadURL, destPath string) error {
 		return fmt.Errorf("create temp file: %w", err)
 	}
 
-	written, err := io.Copy(f, resp.Body)
+	pr, bar := progress.NewReader(resp.Body, resp.ContentLength, "Downloading")
+	_, err = io.Copy(f, pr)
 	f.Close()
+	bar.Finish()
 	if err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("write JAR: %w", err)
@@ -365,8 +370,68 @@ func downloadJAR(downloadURL, destPath string) error {
 		return fmt.Errorf("rename JAR: %w", err)
 	}
 
-	color.Green("Downloaded %.1f MB", float64(written)/1024/1024)
+	color.Green("Download complete!")
 	return nil
+}
+
+// --- AI provider check ---
+
+const aiModelsDocURL = "https://github.com/agentspan/agentspan/blob/main/docs/ai-models.md"
+
+func checkAIProviderKeys() {
+	hasAny := false
+	for _, p := range aiProviders {
+		allSet := true
+		for _, env := range p.envVars {
+			if os.Getenv(env) == "" {
+				allSet = false
+				break
+			}
+		}
+		if allSet {
+			hasAny = true
+			break
+		}
+	}
+
+	// Check provider-specific warnings
+	for _, p := range aiProviders {
+		for _, w := range p.warns {
+			if w.condition() {
+				warn := color.New(color.FgYellow, color.Bold)
+				warn.Printf("WARNING: %s — %s\n", p.name, w.message)
+				fmt.Println()
+				fmt.Printf("    %s\n", w.fix)
+				fmt.Println()
+			}
+		}
+	}
+
+	if hasAny {
+		return
+	}
+
+	warn := color.New(color.FgYellow, color.Bold)
+	warn.Println("WARNING: No AI provider API keys detected!")
+	fmt.Println()
+	fmt.Println("  The server will start, but agents won't be able to call any LLM")
+	fmt.Println("  until you set at least one provider's API key.")
+	fmt.Println()
+	fmt.Println("  Set one or more of these before starting the server:")
+	fmt.Println()
+	fmt.Println("    # OpenAI")
+	fmt.Println("    export OPENAI_API_KEY=sk-...")
+	fmt.Println()
+	fmt.Println("    # Anthropic (Claude)")
+	fmt.Println("    export ANTHROPIC_API_KEY=sk-ant-...")
+	fmt.Println()
+	fmt.Println("    # Google Gemini")
+	fmt.Println("    export GEMINI_API_KEY=AI...")
+	fmt.Println("    export GOOGLE_CLOUD_PROJECT=your-gcp-project-id")
+	fmt.Println()
+	fmt.Println("  Run 'agentspan doctor' for a full diagnostic.")
+	fmt.Printf("  Docs: %s\n", aiModelsDocURL)
+	fmt.Println()
 }
 
 // --- PID helpers ---
