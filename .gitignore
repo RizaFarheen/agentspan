@@ -12,3 +12,4 @@ bin/
 server/agent-runtime.db-wal
 cli/aspan
 .db-shm
+.db
