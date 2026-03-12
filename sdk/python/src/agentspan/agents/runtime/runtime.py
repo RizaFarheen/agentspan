@@ -176,13 +176,12 @@ class AgentRuntime:
 
     Connection params can be passed directly or loaded from environment
     variables (``AGENTSPAN_SERVER_URL``, ``AGENTSPAN_AUTH_KEY``,
-    ``AGENTSPAN_AUTH_SECRET``).  The legacy ``CONDUCTOR_*`` prefixed
-    variables are also accepted for backward compatibility.
+    ``AGENTSPAN_AUTH_SECRET``).
 
     Args:
-        server_url: Conductor server API URL.  Overrides env and *config*.
-        api_key: Conductor auth key.  Overrides env and *config*.
-        api_secret: Conductor auth secret.  Overrides env and *config*.
+        server_url: AgentSpan server API URL.  Overrides env and *config*.
+        api_key: Agentspan auth key.  Overrides env and *config*.
+        api_secret: Agentspan auth secret.  Overrides env and *config*.
         config: Optional :class:`AgentConfig` for full control over all
             settings.  Explicit keyword params take precedence over values
             in *config*.
@@ -198,7 +197,7 @@ class AgentRuntime:
     ) -> None:
         from agentspan.agents.runtime.config import AgentConfig
 
-        base = config if config is not None else AgentConfig.from_env()
+        base = config if config is not None else AgentConfig()
         self._config = AgentConfig(
             server_url=server_url if server_url is not None else base.server_url,
             auth_key=api_key if api_key is not None else base.auth_key,
