@@ -42,8 +42,55 @@ logger = logging.getLogger("agentspan.agents.run")
 
 # ── Singleton runtime ────────────────────────────────────────────────────
 
+_default_config: Optional[Any] = None
 _default_runtime = None
 _runtime_lock = threading.Lock()
+
+
+def configure(config=None, **kwargs):
+    """Pre-configure the default singleton runtime.
+
+    Must be called **before** the first :func:`run`, :func:`start`, or
+    :func:`stream` call.  The configuration persists across
+    :func:`shutdown` / recreate cycles.
+
+    Args:
+        config: An :class:`AgentConfig` instance.  If provided, *kwargs*
+            are ignored.
+        **kwargs: Individual config fields to override on top of
+            :meth:`AgentConfig.from_env` defaults (e.g.
+            ``server_url="https://prod:8080/api"``,
+            ``auto_start_server=False``).
+
+    Raises:
+        RuntimeError: If the singleton runtime already exists.  Call
+            :func:`shutdown` first.
+        TypeError: If a kwarg does not match an :class:`AgentConfig` field.
+
+    Example::
+
+        import agentspan.agents as ag
+
+        ag.configure(server_url="https://prod:8080/api", auto_start_server=False)
+        result = ag.run(agent, "Hello!")
+    """
+    global _default_config, _default_runtime
+    if _default_runtime is not None:
+        raise RuntimeError(
+            "configure() must be called before the first run/start/stream call. "
+            "Call shutdown() first to reset the default runtime."
+        )
+    if config is not None:
+        _default_config = config
+    else:
+        from agentspan.agents.runtime.config import AgentConfig
+
+        base = AgentConfig.from_env()
+        for key, value in kwargs.items():
+            if not hasattr(base, key):
+                raise TypeError(f"AgentConfig has no field '{key}'")
+            setattr(base, key, value)
+        _default_config = base
 
 
 def _get_default_runtime():
@@ -53,7 +100,7 @@ def _get_default_runtime():
         with _runtime_lock:
             if _default_runtime is None:
                 from agentspan.agents.runtime.runtime import AgentRuntime
-                _default_runtime = AgentRuntime()
+                _default_runtime = AgentRuntime(config=_default_config)
                 logger.info("Created default AgentRuntime singleton")
     return _default_runtime
 

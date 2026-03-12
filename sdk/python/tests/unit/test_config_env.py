@@ -88,6 +88,17 @@ class TestAgentConfigFromEnv:
             assert config.auth_key == "oldkey"
             assert config.auth_secret == "oldsecret"
 
+    def test_auto_start_server_defaults_true(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            config = AgentConfig.from_env()
+            assert config.auto_start_server is True
+
+    def test_auto_start_server_env_false(self):
+        env = {"AGENTSPAN_AUTO_START_SERVER": "false"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            config = AgentConfig.from_env()
+            assert config.auto_start_server is False
+
     def test_boolean_env_vars(self):
         env = {
             "AGENTSPAN_DAEMON_WORKERS": "false",
@@ -146,6 +157,35 @@ class TestServerAutoStart:
 
         ensure_server_running("http://localhost:8080/api")
         mock_ready.assert_called_once()
+
+    @mock.patch("agentspan.agents.runtime.server._is_server_ready", return_value=True)
+    @mock.patch("agentspan.agents.runtime.server.ensure_server_running")
+    def test_auto_start_server_false_skips_ensure(self, mock_ensure, mock_ready):
+        """When auto_start_server=False, ensure_server_running is NOT called."""
+        from agentspan.agents.runtime.config import AgentConfig
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        config = AgentConfig(
+            server_url="http://localhost:8080/api",
+            auto_start_server=False,
+        )
+        with mock.patch("conductor.client.orkes_clients.OrkesClients"):
+            with mock.patch("agentspan.agents.runtime.worker_manager.WorkerManager"):
+                rt = AgentRuntime(config=config)
+        mock_ensure.assert_not_called()
+
+    @mock.patch("agentspan.agents.runtime.server._is_server_ready", return_value=False)
+    def test_auto_start_server_false_exits_on_unreachable(self, mock_ready):
+        """When auto_start_server=False and server is down, exit with message."""
+        from agentspan.agents.runtime.config import AgentConfig
+        from agentspan.agents.runtime.runtime import AgentRuntime
+
+        config = AgentConfig(
+            server_url="http://localhost:8080/api",
+            auto_start_server=False,
+        )
+        with pytest.raises(SystemExit, match="1"):
+            AgentRuntime(config=config)
 
     @mock.patch("agentspan.agents.runtime.server.time")
     @mock.patch("agentspan.agents.runtime.server.subprocess")

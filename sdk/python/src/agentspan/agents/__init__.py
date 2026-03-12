@@ -45,6 +45,7 @@ from agentspan.agents.runtime.mcp_discovery import clear_discovery_cache
 
 # Execution API
 from agentspan.agents.run import (
+    configure,
     plan,
     run,
     run_async,
@@ -144,6 +145,7 @@ __all__ = [
     "pdf_tool",
     "clear_discovery_cache",
     # Convenience execution (uses a singleton AgentRuntime)
+    "configure",
     "plan",
     "run",
     "run_async",

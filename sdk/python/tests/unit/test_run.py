@@ -17,11 +17,13 @@ def _get_run_module():
 
 @pytest.fixture(autouse=True)
 def _reset_singleton():
-    """Reset the singleton runtime between tests."""
+    """Reset the singleton runtime and config between tests."""
     mod = _get_run_module()
     mod._default_runtime = None
+    mod._default_config = None
     yield
     mod._default_runtime = None
+    mod._default_config = None
 
 
 class TestRunFunction:
@@ -128,3 +130,54 @@ class TestRunAsyncFunction:
 
         mock_runtime.run_async.assert_called_once()
         assert result.output == "Async result"
+
+
+class TestConfigure:
+    """Test the configure() function."""
+
+    def test_configure_stores_config(self):
+        from agentspan.agents.run import configure
+        from agentspan.agents.runtime.config import AgentConfig
+
+        config = AgentConfig(server_url="https://prod:8080/api", auto_start_server=False)
+        configure(config=config)
+
+        mod = _get_run_module()
+        assert mod._default_config is config
+
+    def test_configure_kwargs_override_env(self):
+        from agentspan.agents.run import configure
+
+        configure(server_url="https://custom:9090/api", auto_start_server=False)
+
+        mod = _get_run_module()
+        assert mod._default_config.server_url == "https://custom:9090/api"
+        assert mod._default_config.auto_start_server is False
+
+    def test_configure_raises_if_runtime_exists(self):
+        mod = _get_run_module()
+        mod._default_runtime = MagicMock()
+
+        from agentspan.agents.run import configure
+
+        with pytest.raises(RuntimeError, match="configure.*must be called before"):
+            configure(auto_start_server=False)
+
+    def test_configure_raises_for_unknown_field(self):
+        from agentspan.agents.run import configure
+
+        with pytest.raises(TypeError, match="no field 'bogus_field'"):
+            configure(bogus_field=42)
+
+    def test_shutdown_preserves_config(self):
+        from agentspan.agents.run import configure, shutdown
+
+        configure(auto_start_server=False)
+
+        mod = _get_run_module()
+        mod._default_runtime = MagicMock()
+        shutdown()
+
+        assert mod._default_runtime is None
+        assert mod._default_config is not None
+        assert mod._default_config.auto_start_server is False

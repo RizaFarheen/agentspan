@@ -209,13 +209,32 @@ class AgentRuntime:
             worker_thread_count=base.worker_thread_count,
             auto_start_workers=base.auto_start_workers,
             daemon_workers=base.daemon_workers,
+            auto_start_server=base.auto_start_server,
             auto_register_integrations=base.auto_register_integrations,
             streaming_enabled=base.streaming_enabled,
         )
         # Auto-start the server if it targets localhost and is not responding.
-        from agentspan.agents.runtime.server import ensure_server_running
+        if self._config.auto_start_server:
+            from agentspan.agents.runtime.server import ensure_server_running
 
-        ensure_server_running(self._config.server_url)
+            ensure_server_running(self._config.server_url)
+        else:
+            # Fail fast with a clear message when auto-start is disabled
+            # and the server is unreachable.
+            from agentspan.agents.runtime.server import _is_server_ready
+
+            if not _is_server_ready(self._config.server_url):
+                import sys
+                print(
+                    f"\n[agentspan] Error: Cannot connect to the Agentspan server at "
+                    f"{self._config.server_url}\n"
+                    f"[agentspan] The server does not appear to be running and "
+                    f"auto_start_server is disabled.\n"
+                    f"[agentspan] Please ensure the server is running at the configured "
+                    f"URL, or remove AGENTSPAN_AUTO_START_SERVER=false to start it automatically.",
+                    file=sys.stderr,
+                )
+                raise SystemExit(1)
 
         self._conductor_config = self._config.to_conductor_configuration()
 

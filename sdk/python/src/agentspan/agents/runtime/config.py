@@ -43,6 +43,9 @@ class AgentConfig:
         worker_thread_count: Number of threads per worker.
         auto_start_workers: Whether to auto-start worker processes.
         daemon_workers: Whether worker processes are daemon (killed on exit).
+        auto_start_server: Whether to auto-start the local server process
+            when the server URL points to localhost and the server is not
+            already running.  Set to ``False`` for remote/production servers.
         auto_register_integrations: When ``True``, automatically create LLM
             integrations and register models on the server before executing
             agents.  Reads API keys from provider-specific env vars
@@ -59,6 +62,7 @@ class AgentConfig:
     auto_start_workers: bool = True
     daemon_workers: bool = True
     auto_register_integrations: bool = False
+    auto_start_server: bool = True
     streaming_enabled: bool = True
 
     @property
@@ -86,6 +90,7 @@ class AgentConfig:
             - ``AGENTSPAN_LLM_RETRY_COUNT`` — LLM task retry count
             - ``AGENTSPAN_WORKER_POLL_INTERVAL`` — Worker poll interval (ms)
             - ``AGENTSPAN_WORKER_THREADS`` — Worker thread count
+            - ``AGENTSPAN_AUTO_START_SERVER`` — Auto-start local server (default true)
             - ``AGENTSPAN_DAEMON_WORKERS`` — Use daemon workers (default true)
             - ``AGENTSPAN_INTEGRATIONS_AUTO_REGISTER`` — Auto-register LLM
               integrations and models on the server (default false)
@@ -110,6 +115,10 @@ class AgentConfig:
             worker_thread_count=int(
                 _env("AGENTSPAN_WORKER_THREADS", "CONDUCTOR_WORKER_THREADS", "1") or "1"
             ),
+            auto_start_server=(
+                _env("AGENTSPAN_AUTO_START_SERVER", "CONDUCTOR_AUTO_START_SERVER", "true")
+                or "true"
+            ).lower() in ("true", "1", "yes"),
             daemon_workers=(
                 _env("AGENTSPAN_DAEMON_WORKERS", "CONDUCTOR_DAEMON_WORKERS", "true") or "true"
             ).lower() in ("true", "1", "yes"),
