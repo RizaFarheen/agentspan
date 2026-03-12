@@ -1,4 +1,4 @@
-# Copyright (c) 2025 AgentSpan
+# Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Basic Agent — 5-line hello world.
@@ -18,4 +18,5 @@ agent = Agent(name="greeter", model=get_model())
 
 with AgentRuntime() as runtime:
     result = runtime.run(agent, "Say hello and tell me a fun fact about Python programming.")
+    print(f'agent completed with status: {result.status}')
     result.print_result()

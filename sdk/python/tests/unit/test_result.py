@@ -1,4 +1,4 @@
-# Copyright (c) 2025 AgentSpan
+# Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Unit tests for result types."""
@@ -11,7 +11,10 @@ from agentspan.agents.result import (
     AgentResult,
     AgentStatus,
     EventType,
+    FinishReason,
+    Status,
     TokenUsage,
+    _build_result_from_events,
 )
 
 
@@ -249,3 +252,110 @@ class TestAgentResultPrintResult:
         assert "150 total" in captured.out
         assert "100 prompt" in captured.out
         assert "50 completion" in captured.out
+
+    def test_print_failed_result_shows_error(self, capsys):
+        result = AgentResult(
+            output=None,
+            status=Status.FAILED,
+            finish_reason=FinishReason.ERROR,
+            error="API key not configured",
+        )
+        result.print_result()
+        captured = capsys.readouterr()
+        assert "ERROR: API key not configured" in captured.out
+
+
+class TestStatusEnum:
+    """Test Status enum backward compatibility and values."""
+
+    def test_string_equality(self):
+        assert Status.COMPLETED == "COMPLETED"
+        assert Status.FAILED == "FAILED"
+        assert Status.TERMINATED == "TERMINATED"
+        assert Status.TIMED_OUT == "TIMED_OUT"
+
+    def test_is_string_instance(self):
+        assert isinstance(Status.COMPLETED, str)
+
+    def test_in_string_check(self):
+        assert Status.FAILED in ("FAILED", "TERMINATED")
+
+    def test_all_values(self):
+        assert len(Status) == 4
+
+
+class TestFinishReasonEnum:
+    """Test FinishReason enum backward compatibility and values."""
+
+    def test_string_equality(self):
+        assert FinishReason.STOP == "stop"
+        assert FinishReason.LENGTH == "LENGTH"
+        assert FinishReason.ERROR == "error"
+        assert FinishReason.CANCELLED == "cancelled"
+        assert FinishReason.TIMEOUT == "timeout"
+        assert FinishReason.GUARDRAIL == "guardrail"
+        assert FinishReason.TOOL_CALLS == "tool_calls"
+
+    def test_is_string_instance(self):
+        assert isinstance(FinishReason.STOP, str)
+
+    def test_all_values(self):
+        assert len(FinishReason) == 7
+
+
+class TestAgentResultProperties:
+    """Test is_success / is_failed convenience properties."""
+
+    def test_is_success_on_completed(self):
+        result = AgentResult(status=Status.COMPLETED)
+        assert result.is_success is True
+        assert result.is_failed is False
+
+    def test_is_failed_on_failed(self):
+        result = AgentResult(status=Status.FAILED)
+        assert result.is_success is False
+        assert result.is_failed is True
+
+    def test_is_failed_on_terminated(self):
+        result = AgentResult(status=Status.TERMINATED)
+        assert result.is_failed is True
+
+    def test_is_failed_on_timed_out(self):
+        result = AgentResult(status=Status.TIMED_OUT)
+        assert result.is_failed is True
+
+    def test_backward_compat_status_string(self):
+        result = AgentResult(status="COMPLETED")
+        assert result.status == "COMPLETED"
+        assert result.status == Status.COMPLETED
+
+
+class TestBuildResultFromEvents:
+    """Test that _build_result_from_events sets finish_reason and error."""
+
+    def test_done_event_sets_stop(self):
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        events = [AgentEvent(type=EventType.DONE, output="Hello")]
+        result = _build_result_from_events(events, handle)
+        assert result.status == Status.COMPLETED
+        assert result.finish_reason == FinishReason.STOP
+        assert result.error is None
+        assert result.output == "Hello"
+
+    def test_error_event_sets_failed(self):
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        events = [AgentEvent(type=EventType.ERROR, content="401 Unauthorized")]
+        result = _build_result_from_events(events, handle)
+        assert result.status == Status.FAILED
+        assert result.finish_reason == FinishReason.ERROR
+        assert result.error == "401 Unauthorized"
+
+    def test_guardrail_fail_event(self):
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        events = [
+            AgentEvent(type=EventType.GUARDRAIL_FAIL, content="PII detected"),
+        ]
+        result = _build_result_from_events(events, handle)
+        assert result.status == Status.FAILED
+        assert result.finish_reason == FinishReason.GUARDRAIL
+        assert result.error == "PII detected"

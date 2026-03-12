@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 AgentSpan
+ * Copyright (c) 2025 Agentspan
  * Licensed under the MIT License. See LICENSE file in the project root for details.
  */
 
@@ -80,7 +80,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
         // Tool dispatch — SIMPLE tasks that are tool invocations
         if (isToolTask(task)) {
-            String toolName = taskRef;
+            String toolName = resolveToolName(task);
             Object args = task.getInputData();
             Object result = output.get("result");
             if (result == null) result = output;
@@ -234,23 +234,90 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
                 return false;
             default:
                 // SIMPLE or other user-defined task types = tool invocation
-                return "SIMPLE".equals(taskType) || task.getTaskDefinition() != null;
+                return "SIMPLE".equals(taskType) || task.getTaskDefinition().isPresent();
         }
     }
 
     /**
-     * Extract the target agent name from a sub-workflow task reference name.
-     * Convention: "{parent}_{target}_sub" or just use the ref name.
+     * Resolve the actual tool/function name from a task.
+     *
+     * <p>Server-compiled workflows use SIMPLE tasks where the actual tool name
+     * is stored in {@code inputData.method} (set by the enrichment script).
+     * Locally-compiled workflows use SIMPLE tasks with a dispatch pattern
+     * where the function name is stored in the output data.
+     * SDK-compiled worker tasks use a custom task type matching the function name.</p>
+     */
+    private String resolveToolName(TaskModel task) {
+        String taskType = task.getTaskType();
+
+        // Server-compiled SIMPLE tasks: tool name is in inputData.method
+        Map<String, Object> input = task.getInputData();
+        if (input != null && input.containsKey("method")) {
+            return String.valueOf(input.get("method"));
+        }
+
+        // Locally-compiled (dispatch): function name in output data
+        Map<String, Object> output = task.getOutputData();
+        if (output != null && output.containsKey("function")) {
+            return String.valueOf(output.get("function"));
+        }
+
+        // SDK-compiled workers: taskType is the function name (e.g. "get_weather")
+        if (!"SIMPLE".equals(taskType) && taskType != null) {
+            return taskType.toLowerCase();
+        }
+
+        // Fallback to task reference name
+        return task.getReferenceTaskName();
+    }
+
+    /**
+     * Extract the target agent name from a sub-workflow task reference.
+     *
+     * <p>Conductor generates indexed references for sub-workflows in
+     * multi-agent strategies.  Examples:</p>
+     * <ul>
+     *   <li>{@code 0_billing__1}             → {@code billing}</li>
+     *   <li>{@code analysis_parallel_0_pros_analyst} → {@code pros_analyst}</li>
+     *   <li>{@code debate_round_robin_1_optimist__1} → {@code optimist}</li>
+     *   <li>{@code researcher_writer_step_0_researcher} → {@code researcher}</li>
+     *   <li>{@code support_handoff_billing}   → {@code billing}</li>
+     * </ul>
+     *
+     * <p>Strategy:</p>
+     * <ol>
+     *   <li>Strip trailing {@code __N} turn counter</li>
+     *   <li>If it contains {@code _handoff_}, take everything after</li>
+     *   <li>Strip strategy-indexed prefixes ({@code _sequential_N_}, etc.)</li>
+     *   <li>Strip {@code _step_N_} sequential pipeline prefixes</li>
+     *   <li>Strip leading {@code N_} index prefix</li>
+     * </ol>
      */
     private String extractHandoffTarget(String taskRef) {
         if (taskRef == null) return "unknown";
-        // Remove common suffixes
-        String name = taskRef.replaceAll("_sub$", "").replaceAll("_subworkflow$", "");
-        // Take the last segment after underscore if it looks like a composite name
-        int lastUnderscore = name.lastIndexOf('_');
-        if (lastUnderscore > 0) {
-            return name.substring(lastUnderscore + 1);
+
+        // Step 1: strip trailing __N (turn counter)
+        String name = taskRef.replaceAll("__\\d+$", "");
+
+        // Step 2: strip strategy-indexed prefixes
+        // Matches: <parent>_<strategy>_<idx>_<agent_name>
+        // Strategies: handoff (handoff+router), agent (round_robin+swarm),
+        //   step (sequential), parallel, and others
+        java.util.regex.Matcher strategyMatcher = java.util.regex.Pattern.compile(
+                "^.+?_(?:handoff|agent|step|sequential|parallel|round_robin|router|swarm|random|manual)_(\\d+)_(.*)"
+        ).matcher(name);
+        if (strategyMatcher.matches()) {
+            return strategyMatcher.group(2);
         }
+
+        // Step 3: strip leading N_ index prefix (e.g. "0_billing")
+        java.util.regex.Matcher idxMatcher = java.util.regex.Pattern.compile(
+                "^\\d+_(.*)"
+        ).matcher(name);
+        if (idxMatcher.matches()) {
+            return idxMatcher.group(1);
+        }
+
         return name;
     }
 }

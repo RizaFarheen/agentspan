@@ -1,4 +1,4 @@
-# Copyright (c) 2025 AgentSpan
+# Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Unit tests for the AgentRuntime.
@@ -1189,7 +1189,7 @@ class TestRuntimeStream:
         sub_task = MagicMock()
         sub_task.task_id = "t-sub"
         sub_task.task_type = "SUB_WORKFLOW"
-        sub_task.reference_task_name = "test_handoff_agent_b"
+        sub_task.reference_task_name = "test_handoff_0_agent_b"
         sub_task.status = "IN_PROGRESS"
         sub_task.output_data = {}
 

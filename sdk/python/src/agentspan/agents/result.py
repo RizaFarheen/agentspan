@@ -1,4 +1,4 @@
-# Copyright (c) 2025 AgentSpan
+# Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Result types — AgentResult, AgentHandle, AgentEvent, AgentStatus, AgentStream, AsyncAgentStream.
@@ -12,6 +12,38 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Optional
+
+
+# ── Status & FinishReason enums ────────────────────────────────────────
+
+
+class Status(str, Enum):
+    """Terminal status of an agent workflow execution.
+
+    Inherits from ``str`` so comparisons like ``status == "COMPLETED"``
+    continue to work for backward compatibility.
+    """
+
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    TERMINATED = "TERMINATED"
+    TIMED_OUT = "TIMED_OUT"
+
+
+class FinishReason(str, Enum):
+    """Why the agent stopped executing.
+
+    Inherits from ``str`` so comparisons like ``reason == "stop"``
+    continue to work for backward compatibility.
+    """
+
+    STOP = "stop"              # Model finished naturally
+    LENGTH = "LENGTH"          # Hit token limit
+    TOOL_CALLS = "tool_calls"  # Stopped to execute tools (intermediate)
+    ERROR = "error"            # Execution failed
+    CANCELLED = "cancelled"    # User cancelled / workflow terminated
+    TIMEOUT = "timeout"        # Execution timed out
+    GUARDRAIL = "guardrail"    # Blocked by guardrail
 
 
 # ── TokenUsage ──────────────────────────────────────────────────────────
@@ -45,7 +77,10 @@ class AgentResult:
         workflow_id: The Conductor workflow ID (for debugging in the UI).
         messages: Full conversation history (list of message dicts).
         tool_calls: All tool invocations with inputs and outputs.
-        status: Terminal status string (``"COMPLETED"``, ``"FAILED"``, etc.).
+        status: Terminal workflow status (:class:`Status` enum, backward
+            compatible with plain string comparisons).
+        finish_reason: Why the agent stopped (:class:`FinishReason` enum).
+        error: Human-readable error message when the agent failed.
         token_usage: Aggregated token usage across all LLM calls.
         metadata: Extra data from the workflow execution.
     """
@@ -55,11 +90,22 @@ class AgentResult:
     correlation_id: Optional[str] = None
     messages: List[Dict[str, Any]] = field(default_factory=list)
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-    status: str = "COMPLETED"
+    status: Status = Status.COMPLETED
     token_usage: Optional[TokenUsage] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
-    finish_reason: Optional[str] = None
+    finish_reason: Optional[FinishReason] = None
+    error: Optional[str] = None
     events: List["AgentEvent"] = field(default_factory=list)
+
+    @property
+    def is_success(self) -> bool:
+        """Whether the agent completed successfully."""
+        return self.status == Status.COMPLETED
+
+    @property
+    def is_failed(self) -> bool:
+        """Whether the agent execution failed."""
+        return self.status in (Status.FAILED, Status.TERMINATED, Status.TIMED_OUT)
 
     def print_result(self) -> None:
         """Pretty-print the agent output with clear visual separators."""
@@ -69,7 +115,10 @@ class AgentResult:
         print(f"╘{'═' * width}╛")
         print()
 
-        if isinstance(self.output, dict):
+        if self.is_failed and self.error:
+            print(f"ERROR: {self.error}")
+            print()
+        elif isinstance(self.output, dict):
             for key, value in self.output.items():
                 print(f"--- {key} ---")
                 print(value)
@@ -117,6 +166,7 @@ class AgentStatus:
     is_waiting: bool = False
     output: Any = None
     status: str = ""
+    reason: Optional[str] = None
     current_task: Optional[str] = None
     messages: List[Dict[str, Any]] = field(default_factory=list)
     pending_tool: Optional[Dict[str, Any]] = None
@@ -339,7 +389,9 @@ class AgentStream:
     def _build_result(self) -> None:
         """Build an :class:`AgentResult` from captured events."""
         output = None
-        status = "COMPLETED"
+        status: Status = Status.COMPLETED
+        finish_reason: Optional[FinishReason] = FinishReason.STOP
+        error_message: Optional[str] = None
         tool_calls: List[Dict[str, Any]] = []
         pending_call: Optional[Dict[str, Any]] = None
 
@@ -357,9 +409,16 @@ class AgentStream:
                     )
             elif ev.type == EventType.DONE:
                 output = ev.output
+                finish_reason = FinishReason.STOP
             elif ev.type == EventType.ERROR:
                 output = ev.content
-                status = "FAILED"
+                status = Status.FAILED
+                finish_reason = FinishReason.ERROR
+                error_message = ev.content
+            elif ev.type == EventType.GUARDRAIL_FAIL:
+                status = Status.FAILED
+                finish_reason = FinishReason.GUARDRAIL
+                error_message = ev.content
 
         self.result = AgentResult(
             output=output,
@@ -367,6 +426,8 @@ class AgentStream:
             correlation_id=self.handle.correlation_id,
             tool_calls=tool_calls,
             status=status,
+            finish_reason=finish_reason,
+            error=error_message,
             events=list(self.events),
         )
 
@@ -409,7 +470,9 @@ def _build_result_from_events(
 ) -> AgentResult:
     """Build an :class:`AgentResult` from a list of captured events."""
     output = None
-    status = "COMPLETED"
+    status: Status = Status.COMPLETED
+    finish_reason: Optional[FinishReason] = FinishReason.STOP
+    error_message: Optional[str] = None
     tool_calls: List[Dict[str, Any]] = []
     pending_call: Optional[Dict[str, Any]] = None
 
@@ -427,9 +490,16 @@ def _build_result_from_events(
                 )
         elif ev.type == EventType.DONE:
             output = ev.output
+            finish_reason = FinishReason.STOP
         elif ev.type == EventType.ERROR:
             output = ev.content
-            status = "FAILED"
+            status = Status.FAILED
+            finish_reason = FinishReason.ERROR
+            error_message = ev.content
+        elif ev.type == EventType.GUARDRAIL_FAIL:
+            status = Status.FAILED
+            finish_reason = FinishReason.GUARDRAIL
+            error_message = ev.content
 
     return AgentResult(
         output=output,
@@ -437,6 +507,8 @@ def _build_result_from_events(
         correlation_id=handle.correlation_id,
         tool_calls=tool_calls,
         status=status,
+        finish_reason=finish_reason,
+        error=error_message,
         events=list(events),
     )
 

@@ -1,7 +1,7 @@
-# Copyright (c) 2025 AgentSpan
+# Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Server auto-start — detect and launch the AgentSpan runtime server.
+"""Server auto-start — detect and launch the Agentspan runtime server.
 
 Called during :class:`AgentRuntime` initialisation when the target server
 URL points to localhost and is not yet responding.
@@ -64,17 +64,17 @@ def _find_or_install_cli() -> str | None:
     try:
         from agentspan.cli import _ensure_binary
 
-        _log("AgentSpan CLI not found. Installing...")
+        _log("Agentspan CLI not found. Installing...")
         binary = _ensure_binary()
-        _log(f"AgentSpan CLI installed at {binary}")
+        _log(f"Agentspan CLI installed at {binary}")
         return binary
     except Exception as exc:
-        _log(f"Failed to install AgentSpan CLI: {exc}")
+        _log(f"Failed to install Agentspan CLI: {exc}")
         return None
 
 
 def ensure_server_running(server_url: str, *, max_wait: float = 60.0) -> None:
-    """Start the AgentSpan server if it is not already running.
+    """Start the Agentspan server if it is not already running.
 
     Only attempts to start the server when *server_url* points to localhost.
     If the CLI binary cannot be found or installed, a warning is printed but
@@ -92,26 +92,36 @@ def ensure_server_running(server_url: str, *, max_wait: float = 60.0) -> None:
     if _is_server_ready(server_url):
         return
 
-    _log(f"AgentSpan server is not running at {server_url}.")
+    _log(f"Agentspan server is not running at {server_url}.")
 
     cli = _find_or_install_cli()
     if cli is None:
         _log(
-            "Could not find or install the AgentSpan CLI. "
+            "Could not find or install the Agentspan CLI. "
             "Please start the server manually with: agentspan server start"
         )
         return
 
-    _log("Starting AgentSpan server...")
+    _log("Starting Agentspan server...")
 
     try:
-        subprocess.run(
+        result = subprocess.run(
             [cli, "server", "start"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            error_msg = (result.stderr or result.stdout or "").strip()
+            _log(f"Failed to start Agentspan server: {error_msg}")
+            if "java" in error_msg.lower() or "jdk" in error_msg.lower():
+                _log(
+                    "The Agentspan server requires Java 21+. "
+                    "Install: https://adoptium.net/"
+                )
+            _log("Run 'agentspan doctor' for full diagnostics.")
+            return
     except OSError as exc:
-        _log(f"Failed to start AgentSpan server: {exc}")
+        _log(f"Failed to start Agentspan server: {exc}")
         return
 
     # Poll until the server is ready.
@@ -119,11 +129,13 @@ def ensure_server_running(server_url: str, *, max_wait: float = 60.0) -> None:
     deadline = time.monotonic() + max_wait
     while time.monotonic() < deadline:
         if _is_server_ready(server_url):
-            _log("AgentSpan server is ready.")
+            _log("Agentspan server is ready.")
             return
         time.sleep(1.0)
 
     raise RuntimeError(
-        f"AgentSpan server did not become ready at {server_url} "
-        f"within {max_wait:.0f} seconds. Check 'agentspan server logs' for details."
+        f"Agentspan server did not become ready at {server_url} "
+        f"within {max_wait:.0f} seconds. "
+        f"Check 'agentspan server logs' for details, "
+        f"or run 'agentspan doctor' for full diagnostics."
     )

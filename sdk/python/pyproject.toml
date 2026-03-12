@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agentspan"
 version = "0.1.0"
-description = "AgentSpan SDK — durable, scalable, observable AI agents"
+description = "Agentspan SDK — durable, scalable, observable AI agents"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.9"
@@ -38,6 +38,12 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
 ]
+testing = [
+    "litellm>=1.0",
+]
+
+[project.entry-points."pytest11"]
+agentspan-testing = "agentspan.agents.testing.pytest_plugin"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -48,8 +54,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: marks tests requiring a live AgentSpan server (deselect with '-m \"not integration\"')",
+    "integration: marks tests requiring a live Agentspan server (deselect with '-m \"not integration\"')",
     "sse: marks tests requiring SSE streaming support (requires AGENTSPAN_STREAMING_ENABLED=true)",
+    "agent_correctness: marks tests as agent correctness tests",
+    "semantic: marks tests that use LLM judge for semantic assertions (requires litellm)",
 ]
 
 [tool.coverage.run]

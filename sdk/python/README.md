@@ -26,16 +26,16 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-Every other agent SDK runs agents in-memory. **When the process dies, the agent dies.** AgentSpan gives you durable, distributed agent execution backed by [Conductor](https://github.com/conductor-oss/conductor) workflows -- agents that survive crashes, tools that scale independently across languages, and human-in-the-loop workflows that can pause for days.
+Every other agent SDK runs agents in-memory. **When the process dies, the agent dies.** Agentspan gives you durable, distributed agent execution backed by [Conductor](https://github.com/conductor-oss/conductor) workflows -- agents that survive crashes, tools that scale independently across languages, and human-in-the-loop workflows that can pause for days.
 
-## Why AgentSpan?
+## Why Agentspan?
 
-| | In-memory SDKs | AgentSpan |
-|---|---|---|
-| **Process crashes** | Agent dies | Agent continues |
-| **Tool scaling** | Single process | Distributed workers, any language |
-| **Human approval** | Minutes at best | Days or weeks |
-| **Long-running tasks** | Process-bound | Workflow-bound (weeks+) |
+| | In-memory SDKs | Agentspan                              |
+|---|---|----------------------------------------|
+| **Process crashes** | Agent dies | Agent continues                        |
+| **Tool scaling** | Single process | Distributed workers, any language      |
+| **Human approval** | Minutes at best | Days or weeks                          |
+| **Long-running tasks** | Process-bound | Workflow-bound (weeks+)                |
 | **Debugging** | Log files | Visual workflow UI + execution history |
 | **Observability** | Basic traces | Prometheus, OpenTelemetry, built-in UI |
 
@@ -50,6 +50,20 @@ This installs both the Python SDK and the `agentspan` CLI. Python 3.9+ required.
 ### Start the server
 
 ```bash
+# Server needs API keys for the models to be used
+# OpenAI (most common)
+# export OPENAI_API_KEY=sk-...
+
+# Anthropic (Claude)
+# export ANTHROPIC_API_KEY=sk-ant-...
+
+# Google Gemini
+# export GEMINI_API_KEY=AI...
+# export GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+
+# see https://github.com/agentspan/agentspan/blob/main/docs/ai-models.md for the full list of configs
+
+# Then start the server
 agentspan server start
 ```
 

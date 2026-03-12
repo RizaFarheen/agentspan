@@ -1,4 +1,4 @@
-# Copyright (c) 2025 AgentSpan
+# Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Handoffs — agent delegating to sub-agents.

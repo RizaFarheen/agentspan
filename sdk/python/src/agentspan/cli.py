@@ -1,4 +1,4 @@
-# Copyright (c) 2025 AgentSpan
+# Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Thin CLI wrapper — downloads and delegates to the Go ``agentspan`` binary.
@@ -88,11 +88,11 @@ def _ensure_binary() -> str:
     if os_name == "windows":
         url += ".exe"
 
-    print(f"Downloading AgentSpan CLI ...", file=sys.stderr, flush=True)
+    print(f"Downloading Agentspan CLI ...", file=sys.stderr, flush=True)
     _download_with_progress(url, path)
     st = os.stat(path)
     os.chmod(path, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
-    print("AgentSpan CLI installed.", file=sys.stderr, flush=True)
+    print("Agentspan CLI installed.", file=sys.stderr, flush=True)
     return path
 
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2025 AgentSpan
+# Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Configuration — load settings from environment variables.
@@ -35,7 +35,7 @@ class AgentConfig:
     Values are loaded from environment variables with sensible defaults.
 
     Attributes:
-        server_url: AgentSpan server API URL.
+        server_url: Agentspan server API URL.
         auth_key: Auth key (optional for OSS).
         auth_secret: Auth secret (optional for OSS).
         default_timeout_seconds: Default workflow timeout.
@@ -78,7 +78,7 @@ class AgentConfig:
         Reads (``AGENTSPAN_*`` is primary; ``CONDUCTOR_*`` is accepted
         for backward compatibility):
 
-            - ``AGENTSPAN_SERVER_URL`` — AgentSpan server API URL
+            - ``AGENTSPAN_SERVER_URL`` — Agentspan server API URL
               (default ``http://localhost:8080/api``)
             - ``AGENTSPAN_AUTH_KEY`` — Auth key (optional)
             - ``AGENTSPAN_AUTH_SECRET`` — Auth secret (optional)

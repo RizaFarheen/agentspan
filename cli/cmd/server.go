@@ -136,6 +136,21 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 
 	checkAIProviderKeys()
 
+	// Validate JDK before launching java
+	javaOk, javaVersion := checkJava()
+	if !javaOk {
+		if javaVersion != "" {
+			return fmt.Errorf(
+				"Java %s detected but Java 21+ is required.\n"+
+					"  Install Java 21+: https://adoptium.net/\n"+
+					"  Run 'agentspan doctor' for full diagnostics.", javaVersion)
+		}
+		return fmt.Errorf(
+			"Java is not installed. The Agentspan server requires Java 21+.\n"+
+				"  Install: https://adoptium.net/\n"+
+				"  Run 'agentspan doctor' for full diagnostics.")
+	}
+
 	bold := color.New(color.Bold)
 	bold.Printf("Starting agent runtime on port %s...\n", serverPort)
 

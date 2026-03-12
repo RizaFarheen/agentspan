@@ -675,7 +675,7 @@ config = AgentConfig.from_env()
 
 | Field | Type | Default | Env Variable | Description |
 |-------|------|---------|-------------|-------------|
-| `server_url` | `str` | `http://localhost:8080/api` | `AGENTSPAN_SERVER_URL` | AgentSpan server API URL. |
+| `server_url` | `str` | `http://localhost:8080/api` | `AGENTSPAN_SERVER_URL` | Agentspan server API URL. |
 | `auth_key` | `str` | `None` | `AGENTSPAN_AUTH_KEY` | Auth key. |
 | `auth_secret` | `str` | `None` | `AGENTSPAN_AUTH_SECRET` | Auth secret. |
 | `default_timeout_seconds` | `int` | `0` | `AGENTSPAN_AGENT_TIMEOUT` | Default workflow timeout. `0` = no timeout. |

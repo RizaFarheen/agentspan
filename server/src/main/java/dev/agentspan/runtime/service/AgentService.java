@@ -24,6 +24,8 @@ import com.netflix.conductor.common.run.WorkflowSummary;
 import dev.agentspan.runtime.compiler.AgentCompiler;
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
+import dev.agentspan.runtime.util.ModelParser;
+import dev.agentspan.runtime.util.ProviderValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -35,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Component
@@ -51,6 +54,7 @@ public class AgentService {
     private final WorkflowService workflowService;
     private final AgentStreamRegistry streamRegistry;
     private final ExecutionService executionService;
+    private final ProviderValidator providerValidator;
 
     /**
      * Compile an agent config into a WorkflowDef and return it.
@@ -111,6 +115,13 @@ public class AgentService {
 
         String workflowId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
         log.info("Started workflow: {} (id={})", def.getName(), workflowId);
+
+        // Validate provider AFTER start — workflow is captured for replay
+        Optional<String> validationError = validateModelProvider(config);
+        if (validationError.isPresent()) {
+            log.warn("Provider not configured for agent '{}': {}", config.getName(), validationError.get());
+            workflowService.terminateWorkflow(workflowId, validationError.get());
+        }
 
         return StartResponse.builder()
             .workflowId(workflowId)
@@ -430,6 +441,25 @@ public class AgentService {
         }
     }
 
+    // ── Provider validation ─────────────────────────────────────────
+
+    private Optional<String> validateModelProvider(AgentConfig config) {
+        if (config.getModel() != null && !config.getModel().isBlank()) {
+            ModelParser.ParsedModel parsed = ModelParser.parse(config.getModel());
+            Optional<String> error = providerValidator.validateProvider(parsed.getProvider());
+            if (error.isPresent()) return error;
+        }
+        if (config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                if (!sub.isExternal()) {
+                    Optional<String> error = validateModelProvider(sub);
+                    if (error.isPresent()) return error;
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     // ── Config resolution ─────────────────────────────────────────
 
     /**
@@ -505,6 +535,11 @@ public class AgentService {
 
         if (isComplete) {
             result.put("output", workflow.getOutput());
+        }
+
+        String reason = workflow.getReasonForIncompletion();
+        if (reason != null && !reason.isBlank()) {
+            result.put("reasonForIncompletion", reason);
         }
 
         // Find pending HUMAN task
