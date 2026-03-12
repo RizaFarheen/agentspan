@@ -17,3 +17,4 @@ cli/aspan
 *.db-shm
 *.db-wal
 agentspan_sdk.egg-info/
+cli/main
