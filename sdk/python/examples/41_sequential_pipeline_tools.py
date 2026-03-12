@@ -14,7 +14,7 @@ composing them into an ordered sequence using the >> operator.
 
 Requirements:
     - Conductor server with LLM support
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool

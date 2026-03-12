@@ -325,7 +325,7 @@ Poll interval: 500ms.
 ## Configuration Hierarchy
 
 ```
-Environment Variables (CONDUCTOR_*)
+Environment Variables (AGENTSPAN_*)
     |
     v
 AgentConfig (dataclass)

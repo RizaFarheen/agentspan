@@ -15,7 +15,7 @@ so the LLM retries automatically on guardrail failure.
 Requirements:
     - Conductor server with LLM support
     - pip install litellm (for the guardrail LLM call)
-    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - export OPENAI_API_KEY=sk-...
 """
 

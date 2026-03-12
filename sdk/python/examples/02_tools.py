@@ -11,7 +11,7 @@ Demonstrates:
 Requirements:
     - Conductor server with LLM support
     - LLM provider "openai" configured
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, EventType, tool

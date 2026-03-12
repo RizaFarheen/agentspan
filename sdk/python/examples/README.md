@@ -7,9 +7,9 @@ Runnable examples demonstrating every feature of the Conductor Agents SDK.
 All examples require a running Conductor server with LLM integration configured:
 
 ```bash
-export CONDUCTOR_SERVER_URL=http://localhost:8080/api
-export CONDUCTOR_AUTH_KEY=...       # if authentication is enabled
-export CONDUCTOR_AUTH_SECRET=...    # if authentication is enabled
+export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_AUTH_KEY=...       # if authentication is enabled
+export AGENTSPAN_AUTH_SECRET=...    # if authentication is enabled
 ```
 
 Some examples have additional dependencies noted in their headers.
@@ -159,7 +159,7 @@ and `deepseek`.
 
 ```bash
 # Set up your environment
-export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 
 # Run any example
 python examples/01_basic_agent.py

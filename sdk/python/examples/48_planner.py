@@ -9,7 +9,7 @@ tools. This improves performance on complex, multi-step tasks.
 
 Requirements:
     - Conductor server with planner support
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool

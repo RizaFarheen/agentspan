@@ -675,16 +675,16 @@ config = AgentConfig.from_env()
 
 | Field | Type | Default | Env Variable | Description |
 |-------|------|---------|-------------|-------------|
-| `server_url` | `str` | `""` | `CONDUCTOR_SERVER_URL` | Conductor server API URL. |
-| `auth_key` | `str` | `None` | `CONDUCTOR_AUTH_KEY` | Auth key. |
-| `auth_secret` | `str` | `None` | `CONDUCTOR_AUTH_SECRET` | Auth secret. |
-| `default_timeout_seconds` | `int` | `0` | `CONDUCTOR_AGENT_TIMEOUT` | Default workflow timeout. `0` = no timeout. |
-| `llm_retry_count` | `int` | `3` | `CONDUCTOR_LLM_RETRY_COUNT` | LLM task retry count. |
-| `worker_poll_interval_ms` | `int` | `100` | `CONDUCTOR_WORKER_POLL_INTERVAL` | Worker polling interval (ms). |
-| `worker_thread_count` | `int` | `1` | `CONDUCTOR_WORKER_THREADS` | Threads per worker. |
+| `server_url` | `str` | `http://localhost:8080/api` | `AGENTSPAN_SERVER_URL` | AgentSpan server API URL. |
+| `auth_key` | `str` | `None` | `AGENTSPAN_AUTH_KEY` | Auth key. |
+| `auth_secret` | `str` | `None` | `AGENTSPAN_AUTH_SECRET` | Auth secret. |
+| `default_timeout_seconds` | `int` | `0` | `AGENTSPAN_AGENT_TIMEOUT` | Default workflow timeout. `0` = no timeout. |
+| `llm_retry_count` | `int` | `3` | `AGENTSPAN_LLM_RETRY_COUNT` | LLM task retry count. |
+| `worker_poll_interval_ms` | `int` | `100` | `AGENTSPAN_WORKER_POLL_INTERVAL` | Worker polling interval (ms). |
+| `worker_thread_count` | `int` | `1` | `AGENTSPAN_WORKER_THREADS` | Threads per worker. |
 | `auto_start_workers` | `bool` | `True` | — | Auto-start worker processes. |
-| `daemon_workers` | `bool` | `True` | `CONDUCTOR_DAEMON_WORKERS` | Workers are daemon threads (killed on exit). |
-| `auto_register_integrations` | `bool` | `False` | `CONDUCTOR_INTEGRATIONS_AUTO_REGISTER` | Auto-create LLM integrations on server. |
+| `daemon_workers` | `bool` | `True` | `AGENTSPAN_DAEMON_WORKERS` | Workers are daemon threads (killed on exit). |
+| `auto_register_integrations` | `bool` | `False` | `AGENTSPAN_INTEGRATIONS_AUTO_REGISTER` | Auto-create LLM integrations on server. |
 
 ---
 

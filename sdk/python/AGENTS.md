@@ -1037,13 +1037,15 @@ The SDK reads configuration from environment variables:
 
 | Variable | Description | Default |
 |---|---|---|
-| `CONDUCTOR_SERVER_URL` | Conductor server API URL | (required) |
-| `CONDUCTOR_AUTH_KEY` | Auth key (Orkes Cloud) | None |
-| `CONDUCTOR_AUTH_SECRET` | Auth secret (Orkes Cloud) | None |
-| `CONDUCTOR_AGENT_TIMEOUT` | Default workflow timeout (seconds) | 300 |
-| `CONDUCTOR_LLM_RETRY_COUNT` | LLM task retry count | 3 |
-| `CONDUCTOR_WORKER_POLL_INTERVAL` | Worker poll interval (ms) | 100 |
-| `CONDUCTOR_WORKER_THREADS` | Worker threads per tool | 1 |
+| `AGENTSPAN_SERVER_URL` | AgentSpan server API URL | `http://localhost:8080/api` |
+| `AGENTSPAN_AUTH_KEY` | Auth key (Orkes Cloud) | None |
+| `AGENTSPAN_AUTH_SECRET` | Auth secret (Orkes Cloud) | None |
+| `AGENTSPAN_AGENT_TIMEOUT` | Default workflow timeout (seconds) | 300 |
+| `AGENTSPAN_LLM_RETRY_COUNT` | LLM task retry count | 3 |
+| `AGENTSPAN_WORKER_POLL_INTERVAL` | Worker poll interval (ms) | 100 |
+| `AGENTSPAN_WORKER_THREADS` | Worker threads per tool | 1 |
+
+> **Note:** The legacy `CONDUCTOR_*` prefixed environment variables (e.g. `CONDUCTOR_SERVER_URL`) are still accepted for backward compatibility, but the `AGENTSPAN_*` equivalents take precedence.
 
 ### Programmatic Configuration
 
@@ -1135,7 +1137,7 @@ All runnable examples must execute successfully against a live Conductor server 
 ### Run All Autonomous Examples
 
 ```bash
-export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 for ex in 01_basic_agent 02a_simple_tools 02b_multi_step_tools 03_structured_output \
           05_handoffs 06_sequential_pipeline 07_parallel_agents 08_router_agent \
           10_guardrails 11_streaming 12_long_running 13_hierarchical_agents 14_existing_workers \
@@ -1179,7 +1181,7 @@ End-to-end streaming tests validate the complete SSE event stream for all agent 
 
 **Prerequisites:**
 - Running Conductor server with streaming support
-- `export CONDUCTOR_SERVER_URL=http://localhost:8080/api`
+- `export AGENTSPAN_SERVER_URL=http://localhost:8080/api`
 - LLM provider configured (OpenAI by default)
 - Optionally: `export AGENT_LLM_MODEL=openai/gpt-4o-mini` (default)
 

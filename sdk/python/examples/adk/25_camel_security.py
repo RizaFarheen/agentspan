@@ -14,7 +14,7 @@ for secure, controlled LLM agent data flow.
 Requirements:
     - pip install google-adk
     - Conductor server
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from google.adk.agents import Agent, SequentialAgent

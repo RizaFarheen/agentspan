@@ -16,7 +16,7 @@ automatically emit spans for:
 Requirements:
     - pip install opentelemetry-api opentelemetry-sdk
     - Conductor server with LLM support
-    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, is_tracing_enabled, tool

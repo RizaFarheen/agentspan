@@ -18,7 +18,7 @@ Architecture:
 
 Requirements:
     - Conductor server with OpenAI integration configured
-    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, audio_tool, image_tool, video_tool

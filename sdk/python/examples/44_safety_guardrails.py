@@ -18,7 +18,7 @@ policies through explicit scanning and redaction.
 
 Requirements:
     - Conductor server with LLM support
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 import re

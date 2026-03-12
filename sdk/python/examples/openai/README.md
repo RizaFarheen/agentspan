@@ -8,7 +8,7 @@ The agents are defined using standard OpenAI SDK classes and decorators — the 
 
 ```bash
 pip install openai-agents agentspan-sdk
-export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 export OPENAI_API_KEY=your-key  # or configure via Conductor server
 ```
 

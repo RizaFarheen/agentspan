@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">AgentSpan</h1>
+  <h1 align="center">Agentspan</h1>
   <p align="center"><strong>AI agents that survive crashes, scale to millions, and pause for human approval.</strong></p>
 </p>
 
@@ -12,7 +12,7 @@
 ---
 
 ```python
-from agentspan.agents import Agent, tool, run
+from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -20,7 +20,10 @@ def get_weather(city: str) -> str:
     return f"72F and sunny in {city}"
 
 agent = Agent(name="weatherbot", model="openai/gpt-4o", tools=[get_weather])
-result = run(agent, "What's the weather in NYC?")
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "What's the weather in NYC?")
+    result.print_result()
 ```
 
 Every other agent SDK runs agents in-memory. **When the process dies, the agent dies.** AgentSpan gives you durable, distributed agent execution backed by [Conductor](https://github.com/conductor-oss/conductor) workflows -- agents that survive crashes, tools that scale independently across languages, and human-in-the-loop workflows that can pause for days.
@@ -42,14 +45,25 @@ Every other agent SDK runs agents in-memory. **When the process dies, the agent 
 pip install agentspan
 ```
 
-**Prerequisites:** Python 3.9+ and a running [Conductor](https://github.com/conductor-oss/conductor) server with LLM support.
+This installs both the Python SDK and the `agentspan` CLI. Python 3.9+ required.
+
+### Start the server
 
 ```bash
-export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+agentspan server start
+```
+
+The server defaults to `http://localhost:8080/api`. If you skip this step, `AgentRuntime()` will auto-start the server for you.
+
+### Configure (optional)
+
+```bash
+# Override the default server URL:
+export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 
 # For Orkes Cloud:
-# export CONDUCTOR_AUTH_KEY=your_key
-# export CONDUCTOR_AUTH_SECRET=your_secret
+# export AGENTSPAN_AUTH_KEY=your_key
+# export AGENTSPAN_AUTH_SECRET=your_secret
 ```
 
 ## Quick Start
@@ -57,12 +71,13 @@ export CONDUCTOR_SERVER_URL=http://localhost:7001/api
 ### Hello World
 
 ```python
-from agentspan.agents import Agent, run
+from agentspan.agents import Agent, AgentRuntime
 
-agent = Agent(name="hello", model="openai/gpt-4o")
-result = run(agent, "Say hello and tell me a fun fact.")
-print(result.output)
-print(f"Workflow: {result.workflow_id}")  # View in Conductor UI
+agent = Agent(name="greeter", model="openai/gpt-4o")
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "Say hello and tell me a fun fact.")
+    result.print_result()
 ```
 
 ### Tools
@@ -70,27 +85,28 @@ print(f"Workflow: {result.workflow_id}")  # View in Conductor UI
 Decorate any Python function with `@tool`. The LLM sees the function name, docstring, and type hints -- then decides when to call it.
 
 ```python
-from agentspan.agents import Agent, tool, run
+from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> dict:
-    """Get current weather for a city."""
-    return {"city": city, "temp": 72, "condition": "Sunny"}
+    """Get the current weather for a city."""
+    return {"city": city, "temp_f": 72, "condition": "Sunny"}
 
 @tool
-def calculate(expression: str) -> dict:
-    """Evaluate a math expression."""
-    return {"result": eval(expression)}
+def get_stock_price(symbol: str) -> dict:
+    """Get the current stock price for a ticker symbol."""
+    return {"symbol": symbol, "price": 182.50, "change": "+1.2%"}
 
 agent = Agent(
     name="assistant",
     model="openai/gpt-4o",
-    tools=[get_weather, calculate],
-    instructions="You are a helpful assistant.",
+    tools=[get_weather, get_stock_price],
+    instructions="You are a helpful assistant. Use tools to answer questions.",
 )
 
-result = run(agent, "What's the weather in NYC? Also, what's 42 * 17?")
-print(result.output)
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "What's the weather like in San Francisco?")
+    result.print_result()
 ```
 
 ### Structured Output
@@ -99,7 +115,7 @@ Return typed Pydantic models instead of free-form text.
 
 ```python
 from pydantic import BaseModel
-from agentspan.agents import Agent, tool, run
+from agentspan.agents import Agent, AgentRuntime, tool
 
 class WeatherReport(BaseModel):
     city: str
@@ -109,7 +125,7 @@ class WeatherReport(BaseModel):
 
 @tool
 def get_weather(city: str) -> dict:
-    """Get weather data for a city."""
+    """Get current weather data for a city."""
     return {"city": city, "temp_f": 72, "condition": "Sunny", "humidity": 45}
 
 agent = Agent(
@@ -117,12 +133,12 @@ agent = Agent(
     model="openai/gpt-4o",
     tools=[get_weather],
     output_type=WeatherReport,
+    instructions="You are a weather reporter. Get the weather and provide a recommendation.",
 )
 
-result = run(agent, "What's the weather in NYC?")
-report: WeatherReport = result.output
-print(f"{report.city}: {report.temperature}F, {report.condition}")
-print(f"Recommendation: {report.recommendation}")
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "What's the weather in NYC?")
+    result.print_result()
 ```
 
 ## Multi-Agent Patterns
@@ -132,35 +148,43 @@ print(f"Recommendation: {report.recommendation}")
 An orchestrator agent delegates to specialist sub-agents. The LLM decides who handles each request.
 
 ```python
-from agentspan.agents import Agent, tool, run
+from agentspan.agents import Agent, AgentRuntime, Strategy, tool
 
 @tool
 def check_balance(account_id: str) -> dict:
-    """Check account balance."""
-    return {"account_id": account_id, "balance": 5432.10}
+    """Check the balance of a bank account."""
+    return {"account_id": account_id, "balance": 5432.10, "currency": "USD"}
+
+@tool
+def lookup_order(order_id: str) -> dict:
+    """Look up the status of an order."""
+    return {"order_id": order_id, "status": "shipped", "eta": "2 days"}
 
 billing = Agent(
     name="billing",
     model="openai/gpt-4o",
-    instructions="Handle billing: balances, payments, invoices.",
+    instructions="You handle billing questions: balances, payments, invoices.",
     tools=[check_balance],
 )
 
 technical = Agent(
     name="technical",
     model="openai/gpt-4o",
-    instructions="Handle technical: orders, shipping, returns.",
+    instructions="You handle technical questions: order status, shipping, returns.",
+    tools=[lookup_order],
 )
 
 support = Agent(
     name="support",
     model="openai/gpt-4o",
-    instructions="Route customer requests to billing or technical.",
+    instructions="Route customer requests to the right specialist: billing or technical.",
     agents=[billing, technical],
-    strategy="handoff",
+    strategy=Strategy.HANDOFF,
 )
 
-result = run(support, "What's the balance on account ACC-123?")
+with AgentRuntime() as runtime:
+    result = runtime.run(support, "What's the balance on account ACC-123?")
+    result.print_result()
 ```
 
 ### Sequential Pipeline
@@ -168,18 +192,31 @@ result = run(support, "What's the balance on account ACC-123?")
 Chain agents with the `>>` operator. Output flows from one to the next.
 
 ```python
-from agentspan.agents import Agent, run
+from agentspan.agents import Agent, AgentRuntime
 
-researcher = Agent(name="researcher", model="openai/gpt-4o",
-                   instructions="Research the topic and provide key facts.")
-writer = Agent(name="writer", model="openai/gpt-4o",
-               instructions="Write an engaging article from the research.")
-editor = Agent(name="editor", model="openai/gpt-4o",
-               instructions="Polish the article for publication.")
+researcher = Agent(
+    name="researcher",
+    model="openai/gpt-4o",
+    instructions="You are a researcher. Given a topic, provide key facts and data points.",
+)
+
+writer = Agent(
+    name="writer",
+    model="openai/gpt-4o",
+    instructions="You are a writer. Take research findings and write a clear, engaging article.",
+)
+
+editor = Agent(
+    name="editor",
+    model="openai/gpt-4o",
+    instructions="You are an editor. Review the article for clarity, grammar, and tone.",
+)
 
 pipeline = researcher >> writer >> editor
-result = run(pipeline, "AI agents in software development")
-print(result.output)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
+    result.print_result()
 ```
 
 ### Parallel Agents
@@ -187,21 +224,30 @@ print(result.output)
 Fan out to multiple agents concurrently, then aggregate results.
 
 ```python
-from agentspan.agents import Agent, run
+from agentspan.agents import Agent, AgentRuntime, Strategy
 
-market = Agent(name="market", model="openai/gpt-4o",
-               instructions="Analyze market size, growth, key players.")
-risk = Agent(name="risk", model="openai/gpt-4o",
-             instructions="Analyze regulatory, technical, competitive risks.")
+market = Agent(
+    name="market_analyst",
+    model="openai/gpt-4o",
+    instructions="Analyze the given topic from a market perspective: size, growth, key players.",
+)
+
+risk = Agent(
+    name="risk_analyst",
+    model="openai/gpt-4o",
+    instructions="Analyze the given topic for risks: regulatory, technical, competitive threats.",
+)
 
 analysis = Agent(
     name="analysis",
     model="openai/gpt-4o",
     agents=[market, risk],
-    strategy="parallel",
+    strategy=Strategy.PARALLEL,
 )
 
-result = run(analysis, "Launching an AI healthcare tool in the US")
+with AgentRuntime() as runtime:
+    result = runtime.run(analysis, "Launching an AI-powered healthcare diagnostic tool in the US market")
+    result.print_result()
 ```
 
 ## Human-in-the-Loop
@@ -209,20 +255,34 @@ result = run(analysis, "Launching an AI healthcare tool in the US")
 Mark any tool as requiring approval. The workflow pauses -- for hours, days, or weeks -- until a human approves or rejects.
 
 ```python
-from agentspan.agents import Agent, tool, start
+from agentspan.agents import Agent, AgentRuntime, EventType, tool
 
 @tool(approval_required=True)
 def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
-    """Transfer funds between accounts."""
-    return {"status": "completed", "amount": amount}
+    """Transfer funds between accounts. Requires human approval."""
+    return {"status": "completed", "from": from_acct, "to": to_acct, "amount": amount}
 
-agent = Agent(name="banker", model="openai/gpt-4o", tools=[transfer_funds])
-handle = start(agent, "Transfer $5000 from checking to savings")
+agent = Agent(
+    name="banker",
+    model="openai/gpt-4o",
+    tools=[transfer_funds],
+    instructions="You are a banking assistant. Help with transfers.",
+)
 
-# Later -- from any process, any machine:
-status = handle.get_status()
-if status.is_waiting:
-    handle.approve()   # or: handle.reject("Amount too high")
+with AgentRuntime() as runtime:
+    handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456")
+    print(f"Workflow started: {handle.workflow_id}\n")
+
+    for event in handle.stream():
+        if event.type == EventType.TOOL_CALL:
+            print(f"  [tool_call] {event.tool_name}({event.args})")
+
+        elif event.type == EventType.WAITING:
+            print("--- Human approval required ---")
+            handle.approve()  # or: handle.reject("Amount too high")
+
+        elif event.type == EventType.DONE:
+            print(f"\nResult: {event.output}")
 ```
 
 ## Guardrails
@@ -230,22 +290,43 @@ if status.is_waiting:
 Validate LLM output before it reaches the user. Retry automatically on failure.
 
 ```python
-from agentspan.agents import Agent, Guardrail, GuardrailResult, OnFail, guardrail, run
+import re
+from agentspan.agents import (
+    Agent, AgentRuntime, Guardrail, GuardrailResult, OnFail, Position, guardrail, tool,
+)
+
+@tool
+def get_customer_info(customer_id: str) -> dict:
+    """Retrieve customer details including payment info on file."""
+    return {
+        "customer_id": customer_id,
+        "name": "Alice Johnson",
+        "card_on_file": "4532-0150-1234-5678",
+    }
 
 @guardrail
-def word_limit(content: str) -> GuardrailResult:
-    """Keep responses concise."""
-    if len(content.split()) > 500:
-        return GuardrailResult(passed=False, message="Too long. Be more concise.")
+def no_pii(content: str) -> GuardrailResult:
+    """Reject responses that contain credit card numbers."""
+    cc_pattern = r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b"
+    if re.search(cc_pattern, content):
+        return GuardrailResult(
+            passed=False,
+            message="Response contains PII. Redact all card numbers before responding.",
+        )
     return GuardrailResult(passed=True)
 
 agent = Agent(
-    name="concise_bot",
+    name="support_agent",
     model="openai/gpt-4o",
-    guardrails=[Guardrail(word_limit, on_fail=OnFail.RETRY)],
+    tools=[get_customer_info],
+    guardrails=[
+        Guardrail(no_pii, position=Position.OUTPUT, on_fail=OnFail.RETRY),
+    ],
 )
 
-result = run(agent, "Explain quantum computing.")
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "What's the profile for customer CUST-7?")
+    result.print_result()
 ```
 
 Built-in guardrail types: `RegexGuardrail` (pattern matching), `LLMGuardrail` (AI judge), or write your own with the `@guardrail` decorator. Failure modes: `RETRY`, `RAISE`, `FIX` (auto-correct), or `HUMAN` (pause for review).
@@ -255,16 +336,21 @@ Built-in guardrail types: `RegexGuardrail` (pattern matching), `LLMGuardrail` (A
 Get real-time events as the agent thinks, calls tools, and produces output.
 
 ```python
-from agentspan.agents import Agent, stream
+from agentspan.agents import Agent, AgentRuntime
 
-agent = Agent(name="writer", model="openai/gpt-4o")
-for event in stream(agent, "Write a haiku about Python"):
-    match event.type:
-        case "tool_call":       print(f"Calling {event.tool_name}...")
-        case "thinking":        print(f"Thinking: {event.content}")
-        case "guardrail_pass":  print(f"Guardrail passed: {event.guardrail_name}")
-        case "guardrail_fail":  print(f"Guardrail failed: {event.guardrail_name}")
-        case "done":            print(f"\n{event.output}")
+agent = Agent(
+    name="haiku_writer",
+    model="openai/gpt-4o",
+    instructions="You are a haiku poet. Write a single haiku.",
+)
+
+with AgentRuntime() as runtime:
+    for event in runtime.stream(agent, "Write a haiku about Python programming"):
+        if event.type == "done":
+            print(f"\nResult: {event.output}")
+            print(f"Workflow: {event.workflow_id}")
+        elif event.type == "error":
+            print(f"[Error: {event.content}]")
 ```
 
 ## Server-Side Tools
@@ -272,22 +358,38 @@ for event in stream(agent, "Write a haiku about Python"):
 Call HTTP APIs and MCP servers directly from Conductor -- no local workers needed.
 
 ```python
-from agentspan.agents import Agent, http_tool, mcp_tool, run
+from agentspan.agents import Agent, AgentRuntime, tool, http_tool, mcp_tool
 
-# Any HTTP endpoint becomes a tool
+# HTTP endpoint as a tool (pure server-side, no worker needed)
 weather_api = http_tool(
-    name="get_weather",
-    description="Get weather for a city",
+    name="get_current_weather",
+    description="Get current weather for a city from the weather API",
     url="https://api.weather.com/v1/current",
     method="GET",
-    input_schema={"type": "object", "properties": {"city": {"type": "string"}}},
+    input_schema={
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"],
+    },
 )
 
-# MCP server -- tools are discovered automatically
-github = mcp_tool(server_url="http://localhost:8080/mcp")
+# MCP server tools (discovered at runtime)
+github_tools = mcp_tool(
+    server_url="http://localhost:3001/mcp",
+    name="github",
+    description="GitHub operations via MCP",
+)
 
-agent = Agent(name="assistant", model="openai/gpt-4o", tools=[weather_api, github])
-result = run(agent, "What's the weather in NYC?")
+agent = Agent(
+    name="api_assistant",
+    model="openai/gpt-4o",
+    tools=[weather_api, github_tools],
+    instructions="You have access to weather data and GitHub operations.",
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "Get the weather in London.")
+    result.print_result()
 ```
 
 ## More Capabilities

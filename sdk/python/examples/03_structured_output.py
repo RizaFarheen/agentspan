@@ -9,7 +9,7 @@ using Pydantic models.
 Requirements:
     - Conductor server with LLM support
     - pydantic installed
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from pydantic import BaseModel

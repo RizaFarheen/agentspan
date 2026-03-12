@@ -10,8 +10,22 @@ agents-specific defaults.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
+
+_DEFAULT_SERVER_URL = "http://localhost:8080/api"
+
+
+def _env(new_name: str, old_name: str, default: Optional[str] = None) -> Optional[str]:
+    """Read an ``AGENTSPAN_*`` env var, falling back to ``CONDUCTOR_*``.
+
+    The ``AGENTSPAN_*`` prefix is the primary name.  The ``CONDUCTOR_*``
+    prefix is accepted for backward compatibility but is deprecated.
+    """
+    val = os.environ.get(new_name)
+    if val is not None:
+        return val
+    return os.environ.get(old_name, default)
 
 
 @dataclass
@@ -19,21 +33,19 @@ class AgentConfig:
     """Configuration for the agents runtime.
 
     Values are loaded from environment variables with sensible defaults.
-    The Conductor server URL, key, and secret are required and are read
-    from the same env vars as ``conductor-python``.
 
     Attributes:
-        server_url: Conductor server API URL.
-        auth_key: Conductor auth key (optional for OSS).
-        auth_secret: Conductor auth secret (optional for OSS).
+        server_url: AgentSpan server API URL.
+        auth_key: Auth key (optional for OSS).
+        auth_secret: Auth secret (optional for OSS).
         default_timeout_seconds: Default workflow timeout.
         worker_poll_interval_ms: Worker polling interval in milliseconds.
         worker_thread_count: Number of threads per worker.
         auto_start_workers: Whether to auto-start worker processes.
         daemon_workers: Whether worker processes are daemon (killed on exit).
         auto_register_integrations: When ``True``, automatically create LLM
-            integrations and register models on the Conductor server before
-            executing agents.  Reads API keys from provider-specific env vars
+            integrations and register models on the server before executing
+            agents.  Reads API keys from provider-specific env vars
             (e.g. ``OPENAI_API_KEY``).
     """
 
@@ -63,42 +75,55 @@ class AgentConfig:
     def from_env(cls) -> "AgentConfig":
         """Create configuration from environment variables.
 
-        Reads:
-            - ``CONDUCTOR_SERVER_URL`` — Conductor API URL
-            - ``CONDUCTOR_AUTH_KEY`` — Auth key (optional)
-            - ``CONDUCTOR_AUTH_SECRET`` — Auth secret (optional)
-            - ``CONDUCTOR_AGENT_TIMEOUT`` — Default timeout in seconds
-            - ``CONDUCTOR_LLM_RETRY_COUNT`` — LLM task retry count
-            - ``CONDUCTOR_WORKER_POLL_INTERVAL`` — Worker poll interval (ms)
-            - ``CONDUCTOR_WORKER_THREADS`` — Worker thread count
-            - ``CONDUCTOR_DAEMON_WORKERS`` — Use daemon worker processes (default true)
-            - ``CONDUCTOR_INTEGRATIONS_AUTO_REGISTER`` — Auto-register LLM
+        Reads (``AGENTSPAN_*`` is primary; ``CONDUCTOR_*`` is accepted
+        for backward compatibility):
+
+            - ``AGENTSPAN_SERVER_URL`` — AgentSpan server API URL
+              (default ``http://localhost:8080/api``)
+            - ``AGENTSPAN_AUTH_KEY`` — Auth key (optional)
+            - ``AGENTSPAN_AUTH_SECRET`` — Auth secret (optional)
+            - ``AGENTSPAN_AGENT_TIMEOUT`` — Default timeout in seconds
+            - ``AGENTSPAN_LLM_RETRY_COUNT`` — LLM task retry count
+            - ``AGENTSPAN_WORKER_POLL_INTERVAL`` — Worker poll interval (ms)
+            - ``AGENTSPAN_WORKER_THREADS`` — Worker thread count
+            - ``AGENTSPAN_DAEMON_WORKERS`` — Use daemon workers (default true)
+            - ``AGENTSPAN_INTEGRATIONS_AUTO_REGISTER`` — Auto-register LLM
               integrations and models on the server (default false)
+            - ``AGENTSPAN_STREAMING_ENABLED`` — Enable SSE streaming (default true)
         """
         return cls(
-            server_url=os.environ.get("CONDUCTOR_SERVER_URL", ""),
-            auth_key=os.environ.get("CONDUCTOR_AUTH_KEY"),
-            auth_secret=os.environ.get("CONDUCTOR_AUTH_SECRET"),
+            server_url=_env(
+                "AGENTSPAN_SERVER_URL", "CONDUCTOR_SERVER_URL", _DEFAULT_SERVER_URL
+            ) or _DEFAULT_SERVER_URL,
+            auth_key=_env("AGENTSPAN_AUTH_KEY", "CONDUCTOR_AUTH_KEY"),
+            auth_secret=_env("AGENTSPAN_AUTH_SECRET", "CONDUCTOR_AUTH_SECRET"),
             default_timeout_seconds=int(
-                os.environ.get("CONDUCTOR_AGENT_TIMEOUT", "0")
+                _env("AGENTSPAN_AGENT_TIMEOUT", "CONDUCTOR_AGENT_TIMEOUT", "0") or "0"
             ),
             llm_retry_count=int(
-                os.environ.get("CONDUCTOR_LLM_RETRY_COUNT", "3")
+                _env("AGENTSPAN_LLM_RETRY_COUNT", "CONDUCTOR_LLM_RETRY_COUNT", "3") or "3"
             ),
             worker_poll_interval_ms=int(
-                os.environ.get("CONDUCTOR_WORKER_POLL_INTERVAL", "100")
+                _env("AGENTSPAN_WORKER_POLL_INTERVAL", "CONDUCTOR_WORKER_POLL_INTERVAL", "100")
+                or "100"
             ),
             worker_thread_count=int(
-                os.environ.get("CONDUCTOR_WORKER_THREADS", "1")
+                _env("AGENTSPAN_WORKER_THREADS", "CONDUCTOR_WORKER_THREADS", "1") or "1"
             ),
-            daemon_workers=os.environ.get(
-                "CONDUCTOR_DAEMON_WORKERS", "true"
+            daemon_workers=(
+                _env("AGENTSPAN_DAEMON_WORKERS", "CONDUCTOR_DAEMON_WORKERS", "true") or "true"
             ).lower() in ("true", "1", "yes"),
-            auto_register_integrations=os.environ.get(
-                "CONDUCTOR_INTEGRATIONS_AUTO_REGISTER", "false"
+            auto_register_integrations=(
+                _env(
+                    "AGENTSPAN_INTEGRATIONS_AUTO_REGISTER",
+                    "CONDUCTOR_INTEGRATIONS_AUTO_REGISTER",
+                    "false",
+                )
+                or "false"
             ).lower() in ("true", "1", "yes"),
-            streaming_enabled=os.environ.get(
-                "CONDUCTOR_STREAMING_ENABLED", "true"
+            streaming_enabled=(
+                _env("AGENTSPAN_STREAMING_ENABLED", "CONDUCTOR_STREAMING_ENABLED", "true")
+                or "true"
             ).lower() in ("true", "1", "yes"),
         )
 

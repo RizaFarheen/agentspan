@@ -12,7 +12,7 @@ These tools execute entirely server-side — no Python worker process needed.
 
 Requirements:
     - Conductor server with LLM support
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool, http_tool, mcp_tool

@@ -41,9 +41,9 @@ from agentspan.agents import AgentRuntime
 # ---------------------------------------------------------------------------
 # Server config
 # ---------------------------------------------------------------------------
-SERVER_URL = os.environ.get("CONDUCTOR_SERVER_URL", "http://localhost:8080/api")
-AUTH_KEY = os.environ.get("CONDUCTOR_AUTH_KEY", "")
-AUTH_SECRET = os.environ.get("CONDUCTOR_AUTH_SECRET", "")
+SERVER_URL = os.environ.get("AGENTSPAN_SERVER_URL") or os.environ.get("CONDUCTOR_SERVER_URL", "http://localhost:8080/api")
+AUTH_KEY = os.environ.get("AGENTSPAN_AUTH_KEY") or os.environ.get("CONDUCTOR_AUTH_KEY", "")
+AUTH_SECRET = os.environ.get("AGENTSPAN_AUTH_SECRET") or os.environ.get("CONDUCTOR_AUTH_SECRET", "")
 
 
 # ---------------------------------------------------------------------------

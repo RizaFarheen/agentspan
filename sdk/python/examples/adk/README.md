@@ -8,7 +8,7 @@ The agents are defined using standard ADK classes — the Conductor runtime auto
 
 ```bash
 pip install google-adk agentspan-sdk
-export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 export GOOGLE_GEMINI_API_KEY=your-key  # or configure via Conductor server
 ```
 

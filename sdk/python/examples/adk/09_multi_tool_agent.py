@@ -12,7 +12,7 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from typing import List

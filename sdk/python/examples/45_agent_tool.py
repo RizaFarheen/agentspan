@@ -14,7 +14,7 @@ own workflow and returns the result as a tool output.
 
 Requirements:
     - Conductor server with AgentTool support
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, agent_tool, tool

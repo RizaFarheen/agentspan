@@ -18,7 +18,7 @@ Architecture:
 Requirements:
     - pip install google-adk
     - Conductor server with AgentTool support
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from google.adk.agents import Agent

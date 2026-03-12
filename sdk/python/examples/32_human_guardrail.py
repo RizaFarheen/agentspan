@@ -11,7 +11,7 @@ Since the workflow pauses at a HumanTask, this example uses ``start()``
 
 Requirements:
     - Conductor server with LLM support
-    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 """
 
 import time

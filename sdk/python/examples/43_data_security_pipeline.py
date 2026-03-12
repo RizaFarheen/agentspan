@@ -17,7 +17,7 @@ user-facing responses, ensuring PII never reaches the final output.
 
 Requirements:
     - Conductor server with LLM support
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 import json

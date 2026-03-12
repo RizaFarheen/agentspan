@@ -33,14 +33,20 @@ func configPath() string {
 func Load() *Config {
 	cfg := DefaultConfig()
 
-	// Env vars override
-	if url := os.Getenv("AGENT_SERVER_URL"); url != "" {
+	// Env vars override (AGENTSPAN_* primary, CONDUCTOR_* fallback)
+	if url := os.Getenv("AGENTSPAN_SERVER_URL"); url != "" {
+		cfg.ServerURL = url
+	} else if url := os.Getenv("AGENT_SERVER_URL"); url != "" {
 		cfg.ServerURL = url
 	}
-	if key := os.Getenv("CONDUCTOR_AUTH_KEY"); key != "" {
+	if key := os.Getenv("AGENTSPAN_AUTH_KEY"); key != "" {
+		cfg.AuthKey = key
+	} else if key := os.Getenv("CONDUCTOR_AUTH_KEY"); key != "" {
 		cfg.AuthKey = key
 	}
-	if secret := os.Getenv("CONDUCTOR_AUTH_SECRET"); secret != "" {
+	if secret := os.Getenv("AGENTSPAN_AUTH_SECRET"); secret != "" {
+		cfg.AuthSecret = secret
+	} else if secret := os.Getenv("CONDUCTOR_AUTH_SECRET"); secret != "" {
 		cfg.AuthSecret = secret
 	}
 

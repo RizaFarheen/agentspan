@@ -272,12 +272,14 @@ class TestConfigFromEnv:
         # Clear relevant env vars
         env_backup = {}
         for key in ["CONDUCTOR_SERVER_URL", "CONDUCTOR_AUTH_KEY", "CONDUCTOR_AGENT_TIMEOUT",
-                     "CONDUCTOR_LLM_RETRY_COUNT"]:
+                     "CONDUCTOR_LLM_RETRY_COUNT",
+                     "AGENTSPAN_SERVER_URL", "AGENTSPAN_AUTH_KEY", "AGENTSPAN_AGENT_TIMEOUT",
+                     "AGENTSPAN_LLM_RETRY_COUNT"]:
             env_backup[key] = os.environ.pop(key, None)
 
         try:
             config = AgentConfig.from_env()
-            assert config.server_url == ""
+            assert config.server_url == "http://localhost:8080/api"
             assert config.default_timeout_seconds == 0
             assert config.llm_retry_count == 3
             assert config.worker_poll_interval_ms == 100

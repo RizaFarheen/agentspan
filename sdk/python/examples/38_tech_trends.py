@@ -27,9 +27,9 @@ Architecture:
         generate_pdf           — Conductor GENERATE_PDF task (markdown → PDF)
 
 Run:
-    export CONDUCTOR_SERVER_URL=https://developer.orkescloud.com/api
-    export CONDUCTOR_AUTH_KEY=<key>
-    export CONDUCTOR_AUTH_SECRET=<secret>
+    export AGENTSPAN_SERVER_URL=https://developer.orkescloud.com/api
+    export AGENTSPAN_AUTH_KEY=<key>
+    export AGENTSPAN_AUTH_SECRET=<secret>
     python 38_tech_trends.py
 """
 

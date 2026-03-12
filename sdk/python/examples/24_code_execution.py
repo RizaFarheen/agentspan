@@ -16,7 +16,7 @@ Requirements:
     - Conductor server with LLM support
     - Docker (for DockerCodeExecutor example)
     - pip install jupyter_client ipykernel (for JupyterCodeExecutor)
-    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 """
 
 from agentspan.agents import Agent, AgentRuntime

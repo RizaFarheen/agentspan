@@ -15,7 +15,7 @@ Requirements:
     - pip install openai
     - Conductor server with LLM support
     - export OPENAI_API_KEY=sk-...
-    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 """
 
 from agentspan.agents import AgentRuntime

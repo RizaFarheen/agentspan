@@ -12,7 +12,7 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from agents import (

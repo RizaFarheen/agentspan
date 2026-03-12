@@ -9,7 +9,7 @@ directly back to the coordinator).
 
 Requirements:
     - Conductor server
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool

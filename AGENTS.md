@@ -334,14 +334,14 @@ SSE streaming tests are organized in three tiers:
 
 1. **Tier 1 — SSE parsing unit tests** (`tests/unit/test_sse_parsing.py`): Tests `_parse_sse()` and `_sse_to_agent_event()` as pure functions. Zero dependencies, runs in CI.
 2. **Tier 2 — Mock SSE server tests** (`tests/unit/test_sse_client.py`): Spins up a real HTTP server in a thread, tests the full `_stream_sse()` code path. No Java server or LLM needed.
-3. **Tier 3 — Real server SSE tests** (`tests/integration/test_e2e_sse.py`): Full Python SDK → Runtime → Conductor → SSE path. Requires `CONDUCTOR_STREAMING_ENABLED=true`.
+3. **Tier 3 — Real server SSE tests** (`tests/integration/test_e2e_sse.py`): Full Python SDK → Runtime → SSE path. Requires `AGENTSPAN_STREAMING_ENABLED=true`.
 
 ```bash
 # Tier 1 + 2 (no server needed, always run in CI)
 cd python && python3 -m pytest tests/unit/test_sse_parsing.py tests/unit/test_sse_client.py -v
 
 # Tier 3 (requires running runtime server + LLM key)
-cd python && CONDUCTOR_STREAMING_ENABLED=true python3 -m pytest tests/integration/test_e2e_sse.py -v
+cd python && AGENTSPAN_STREAMING_ENABLED=true python3 -m pytest tests/integration/test_e2e_sse.py -v
 ```
 
 **When adding SSE features:** Add tests at all three tiers. Tier 1+2 are mandatory for CI. Tier 3 validates the real cross-process path.
@@ -359,13 +359,15 @@ Environment variables:
 
 | Variable | Description | Default |
 |---|---|---|
-| `CONDUCTOR_SERVER_URL` | Conductor server API URL | (required) |
-| `CONDUCTOR_AUTH_KEY` | Auth key (Orkes Cloud) | None |
-| `CONDUCTOR_AUTH_SECRET` | Auth secret (Orkes Cloud) | None |
-| `CONDUCTOR_AGENT_TIMEOUT` | Default workflow timeout (seconds) | 300 |
-| `CONDUCTOR_LLM_RETRY_COUNT` | LLM task retry count | 3 |
-| `CONDUCTOR_WORKER_POLL_INTERVAL` | Worker poll interval (ms) | 100 |
-| `CONDUCTOR_WORKER_THREADS` | Worker threads per tool | 1 |
+| `AGENTSPAN_SERVER_URL` | AgentSpan server API URL | `http://localhost:8080/api` |
+| `AGENTSPAN_AUTH_KEY` | Auth key (Orkes Cloud) | None |
+| `AGENTSPAN_AUTH_SECRET` | Auth secret (Orkes Cloud) | None |
+| `AGENTSPAN_AGENT_TIMEOUT` | Default workflow timeout (seconds) | 300 |
+| `AGENTSPAN_LLM_RETRY_COUNT` | LLM task retry count | 3 |
+| `AGENTSPAN_WORKER_POLL_INTERVAL` | Worker poll interval (ms) | 100 |
+| `AGENTSPAN_WORKER_THREADS` | Worker threads per tool | 1 |
+
+> **Note:** The legacy `CONDUCTOR_*` prefixed variables are still accepted for backward compatibility.
 
 ## Dependencies
 

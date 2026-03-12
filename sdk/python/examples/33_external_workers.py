@@ -17,7 +17,7 @@ This is useful when:
 Requirements:
     - Conductor server with LLM support
     - The referenced workers must be running somewhere
-    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool

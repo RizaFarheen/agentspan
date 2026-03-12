@@ -151,9 +151,9 @@ Configuration is stored in `~/.agentspan/config.json`. Environment variables tak
 
 | Variable | Description |
 |----------|-------------|
-| `AGENT_SERVER_URL` | Server URL (default: `http://localhost:8080`) |
-| `CONDUCTOR_AUTH_KEY` | Auth key |
-| `CONDUCTOR_AUTH_SECRET` | Auth secret |
+| `AGENTSPAN_SERVER_URL` | Server URL (default: `http://localhost:8080`) |
+| `AGENTSPAN_AUTH_KEY` | Auth key |
+| `AGENTSPAN_AUTH_SECRET` | Auth secret |
 
 ### Version
 

@@ -9,7 +9,7 @@ Conductor worker tasks and execute server-side.
 
 Requirements:
     - Conductor server with callback support
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool

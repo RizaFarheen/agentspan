@@ -15,7 +15,7 @@ PromptTemplate supports:
 Requirements:
     - Conductor server with LLM support
     - Prompt templates created on the server (see setup below)
-    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, PromptTemplate, tool

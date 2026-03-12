@@ -14,7 +14,7 @@ Flow:
 Requirements:
     - Conductor server with LLM support
     - MCP weather server running on http://localhost:3001/mcp
-    - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, mcp_tool

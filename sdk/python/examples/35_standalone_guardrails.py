@@ -15,7 +15,7 @@ Same functions, two execution modes.
 Requirements:
     Part 1 (standalone): none — no server, no LLM, no workers.
     Part 2 (as workers): Conductor server
-        - export CONDUCTOR_SERVER_URL=http://localhost:8080/api
+        - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 """
 
 import re
@@ -173,7 +173,8 @@ def run_as_workers():
         print(f"  Registered worker: {name}")
 
     # Start polling — TaskHandler discovers all @worker_task functions
-    config = Configuration(server_api_url=os.environ["CONDUCTOR_SERVER_URL"])
+    server_url = os.environ.get("AGENTSPAN_SERVER_URL") or os.environ.get("CONDUCTOR_SERVER_URL", "http://localhost:8080/api")
+    config = Configuration(server_api_url=server_url)
     handler = TaskHandler(
         workers=[],
         configuration=config,

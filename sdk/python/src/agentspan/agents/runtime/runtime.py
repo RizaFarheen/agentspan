@@ -124,8 +124,9 @@ class AgentRuntime:
             print(result.output)
 
     Connection params can be passed directly or loaded from environment
-    variables (``CONDUCTOR_SERVER_URL``, ``CONDUCTOR_AUTH_KEY``,
-    ``CONDUCTOR_AUTH_SECRET``).
+    variables (``AGENTSPAN_SERVER_URL``, ``AGENTSPAN_AUTH_KEY``,
+    ``AGENTSPAN_AUTH_SECRET``).  The legacy ``CONDUCTOR_*`` prefixed
+    variables are also accepted for backward compatibility.
 
     Args:
         server_url: Conductor server API URL.  Overrides env and *config*.
@@ -160,6 +161,11 @@ class AgentRuntime:
             auto_register_integrations=base.auto_register_integrations,
             streaming_enabled=base.streaming_enabled,
         )
+        # Auto-start the server if it targets localhost and is not responding.
+        from agentspan.agents.runtime.server import ensure_server_running
+
+        ensure_server_running(self._config.server_url)
+
         self._conductor_config = self._config.to_conductor_configuration()
 
         from conductor.client.orkes_clients import OrkesClients

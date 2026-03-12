@@ -12,7 +12,7 @@ Requirements:
     - Conductor server with LLM support
     - conductor-python installed (provides @worker_task)
     - LLM provider "openai" configured
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from conductor.client.worker.worker_task import worker_task

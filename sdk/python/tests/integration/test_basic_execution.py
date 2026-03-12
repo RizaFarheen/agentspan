@@ -7,7 +7,7 @@ These tests require a running Conductor server with LLM support.
 Skip with: pytest -m "not integration"
 
 Requirements:
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - LLM provider "openai" configured in Conductor
 """
 

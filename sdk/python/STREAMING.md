@@ -234,7 +234,7 @@ yield from self._poll_stream(handle)
 
 ```python
 streaming_enabled: bool = True  # default
-# Env var: CONDUCTOR_STREAMING_ENABLED
+# Env var: AGENTSPAN_STREAMING_ENABLED
 ```
 
 ### AgentHandle.stream()

@@ -10,7 +10,7 @@ different tool invocations without relying on the LLM to relay state.
 
 Requirements:
     - Conductor server with state support
-    - export CONDUCTOR_SERVER_URL=http://localhost:7001/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:7001/api
 """
 
 from agentspan.agents import Agent, AgentRuntime, tool
