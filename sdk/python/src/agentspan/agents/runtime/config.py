@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +50,15 @@ class AgentConfig(BaseSettings):
         extra="ignore",
         populate_by_name=True,
     )
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _empty_str_to_default(cls, v, info):
+        """Treat empty-string env vars as unset so the field default is used."""
+        if isinstance(v, str) and v.strip() == "":
+            field = cls.model_fields[info.field_name]
+            return field.default
+        return v
 
     server_url: str = Field(
         default="http://localhost:8080/api",
