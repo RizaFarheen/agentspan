@@ -29,7 +29,7 @@
 Every other agent SDK runs agents in-memory. When the process dies, the agent dies. Agentspan compiles your agents to durable workflows that execute on a server, giving you reliability, observability, and distributed scaling out of the box.
 
 ```python
-from agentspan.agents import Agent, tool, run
+from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> str:
@@ -37,7 +37,10 @@ def get_weather(city: str) -> str:
     return f"72F and sunny in {city}"
 
 agent = Agent(name="weatherbot", model="openai/gpt-4o", tools=[get_weather])
-result = run(agent, "What's the weather in NYC?")
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "What's the weather in NYC?")
+    result.print_result()
 ```
 
 ## Why Agentspan?
@@ -46,40 +49,43 @@ Other frameworks give you a Python library. Agentspan gives you a **production r
 
 Your agent code compiles to a durable, server-side workflow. The server manages execution, retries, scaling, and state — so your agents keep running even when your process doesn't.
 
-| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan** |
-|---|---|---|---|---|---|
-| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Server-side workflows** |
-| **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None (Temporal add-on available) | **Automatic — workflow resumes exactly where it left off** |
-| **Tool scaling** | Single process | Single process (Platform for managed scaling) | Distributed runtime | Single process | **Distributed workers in any language (Python, Java, Go, etc.)** |
-| **Human approval** | Stdin-blocking (minutes) | `interrupt()` + checkpointer (days) | Stdin-blocking (minutes) | In-process | **Durable pause — approve from any process, any machine, days later** |
-| **Orchestration API** | Crew, Task, Agent, Flow | StateGraph, Node, Edge, ToolNode | AssistantAgent, GroupChat, Swarm, Team | Agent, Runner, Handoff | **One class: `Agent`** |
-| **Pipeline syntax** | YAML + Python | Graph builder API | Nested class hierarchy | Handoff chains | **`agent_a >> agent_b >> agent_c`** |
-| **Guardrails** | Task guardrails | Middleware-based | Limited | Input, output, tool guardrails | **Custom, regex, LLM — 4 failure modes: retry, raise, fix, human** |
-| **Code execution** | Docker sandbox | Community packages | Docker, Jupyter | Hosted Code Interpreter | **4 built-in: local, Docker, Jupyter, serverless** |
-| **MCP tools** | Manual config | Manual config | Manual config | Manual config | **Auto-discovered, server-side (no worker needed)** |
-| **Observability** | OTel + CrewAI AMP | LangSmith + OTel | OTel + AutoGen Studio | Built-in traces | **OTel + Prometheus + visual workflow UI + execution replay** |
+| | CrewAI | LangChain | AutoGen | OpenAI Agents | **Agentspan**                                                          |
+|---|---|---|---|---|------------------------------------------------------------------------|
+| **Execution model** | In-memory | Checkpoints | In-memory | Client-side loop | **Durable workflows**                                                  |
+| **Crash recovery** | Manual replay from checkpoints | Resume from checkpointer (Postgres, Redis) | None (v0.4) | None (Temporal add-on available) | **Automatic — workflow resumes exactly where it left off**             |
+| **Tool scaling** | Single process | Single process (Platform for managed scaling) | Distributed runtime | Single process | **Distributed workers in any language (Python, Java, Go, etc.)**       |
+| **Human approval** | Stdin-blocking (minutes) | `interrupt()` + checkpointer (days) | Stdin-blocking (minutes) | In-process | **Durable pause — approve from any process, any machine, days later**  |
+| **Cross-process access** | None | Thread ID + checkpointer (rebuild graph) | None | `response_id` (continue only) | **Workflow ID — status, approve, pause, resume, cancel from anywhere** |
+| **Orchestration API** | Crew, Task, Agent, Flow | StateGraph, Node, Edge, ToolNode | AssistantAgent, GroupChat, Swarm, Team | Agent, Runner, Handoff | **One class: `Agent`**                                                 |
+| **Pipeline syntax** | YAML + Python | Graph builder API | Nested class hierarchy | Handoff chains | **`agent_a >> agent_b >> agent_c`**                                    |
+| **Guardrails** | Task guardrails | Middleware-based | Limited | Input, output, tool guardrails | **Custom, regex, LLM — 4 failure modes: retry, raise, fix, human**     |
+| **Code execution** | Docker sandbox | Community packages | Docker, Jupyter | Hosted Code Interpreter | **4 built-in: local, Docker, Jupyter, serverless**                     |
+| **MCP tools** | Manual config | Manual config | Manual config | Manual config | **Auto-discovered, server-side (no worker needed)**                    |
+| **Observability** | OTel + CrewAI AMP | LangSmith + OTel | OTel + AutoGen Studio | Built-in traces | **OTel + Prometheus + visual workflow UI + execution replay**          |
 
 ### What makes it different
 
 1. **True durable execution** — Not checkpoints. Not client-side loops. Your agent compiles to a server-side workflow that the Agentspan server executes independently of your process. Deploy new code, restart your machine, kill the process — the agent keeps running. When it finishes, poll for the result from anywhere. This is the same execution model that powers mission-critical systems at scale.
 
-2. **Distributed workers in any language** — Tools don't run inside your agent process. They execute as distributed tasks that workers pick up. Write workers in Python, Java, Go, or any language. Scale each tool independently. Load-balance automatically. Your agent process just submits work — the server and workers handle the rest.
+2. **Cross-process agent access** — Every running agent has a workflow ID. Any process, on any machine, can use that ID to check status, stream events, approve or reject tool calls, pause, resume, or cancel the agent. No graph rebuilding, no checkpointer setup — just the ID and a runtime connection. LangGraph requires re-instantiating the graph and checkpointer; CrewAI and AutoGen have no cross-process access at all.
 
-3. **One primitive** — No `Crew`, `Task`, `StateGraph`, `Node`, or `AssistantAgent`. Everything is an `Agent`. Single agents, multi-agent teams, nested hierarchies — one class.
+3. **Distributed workers in any language** — Tools don't run inside your agent process. They execute as distributed tasks that workers pick up. Write workers in Python, Java, Go, or any language. Scale each tool independently. Load-balance automatically. Your agent process just submits work — the server and workers handle the rest.
 
-4. **The `>>` operator** — Compose pipelines with Python syntax: `researcher >> writer >> editor`. No YAML, no graph builders.
+4. **One primitive** — No `Crew`, `Task`, `StateGraph`, `Node`, or `AssistantAgent`. Everything is an `Agent`. Single agents, multi-agent teams, nested hierarchies — one class.
 
-5. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the workflow durably on the server. No process stays alive waiting. Approve from any machine, any process, days later.
+5. **The `>>` operator** — Compose pipelines with Python syntax: `researcher >> writer >> editor`. No YAML, no graph builders.
 
-6. **Production guardrails** — Custom functions, regex patterns, or LLM judges. Four failure modes: retry, raise, fix, or escalate to human. Guardrails are durable tasks, not post-processing — they survive workflow restarts.
+6. **Real human-in-the-loop** — `@tool(approval_required=True)` pauses the workflow durably on the server. No process stays alive waiting. Approve from any machine, any process, days later.
 
-7. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker process needed. MCP tools are auto-discovered at compile time.
+7. **Production guardrails** — Custom functions, regex patterns, or LLM judges. Four failure modes: retry, raise, fix, or escalate to human. Guardrails are durable tasks, not post-processing — they survive workflow restarts.
 
-8. **Code execution sandboxes** — Local subprocess, Docker containers, Jupyter kernels, or serverless functions. Four options, built in.
+8. **Server-side tools** — HTTP endpoints and MCP servers execute as server-side tasks. No worker process needed. MCP tools are auto-discovered at compile time.
 
-9. **Full observability** — OpenTelemetry spans, Prometheus metrics, visual workflow UI, execution history, and token/cost tracking — all built in.
+9. **Code execution sandboxes** — Local subprocess, Docker containers, Jupyter kernels, or serverless functions. Four options, built in.
 
-10. **Google ADK compatible** — Use the `google.adk.agents` API you already know, backed by Agentspan's durable execution. [32 ADK examples included](examples/adk/).
+10. **Full observability** — OpenTelemetry spans, Prometheus metrics, visual workflow UI, execution history, and token/cost tracking — all built in.
+
+11. **Framework agnostic** — Use Google ADK, Langchain, OpenAI, CrewAI etc to write agents, run on Agentspan's durable execution runtime.
 
 ## Quickstart
 
@@ -121,20 +127,22 @@ cp .env.example .env
 
 </details>
 
-### Hello World (4 lines)
+### Hello World
 
 ```python
-from agentspan.agents import Agent, run
+from agentspan.agents import Agent, AgentRuntime
 
 agent = Agent(name="hello", model="openai/gpt-4o")
-result = run(agent, "Say hello and tell me a fun fact.")
-print(result.output)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "Say hello and tell me a fun fact.")
+    result.print_result()
 ```
 
 ### Add Tools
 
 ```python
-from agentspan.agents import Agent, tool, run
+from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
 def get_weather(city: str) -> dict:
@@ -153,14 +161,16 @@ agent = Agent(
     instructions="You are a helpful assistant.",
 )
 
-result = run(agent, "What's the weather in NYC? Also, what's 42 * 17?")
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "What's the weather in NYC? Also, what's 42 * 17?")
+    result.print_result()
 ```
 
 ### Structured Output
 
 ```python
 from pydantic import BaseModel
-from agentspan.agents import Agent, tool, run
+from agentspan.agents import Agent, AgentRuntime, tool
 
 class WeatherReport(BaseModel):
     city: str
@@ -174,14 +184,17 @@ def get_weather(city: str) -> dict:
     return {"city": city, "temp_f": 72, "condition": "Sunny", "humidity": 45}
 
 agent = Agent(name="reporter", model="openai/gpt-4o", tools=[get_weather], output_type=WeatherReport)
-result = run(agent, "What's the weather in NYC?")
-report: WeatherReport = result.output  # Fully typed
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "What's the weather in NYC?")
+    report: WeatherReport = result.output  # Fully typed
+    print(f"{report.city}: {report.temperature}F, {report.condition}")
 ```
 
 ### Multi-Agent Handoffs
 
 ```python
-from agentspan.agents import Agent, tool, run
+from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool
 def check_balance(account_id: str) -> dict:
@@ -200,13 +213,15 @@ support = Agent(
     strategy="handoff",
 )
 
-result = run(support, "What's the balance on account ACC-123?")
+with AgentRuntime() as runtime:
+    result = runtime.run(support, "What's the balance on account ACC-123?")
+    result.print_result()
 ```
 
 ### Pipeline Composition
 
 ```python
-from agentspan.agents import Agent, run
+from agentspan.agents import Agent, AgentRuntime
 
 researcher = Agent(name="researcher", model="openai/gpt-4o",
                    instructions="Research the topic and provide key facts.")
@@ -216,13 +231,16 @@ editor = Agent(name="editor", model="openai/gpt-4o",
                instructions="Polish the article for publication.")
 
 pipeline = researcher >> writer >> editor
-result = run(pipeline, "AI agents in software development")
+
+with AgentRuntime() as runtime:
+    result = runtime.run(pipeline, "AI agents in software development")
+    result.print_result()
 ```
 
 ### Parallel Agents
 
 ```python
-from agentspan.agents import Agent, run
+from agentspan.agents import Agent, AgentRuntime
 
 market = Agent(name="market", model="openai/gpt-4o",
                instructions="Analyze market size, growth, key players.")
@@ -232,13 +250,15 @@ risk = Agent(name="risk", model="openai/gpt-4o",
 analysis = Agent(name="analysis", model="openai/gpt-4o",
                  agents=[market, risk], strategy="parallel")
 
-result = run(analysis, "Launching an AI healthcare tool in the US")
+with AgentRuntime() as runtime:
+    result = runtime.run(analysis, "Launching an AI healthcare tool in the US")
+    result.print_result()
 ```
 
 ### Human-in-the-Loop (Durable)
 
 ```python
-from agentspan.agents import Agent, tool, start
+from agentspan.agents import Agent, AgentRuntime, tool
 
 @tool(approval_required=True)
 def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
@@ -246,18 +266,21 @@ def transfer_funds(from_acct: str, to_acct: str, amount: float) -> dict:
     return {"status": "completed", "amount": amount}
 
 agent = Agent(name="banker", model="openai/gpt-4o", tools=[transfer_funds])
-handle = start(agent, "Transfer $5000 from checking to savings")
 
-# Days later, from any process, any machine:
-status = handle.get_status()
-if status.is_waiting:
-    handle.approve()   # Or: handle.reject("Amount too high")
+with AgentRuntime() as runtime:
+    handle = runtime.start(agent, "Transfer $5000 from checking to savings")
+    # Workflow pauses at transfer_funds...
+
+    # Days later, from any process, any machine:
+    status = handle.get_status()
+    if status.is_waiting:
+        handle.approve()   # Or: handle.reject("Amount too high")
 ```
 
 ### Guardrails
 
 ```python
-from agentspan.agents import Agent, Guardrail, GuardrailResult, OnFail, guardrail, run
+from agentspan.agents import Agent, AgentRuntime, Guardrail, GuardrailResult, OnFail, guardrail
 
 @guardrail
 def word_limit(content: str) -> GuardrailResult:
@@ -271,28 +294,32 @@ agent = Agent(
     guardrails=[Guardrail(word_limit, on_fail=OnFail.RETRY)],
 )
 
-result = run(agent, "Explain quantum computing.")
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "Explain quantum computing.")
+    result.print_result()
 ```
 
 ### Streaming
 
 ```python
-from agentspan.agents import Agent, stream
+from agentspan.agents import Agent, AgentRuntime
 
 agent = Agent(name="writer", model="openai/gpt-4o")
-for event in stream(agent, "Write a haiku about Python"):
-    match event.type:
-        case "tool_call":       print(f"Calling {event.tool_name}...")
-        case "thinking":        print(f"Thinking: {event.content}")
-        case "guardrail_pass":  print(f"Guardrail passed: {event.guardrail_name}")
-        case "guardrail_fail":  print(f"Guardrail failed: {event.guardrail_name}")
-        case "done":            print(f"\n{event.output}")
+
+with AgentRuntime() as runtime:
+    for event in runtime.stream(agent, "Write a haiku about Python"):
+        match event.type:
+            case "tool_call":       print(f"Calling {event.tool_name}...")
+            case "thinking":        print(f"Thinking: {event.content}")
+            case "guardrail_pass":  print(f"Guardrail passed: {event.guardrail_name}")
+            case "guardrail_fail":  print(f"Guardrail failed: {event.guardrail_name}")
+            case "done":            print(f"\n{event.output}")
 ```
 
 ### Server-Side Tools (No Workers Needed)
 
 ```python
-from agentspan.agents import Agent, http_tool, mcp_tool, run
+from agentspan.agents import Agent, AgentRuntime, http_tool, mcp_tool
 
 weather_api = http_tool(
     name="get_weather", description="Get weather for a city",
@@ -303,7 +330,71 @@ weather_api = http_tool(
 github = mcp_tool(server_url="http://localhost:8080/mcp")  # Auto-discovered
 
 agent = Agent(name="assistant", model="openai/gpt-4o", tools=[weather_api, github])
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "What's the weather in NYC?")
+    result.print_result()
 ```
+
+### Code Execution
+
+```python
+from agentspan.agents import Agent, AgentRuntime
+from agentspan.agents.code_executor import DockerCodeExecutor
+
+executor = DockerCodeExecutor(image="python:3.12-slim", timeout=30)
+agent = Agent(
+    name="coder", model="openai/gpt-4o",
+    tools=[executor.as_tool()],
+    instructions="Write and execute Python code to solve problems.",
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "Calculate the first 20 Fibonacci numbers.")
+    result.print_result()
+```
+
+### Shared State (Tool Context)
+
+```python
+from agentspan.agents import Agent, AgentRuntime, tool, ToolContext
+
+@tool
+def add_item(item: str, context: ToolContext) -> str:
+    """Add an item to the shared list."""
+    items = context.state.get("items", [])
+    items.append(item)
+    context.state["items"] = items
+    return f"Added '{item}'. List now has {len(items)} items."
+
+@tool
+def get_items(context: ToolContext) -> str:
+    """Get all items from the shared list."""
+    items = context.state.get("items", [])
+    return f"Items: {', '.join(items)}" if items else "No items yet."
+
+agent = Agent(
+    name="list_manager", model="openai/gpt-4o",
+    tools=[add_item, get_items],
+    instructions="Manage a shared list of items.",
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "Add apples, bananas, and cherries, then show the list.")
+    result.print_result()
+```
+
+## Multi-Agent Strategies
+
+| Strategy | Description |
+|---|---|
+| `handoff` (default) | LLM chooses which sub-agent handles the request |
+| `sequential` | Sub-agents run in order, output feeds forward (`>>` operator) |
+| `parallel` | All sub-agents run concurrently, results aggregated |
+| `router` | Router agent or function selects the sub-agent |
+| `round_robin` | Agents take turns in a fixed rotation |
+| `swarm` | Condition-based handoffs between agents |
+| `random` | Random sub-agent selection each turn |
 
 ## Examples
 
