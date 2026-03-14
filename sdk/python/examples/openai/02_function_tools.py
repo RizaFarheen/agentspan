@@ -20,6 +20,8 @@ from agents import Agent, function_tool
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 @function_tool
 def get_weather(city: str) -> str:
@@ -37,9 +39,6 @@ def get_weather(city: str) -> str:
 def calculate(expression: str) -> str:
     """Evaluate a mathematical expression and return the result."""
     import math
-
-from settings import settings
-
     safe_builtins = {
         "abs": abs, "round": round, "min": min, "max": max,
         "sqrt": math.sqrt, "pow": pow, "pi": math.pi, "e": math.e,
