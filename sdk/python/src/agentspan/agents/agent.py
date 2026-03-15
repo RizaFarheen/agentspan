@@ -500,3 +500,95 @@ class Agent:
             parts.append(f", agents={len(self.agents)}, strategy={self.strategy!r}")
         parts.append(")")
         return "".join(parts)
+
+
+# ── Scatter-Gather convenience helper ─────────────────────────────────
+
+
+_SCATTER_GATHER_PREFIX = """\
+You are a coordinator that decomposes problems into independent sub-tasks.
+
+WORKFLOW:
+1. Analyze the input and identify independent sub-problems
+2. Call the '{worker_name}' tool MULTIPLE TIMES IN PARALLEL — once per sub-problem, each with a clear, self-contained prompt
+3. After all results return, synthesize them into a unified answer
+
+IMPORTANT: Issue all '{worker_name}' tool calls in a SINGLE response to maximize parallelism.
+"""
+
+
+def scatter_gather(
+    name: str,
+    worker: "Agent",
+    *,
+    model: str = None,
+    instructions: str = "",
+    tools: Optional[List[Any]] = None,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
+    fail_fast: bool = False,
+    **kwargs: Any,
+) -> "Agent":
+    """Create a coordinator Agent pre-configured for the scatter-gather pattern.
+
+    The coordinator decomposes a problem into N independent sub-tasks,
+    dispatches the *worker* agent N times in parallel (via ``agent_tool``),
+    and synthesizes the results.  N is determined at runtime by the LLM.
+
+    Each sub-task is a durable Conductor sub-workflow with automatic retries
+    on transient failures.  By default, individual sub-task failures are
+    tolerated so the coordinator can synthesize partial results.
+
+    Args:
+        name: Name for the coordinator agent.
+        worker: The worker Agent that handles each sub-task.
+        model: LLM model for the coordinator.  Defaults to the worker's model.
+        instructions: Additional instructions appended after the auto-generated
+            decomposition/synthesis prefix.
+        tools: Extra tools for the coordinator (in addition to the worker tool).
+        retry_count: Retries per sub-task on failure (default 2, linear backoff).
+        retry_delay_seconds: Base delay between retries in seconds (default 2).
+        fail_fast: When ``True``, a single sub-task failure fails the entire
+            scatter-gather.  Default ``False`` — the coordinator continues with
+            partial results.
+        **kwargs: Forwarded to the :class:`Agent` constructor (e.g. ``max_turns``,
+            ``guardrails``, ``temperature``, ``timeout_seconds``).
+            If ``timeout_seconds`` is not specified, defaults to 300 (5 minutes)
+            since scatter-gather dispatches multiple sub-agents in parallel.
+
+    Returns:
+        An :class:`Agent` configured as a scatter-gather coordinator.
+
+    Example::
+
+        researcher = Agent(name="researcher", model="openai/gpt-4o",
+                          tools=[search], instructions="Research a topic.")
+        coordinator = scatter_gather("coordinator", researcher,
+                                     instructions="Focus on technical depth.")
+        result = runtime.run(coordinator, "Compare Python, Rust, and Go for CLIs")
+    """
+    from agentspan.agents.tool import agent_tool
+
+    # Default to 5 minutes — scatter-gather waits for N parallel sub-agents
+    kwargs.setdefault("timeout_seconds", 300)
+
+    worker_tool = agent_tool(
+        worker,
+        retry_count=retry_count,
+        retry_delay_seconds=retry_delay_seconds,
+        optional=not fail_fast if fail_fast else None,
+    )
+    resolved_model = model if model is not None else worker.model
+
+    prefix = _SCATTER_GATHER_PREFIX.format(worker_name=worker.name)
+    full_instructions = f"{prefix}\n{instructions}" if instructions else prefix
+
+    all_tools = [worker_tool] + (list(tools) if tools else [])
+
+    return Agent(
+        name=name,
+        model=resolved_model,
+        instructions=full_instructions,
+        tools=all_tools,
+        **kwargs,
+    )

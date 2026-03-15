@@ -163,6 +163,9 @@ public class JavaScriptBuilder {
             "        prompt: (tc.inputParameters && tc.inputParameters.request)" +
             "                || JSON.stringify(tc.inputParameters)," +
             "        session_id: $.session_id || ''};" +
+            "      if (agentToolCfg[n].retryCount !== undefined) t.retryCount = agentToolCfg[n].retryCount;" +
+            "      if (agentToolCfg[n].retryDelaySeconds !== undefined) t.retryDelaySeconds = agentToolCfg[n].retryDelaySeconds;" +
+            "      if (agentToolCfg[n].optional !== undefined) t.optional = agentToolCfg[n].optional;" +
             "    } else if (mediaCfg[n]) {" +
             "      t.type = mediaCfg[n].taskType;" +
             "      t.name = mediaCfg[n].taskType.toLowerCase();" +
@@ -462,6 +465,9 @@ public class JavaScriptBuilder {
             "        prompt: (tc.inputParameters && tc.inputParameters.request)" +
             "                || JSON.stringify(tc.inputParameters)," +
             "        session_id: $.session_id || ''};" +
+            "      if (agentToolCfg[n].retryCount !== undefined) t.retryCount = agentToolCfg[n].retryCount;" +
+            "      if (agentToolCfg[n].retryDelaySeconds !== undefined) t.retryDelaySeconds = agentToolCfg[n].retryDelaySeconds;" +
+            "      if (agentToolCfg[n].optional !== undefined) t.optional = agentToolCfg[n].optional;" +
             "    } else if (mediaCfg[n]) {" +
             "      t.type = mediaCfg[n].taskType;" +
             "      t.name = mediaCfg[n].taskType.toLowerCase();" +

@@ -331,3 +331,106 @@ class TestDuplicateSubAgentNames:
         with pytest.raises(ValueError, match="dup") as exc_info:
             Agent(name="team", model="openai/gpt-4o", agents=[w, w])
         assert "unique name" in str(exc_info.value).lower()
+
+
+# ── Scatter-Gather helper ─────────────────────────────────────────────
+
+
+class TestScatterGather:
+    """Test the scatter_gather() convenience helper."""
+
+    def test_creates_agent_with_agent_tool(self):
+        from agentspan.agents.agent import scatter_gather
+
+        worker = Agent(name="researcher", model="openai/gpt-4o")
+        coord = scatter_gather("coordinator", worker)
+        assert isinstance(coord, Agent)
+        assert coord.name == "coordinator"
+        assert len(coord.tools) == 1
+        assert coord.tools[0].name == "researcher"
+
+    def test_instructions_include_decomposition_prefix(self):
+        from agentspan.agents.agent import scatter_gather, _SCATTER_GATHER_PREFIX
+
+        worker = Agent(name="worker", model="openai/gpt-4o")
+        coord = scatter_gather("coord", worker, instructions="Be concise.")
+        expected_prefix = _SCATTER_GATHER_PREFIX.format(worker_name="worker")
+        assert coord.instructions.startswith(expected_prefix)
+        assert "Be concise." in coord.instructions
+
+    def test_extra_tools_included(self):
+        from agentspan.agents.agent import scatter_gather
+        from agentspan.agents.tool import tool
+
+        @tool
+        def helper(x: str) -> str:
+            """A helper."""
+            return x
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        coord = scatter_gather("coord", worker, tools=[helper])
+        assert len(coord.tools) == 2
+        # First tool is the agent_tool wrapper, second is the extra tool
+        assert coord.tools[0].name == "w"
+
+    def test_model_inherited_from_worker(self):
+        from agentspan.agents.agent import scatter_gather
+
+        worker = Agent(name="w", model="anthropic/claude-sonnet")
+        coord = scatter_gather("coord", worker)
+        assert coord.model == "anthropic/claude-sonnet"
+
+    def test_model_override(self):
+        from agentspan.agents.agent import scatter_gather
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        coord = scatter_gather("coord", worker, model="anthropic/claude-sonnet")
+        assert coord.model == "anthropic/claude-sonnet"
+
+    def test_kwargs_forwarded(self):
+        from agentspan.agents.agent import scatter_gather
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        coord = scatter_gather("coord", worker, max_turns=10, temperature=0.5)
+        assert coord.max_turns == 10
+        assert coord.temperature == 0.5
+
+    def test_retry_config_passed_to_agent_tool(self):
+        from agentspan.agents.agent import scatter_gather
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        coord = scatter_gather("coord", worker, retry_count=5, retry_delay_seconds=10)
+        worker_tool = coord.tools[0]
+        assert worker_tool.config["retryCount"] == 5
+        assert worker_tool.config["retryDelaySeconds"] == 10
+
+    def test_fail_fast_sets_optional_false(self):
+        from agentspan.agents.agent import scatter_gather
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        coord = scatter_gather("coord", worker, fail_fast=True)
+        worker_tool = coord.tools[0]
+        assert worker_tool.config["optional"] is False
+
+    def test_default_is_not_fail_fast(self):
+        from agentspan.agents.agent import scatter_gather
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        coord = scatter_gather("coord", worker)
+        worker_tool = coord.tools[0]
+        # optional should not be set — server defaults to True
+        assert "optional" not in worker_tool.config
+
+    def test_default_timeout_300(self):
+        from agentspan.agents.agent import scatter_gather
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        coord = scatter_gather("coord", worker)
+        assert coord.timeout_seconds == 300
+
+    def test_timeout_override(self):
+        from agentspan.agents.agent import scatter_gather
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        coord = scatter_gather("coord", worker, timeout_seconds=600)
+        assert coord.timeout_seconds == 600

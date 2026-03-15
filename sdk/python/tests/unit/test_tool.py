@@ -495,6 +495,45 @@ class TestToolEdgeCases:
         assert result.output_data == {"result": "hello"}
 
 
+class TestAgentToolRetryConfig:
+    """Test agent_tool() retry and resilience parameters."""
+
+    def test_default_config_has_no_retry_overrides(self):
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import agent_tool
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        td = agent_tool(worker)
+        assert "retryCount" not in td.config
+        assert "retryDelaySeconds" not in td.config
+        assert "optional" not in td.config
+
+    def test_retry_count_passed(self):
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import agent_tool
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        td = agent_tool(worker, retry_count=5, retry_delay_seconds=10)
+        assert td.config["retryCount"] == 5
+        assert td.config["retryDelaySeconds"] == 10
+
+    def test_optional_false_for_fail_fast(self):
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import agent_tool
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        td = agent_tool(worker, optional=False)
+        assert td.config["optional"] is False
+
+    def test_zero_retries(self):
+        from agentspan.agents.agent import Agent
+        from agentspan.agents.tool import agent_tool
+
+        worker = Agent(name="w", model="openai/gpt-4o")
+        td = agent_tool(worker, retry_count=0)
+        assert td.config["retryCount"] == 0
+
+
 # ── P1-A / P3-A: Dispatch advanced tests ──────────────────────────────
 
 

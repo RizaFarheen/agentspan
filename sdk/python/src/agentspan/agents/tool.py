@@ -694,6 +694,9 @@ def agent_tool(
     agent: Any,
     name: Optional[str] = None,
     description: Optional[str] = None,
+    retry_count: Optional[int] = None,
+    retry_delay_seconds: Optional[int] = None,
+    optional: Optional[bool] = None,
 ) -> ToolDef:
     """Wrap an :class:`Agent` as a callable tool (invoked as a sub-workflow).
 
@@ -705,6 +708,13 @@ def agent_tool(
         agent: The Agent instance to wrap as a tool.
         name: Optional override name (defaults to the agent's name).
         description: Optional override description.
+        retry_count: Number of retries on failure (default 2).  Set to ``0``
+            for no retries.
+        retry_delay_seconds: Seconds between retries with linear backoff
+            (default 2).
+        optional: When ``True`` (default), a permanently failed sub-workflow
+            does not fail the parent — the coordinator continues with partial
+            results.  Set to ``False`` for fail-fast behaviour.
 
     Returns:
         A :class:`ToolDef` with ``tool_type="agent_tool"``.
@@ -718,6 +728,13 @@ def agent_tool(
                        instructions="Delegate research tasks.")
     """
     agent_name = getattr(agent, "name", str(agent))
+    config: dict = {"agent": agent}
+    if retry_count is not None:
+        config["retryCount"] = retry_count
+    if retry_delay_seconds is not None:
+        config["retryDelaySeconds"] = retry_delay_seconds
+    if optional is not None:
+        config["optional"] = optional
     return ToolDef(
         name=name or agent_name,
         description=description or f"Invoke the {agent_name} agent",
@@ -732,7 +749,7 @@ def agent_tool(
             "required": ["request"],
         },
         tool_type="agent_tool",
-        config={"agent": agent},
+        config=config,
     )
 
 

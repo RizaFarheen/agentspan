@@ -24,7 +24,7 @@ Quick start::
 """
 
 # Core primitive
-from agentspan.agents.agent import Agent, AgentDef, PromptTemplate, Strategy, agent
+from agentspan.agents.agent import Agent, AgentDef, PromptTemplate, Strategy, agent, scatter_gather
 
 # Tool decorator and constructors
 from agentspan.agents.tool import (
@@ -135,6 +135,7 @@ __all__ = [
     "PromptTemplate",
     "Strategy",
     "agent",
+    "scatter_gather",
     "AgentRuntime",
     "AgentConfig",
     # Extended agent types

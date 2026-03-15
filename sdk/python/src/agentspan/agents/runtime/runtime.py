@@ -582,6 +582,7 @@ class AgentRuntime:
 
         Includes tools, custom guardrails, stop_when, termination,
         check_transfer, router, handoff, and manual selection workers.
+        Also recurses into agent_tool nested agents.
         """
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.tool import get_tool_def
@@ -594,6 +595,10 @@ class AgentRuntime:
                 td = get_tool_def(t)
                 if td.tool_type == "worker":
                     names.add(td.name)
+                elif td.tool_type == "agent_tool" and td.config and "agent" in td.config:
+                    nested_agent = td.config["agent"]
+                    if not getattr(nested_agent, 'external', False):
+                        names.update(self._collect_worker_names(nested_agent))
             except TypeError:
                 continue
 
@@ -1387,6 +1392,11 @@ class AgentRuntime:
                 continue
             if td.tool_type == "worker":
                 return True
+            if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
+                nested_agent = td.config["agent"]
+                if not getattr(nested_agent, 'external', False):
+                    if self._has_worker_tools(nested_agent):
+                        return True
         return any(self._has_worker_tools(sub) for sub in agent.agents)
 
     # ── Plan (compile without executing) ────────────────────────────

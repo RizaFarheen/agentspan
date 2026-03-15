@@ -183,4 +183,28 @@ class ToolCompilerTest {
         assertThat(script).contains("researcher_agent_wf");
         assertThat(script).contains("SUB_WORKFLOW");
     }
+
+    @Test
+    void testBuildEnrichTask_AgentToolWithRetryConfig() {
+        ToolConfig agentTool = ToolConfig.builder()
+            .name("researcher")
+            .toolType("agent_tool")
+            .config(Map.of(
+                "workflowName", "researcher_agent_wf",
+                "retryCount", 5,
+                "retryDelaySeconds", 10,
+                "optional", false))
+            .build();
+
+        ToolCompiler tc = new ToolCompiler();
+        Object[] result = tc.buildEnrichTask("agent", "agent_llm", List.of(agentTool), "");
+
+        WorkflowTask enrichTask = (WorkflowTask) result[0];
+        String script = (String) enrichTask.getInputParameters().get("expression");
+
+        // The enrichment script should contain the retry overrides baked into agentToolCfg
+        assertThat(script).contains("\"retryCount\":5");
+        assertThat(script).contains("\"retryDelaySeconds\":10");
+        assertThat(script).contains("\"optional\":false");
+    }
 }

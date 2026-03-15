@@ -221,6 +221,10 @@ public class ToolCompiler {
                             tool.getName() + "_agent_wf");
                     Map<String, Object> atEntry = new LinkedHashMap<>();
                     atEntry.put("workflowName", workflowName);
+                    // Pass through retry/resilience overrides from SDK config
+                    if (cfg.containsKey("retryCount")) atEntry.put("retryCount", cfg.get("retryCount"));
+                    if (cfg.containsKey("retryDelaySeconds")) atEntry.put("retryDelaySeconds", cfg.get("retryDelaySeconds"));
+                    if (cfg.containsKey("optional")) atEntry.put("optional", cfg.get("optional"));
                     agentToolConfig.put(tool.getName(), atEntry);
                 } else if (MEDIA_TOOL_TYPES.contains(toolType)) {
                     Map<String, Object> cfgCopy = new LinkedHashMap<>(cfg);
@@ -777,6 +781,10 @@ public class ToolCompiler {
                             tool.getName() + "_agent_wf");
                     Map<String, Object> atEntry = new LinkedHashMap<>();
                     atEntry.put("workflowName", workflowName);
+                    // Pass through retry/resilience overrides from SDK config
+                    if (cfg.containsKey("retryCount")) atEntry.put("retryCount", cfg.get("retryCount"));
+                    if (cfg.containsKey("retryDelaySeconds")) atEntry.put("retryDelaySeconds", cfg.get("retryDelaySeconds"));
+                    if (cfg.containsKey("optional")) atEntry.put("optional", cfg.get("optional"));
                     agentToolConfig.put(tool.getName(), atEntry);
                 } else if (MEDIA_TOOL_TYPES.contains(toolType)) {
                     Map<String, Object> cfgCopy = new LinkedHashMap<>(cfg);
