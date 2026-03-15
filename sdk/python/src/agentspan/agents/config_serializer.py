@@ -157,6 +157,10 @@ class AgentConfigSerializer:
                 "budgetTokens": agent.thinking_budget_tokens,
             }
 
+        # Required tools
+        if getattr(agent, 'required_tools', None):
+            config["requiredTools"] = agent.required_tools
+
         # Code execution
         if hasattr(agent, 'code_execution_config') and agent.code_execution_config:
             cfg = agent.code_execution_config

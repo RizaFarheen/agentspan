@@ -20,15 +20,33 @@ _PYTHON_TYPE_TO_JSON = {
     int: {"type": "integer"},
     float: {"type": "number"},
     bool: {"type": "boolean"},
-    list: {"type": "array"},
-    dict: {"type": "object"},
+    list: {"type": "array", "items": {}},
+    dict: {"type": "object", "additionalProperties": {}},
     type(None): {"type": "null"},
 }
+
+
+def _resolve_string_annotation(annotation: str) -> Any:
+    """Attempt to resolve a PEP 563 string annotation to an actual type."""
+    import typing
+    ns = {**vars(typing), "dict": dict, "list": list, "set": set,
+          "tuple": tuple, "frozenset": frozenset, "type": type}
+    try:
+        return eval(annotation, ns)  # noqa: S307
+    except Exception:
+        return None
 
 
 def _type_to_json_schema(annotation: Any) -> Dict[str, Any]:
     """Convert a Python type annotation to a JSON Schema fragment."""
     if annotation is inspect.Parameter.empty or annotation is Any:
+        return {}
+
+    # Handle PEP 563 string annotations
+    if isinstance(annotation, str):
+        resolved = _resolve_string_annotation(annotation)
+        if resolved is not None:
+            return _type_to_json_schema(resolved)
         return {}
 
     # Direct mapping

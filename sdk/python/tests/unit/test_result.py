@@ -136,6 +136,56 @@ class TestAgentEvent:
         assert event.guardrail_name is None
 
 
+class TestAgentEventArgsSanitisation:
+    """Test BUG-P3-01: internal keys stripped from tool call args."""
+
+    def test_strips_agent_state(self):
+        event = AgentEvent(
+            type=EventType.TOOL_CALL,
+            tool_name="search",
+            args={"query": "hello", "_agent_state": {"foo": "bar"}},
+        )
+        assert "_agent_state" not in event.args
+        assert event.args == {"query": "hello"}
+
+    def test_strips_method(self):
+        event = AgentEvent(
+            type=EventType.TOOL_CALL,
+            tool_name="search",
+            args={"query": "hello", "method": "search"},
+        )
+        assert "method" not in event.args
+        assert event.args == {"query": "hello"}
+
+    def test_strips_both(self):
+        event = AgentEvent(
+            type=EventType.TOOL_CALL,
+            tool_name="search",
+            args={"q": "test", "_agent_state": {}, "method": "search"},
+        )
+        assert event.args == {"q": "test"}
+
+    def test_clean_args_unchanged(self):
+        event = AgentEvent(
+            type=EventType.TOOL_CALL,
+            tool_name="search",
+            args={"city": "NYC", "units": "metric"},
+        )
+        assert event.args == {"city": "NYC", "units": "metric"}
+
+    def test_none_args_stays_none(self):
+        event = AgentEvent(type=EventType.THINKING, content="test")
+        assert event.args is None
+
+    def test_only_internal_keys_becomes_none(self):
+        event = AgentEvent(
+            type=EventType.TOOL_CALL,
+            tool_name="noop",
+            args={"_agent_state": {}, "method": "noop"},
+        )
+        assert event.args is None
+
+
 class TestEventType:
     """Test EventType enum."""
 
@@ -299,8 +349,11 @@ class TestFinishReasonEnum:
     def test_is_string_instance(self):
         assert isinstance(FinishReason.STOP, str)
 
+    def test_rejected_value(self):
+        assert FinishReason.REJECTED == "rejected"
+
     def test_all_values(self):
-        assert len(FinishReason) == 7
+        assert len(FinishReason) == 8
 
 
 class TestAgentResultProperties:
@@ -329,6 +382,22 @@ class TestAgentResultProperties:
         assert result.status == "COMPLETED"
         assert result.status == Status.COMPLETED
 
+    def test_is_rejected_true(self):
+        result = AgentResult(
+            status=Status.COMPLETED,
+            finish_reason=FinishReason.REJECTED,
+        )
+        assert result.is_rejected is True
+        assert result.is_success is True
+        assert result.is_failed is False
+
+    def test_is_rejected_false(self):
+        result = AgentResult(
+            status=Status.COMPLETED,
+            finish_reason=FinishReason.STOP,
+        )
+        assert result.is_rejected is False
+
 
 class TestBuildResultFromEvents:
     """Test that _build_result_from_events sets finish_reason and error."""
@@ -340,7 +409,8 @@ class TestBuildResultFromEvents:
         assert result.status == Status.COMPLETED
         assert result.finish_reason == FinishReason.STOP
         assert result.error is None
-        assert result.output == "Hello"
+        # Output is normalized to a dict (BUG-P1-02 fix)
+        assert result.output == {"result": "Hello"}
 
     def test_error_event_sets_failed(self):
         handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
@@ -359,3 +429,91 @@ class TestBuildResultFromEvents:
         assert result.status == Status.FAILED
         assert result.finish_reason == FinishReason.GUARDRAIL
         assert result.error == "PII detected"
+
+
+class TestOutputNormalization:
+    """Regression tests for BUG-P1-02: output must always be a dict."""
+
+    def test_string_output_wrapped_on_success(self):
+        """Non-dict output on success is wrapped in {"result": ...}."""
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        events = [AgentEvent(type=EventType.DONE, output="Hello world")]
+        result = _build_result_from_events(events, handle)
+        assert isinstance(result.output, dict)
+        assert result.output == {"result": "Hello world"}
+
+    def test_dict_output_preserved(self):
+        """Dict output is returned as-is."""
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        events = [AgentEvent(type=EventType.DONE, output={"result": "ok", "finishReason": "STOP"})]
+        result = _build_result_from_events(events, handle)
+        assert result.output == {"result": "ok", "finishReason": "STOP"}
+
+    def test_error_string_wrapped(self):
+        """Error string output is wrapped in {"error": ..., "status": ...}."""
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        events = [AgentEvent(type=EventType.ERROR, content="401 Unauthorized")]
+        result = _build_result_from_events(events, handle)
+        assert isinstance(result.output, dict)
+        assert result.output["error"] == "401 Unauthorized"
+        assert result.output["status"] == "FAILED"
+
+    def test_none_output_wrapped(self):
+        """None output is wrapped in {"result": None}."""
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        events = []  # No DONE event
+        result = _build_result_from_events(events, handle)
+        assert isinstance(result.output, dict)
+        assert result.output == {"result": None}
+
+
+class TestParallelOutputNormalization:
+    """BUG-P2-02: Parallel strategy output normalized by server."""
+
+    def test_server_normalized_parallel_output_preserved(self):
+        """Server-normalized parallel output (result=string, subResults=dict) is preserved."""
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        # This is the format the server now produces after the INLINE aggregate task
+        server_output = {
+            "result": "[analyst]: Analysis done\n\n[researcher]: Research done",
+            "subResults": {"analyst": "Analysis done", "researcher": "Research done"},
+        }
+        events = [AgentEvent(type=EventType.DONE, output=server_output)]
+        result = _build_result_from_events(events, handle)
+        assert isinstance(result.output, dict)
+        assert isinstance(result.output["result"], str)
+        assert "analyst" in result.output["result"]
+        assert result.sub_results == {"analyst": "Analysis done", "researcher": "Research done"}
+
+    def test_single_agent_string_result_no_sub_results(self):
+        """Single-agent string result has empty sub_results."""
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        events = [AgentEvent(type=EventType.DONE, output="Simple answer")]
+        result = _build_result_from_events(events, handle)
+        assert result.output == {"result": "Simple answer"}
+        assert result.sub_results == {}
+
+    def test_handoff_string_result_no_sub_results(self):
+        """Handoff string result has empty sub_results."""
+        handle = AgentHandle(workflow_id="wf-1", runtime=MagicMock())
+        events = [AgentEvent(type=EventType.DONE, output={"result": "Handoff answer"})]
+        result = _build_result_from_events(events, handle)
+        assert result.output == {"result": "Handoff answer"}
+        assert result.sub_results == {}
+
+    def test_sub_results_default_empty(self):
+        """sub_results defaults to empty dict."""
+        result = AgentResult()
+        assert result.sub_results == {}
+
+    def test_print_result_shows_sub_results(self, capsys):
+        """print_result() displays sub_results when present."""
+        result = AgentResult(
+            output={"result": "[a]: X\n\n[b]: Y", "subResults": {"a": "X", "b": "Y"}},
+            sub_results={"a": "X", "b": "Y"},
+        )
+        result.print_result()
+        captured = capsys.readouterr()
+        assert "Per-agent results" in captured.out
+        assert "[a]: X" in captured.out
+        assert "[b]: Y" in captured.out

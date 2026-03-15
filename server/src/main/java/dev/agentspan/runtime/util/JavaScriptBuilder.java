@@ -8,6 +8,8 @@ package dev.agentspan.runtime.util;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.List;
+
 /**
  * Helper for building JavaScript snippets for Conductor InlineTask scripts.
  * All scripts are wrapped in IIFEs: (function() { ... })()
@@ -327,28 +329,35 @@ public class JavaScriptBuilder {
     public static String approvalValidateScript() {
         return iife(
             "  var raw = $.human_output;" +
-            "  if (!raw) return {needs_normalize: true, raw_text: ''};" +
+            "  if (!raw) return {needs_normalize: true, raw_text: '', extra: {}};" +
             "  var raw_text;" +
             "  if (typeof raw === 'string') { raw_text = raw; }" +
             "  else if (typeof raw.result === 'string') { raw_text = raw.result; }" +
             "  else { var p = []; for (var k in raw) { p.push(k + ': ' + raw[k]); }" +
             "         raw_text = p.join(', '); }" +
+            // Collect extra fields (everything except approved/reason)
+            "  var extra = {};" +
+            "  if (typeof raw === 'object') {" +
+            "    for (var k in raw) {" +
+            "      if (k !== 'approved' && k !== 'reason') { extra[k] = raw[k]; }" +
+            "    }" +
+            "  }" +
             "  if (typeof raw === 'object' && typeof raw.approved === 'boolean') {" +
             "    return {needs_normalize: false, approved: raw.approved," +
-            "            reason: raw.reason || null, raw_text: raw_text};" +
+            "            reason: raw.reason || null, raw_text: raw_text, extra: extra};" +
             "  }" +
             "  if (typeof raw === 'object' && typeof raw.approved === 'string') {" +
             "    var a = raw.approved.toLowerCase().trim();" +
             "    if (a === 'true' || a === 'yes' || a === 'y') {" +
             "      return {needs_normalize: false, approved: true, reason: raw.reason || null," +
-            "              raw_text: raw_text};" +
+            "              raw_text: raw_text, extra: extra};" +
             "    }" +
             "    if (a === 'false' || a === 'no' || a === 'n') {" +
             "      return {needs_normalize: false, approved: false, reason: raw.reason || null," +
-            "              raw_text: raw_text};" +
+            "              raw_text: raw_text, extra: extra};" +
             "    }" +
             "  }" +
-            "  return {needs_normalize: true, raw_text: raw_text};"
+            "  return {needs_normalize: true, raw_text: raw_text, extra: extra};"
         );
     }
 
@@ -536,6 +545,24 @@ public class JavaScriptBuilder {
     }
 
     /**
+     * Format custom data from a human approval response into a readable
+     * system message for the LLM. Returns an empty string if no extra data.
+     */
+    public static String formatHumanFeedbackScript() {
+        return iife(
+            "  var extra = $.extra || {};" +
+            "  var reason = $.reason || '';" +
+            "  var parts = [];" +
+            "  for (var k in extra) { parts.push(k + ': ' + JSON.stringify(extra[k])); }" +
+            "  if (parts.length === 0 && !reason) return '';" +
+            "  var msg = 'Human reviewer feedback:';" +
+            "  if (reason) msg += ' Reason: ' + reason + '.';" +
+            "  if (parts.length > 0) msg += ' Additional context: ' + parts.join(', ') + '.';" +
+            "  return msg;"
+        );
+    }
+
+    /**
      * Build approval check script for tool approval flow.
      */
     public static String approvalCheckScript() {
@@ -543,7 +570,8 @@ public class JavaScriptBuilder {
             "  var validated = $.validated;" +
             "  var normalized = $.normalized;" +
             "  var data = (validated && !validated.needs_normalize) ? validated : (normalized || {});" +
-            "  return {approved: data.approved === true, reason: data.reason || ''};"
+            "  var extra = (validated && validated.extra) ? validated.extra : {};" +
+            "  return {approved: data.approved === true, reason: data.reason || '', extra: extra};"
         );
     }
 
@@ -581,5 +609,28 @@ public class JavaScriptBuilder {
             "  }" +
             "  return {mergedState: base};"
         );
+    }
+
+    /**
+     * Build a JavaScript snippet that checks whether all required tools have been called.
+     * Scans the loop output for completed task reference names containing each required tool name.
+     */
+    public static String requiredToolsCheckScript(List<String> requiredTools) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("(function() {");
+        sb.append("  var required = ").append(toJson(requiredTools)).append(";");
+        sb.append("  var output = $.completedTaskNames;");
+        sb.append("  var outputStr = JSON.stringify(output);");
+        sb.append("  var missing = [];");
+        sb.append("  for (var i = 0; i < required.length; i++) {");
+        sb.append("    if (outputStr.indexOf(required[i]) < 0) missing.push(required[i]);");
+        sb.append("  }");
+        sb.append("  if (missing.length > 0) {");
+        sb.append("    return { satisfied: false, missing: missing,");
+        sb.append("             message: 'You MUST call these tools before completing: ' + missing.join(', ') };");
+        sb.append("  }");
+        sb.append("  return { satisfied: true };");
+        sb.append("})()");
+        return sb.toString();
     }
 }

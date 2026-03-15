@@ -300,3 +300,34 @@ class TestAgentEdgeCases:
     def test_non_external_agent(self):
         agent = Agent(name="test", model="openai/gpt-4o")
         assert agent.external is False
+
+
+class TestDuplicateSubAgentNames:
+    """Test BUG-P2-06: duplicate sub-agent names are caught at construction."""
+
+    def test_duplicate_names_raises(self):
+        worker = Agent(name="worker", model="openai/gpt-4o")
+        with pytest.raises(ValueError, match="Duplicate sub-agent names"):
+            Agent(
+                name="team",
+                model="openai/gpt-4o",
+                agents=[worker, worker, worker],
+                strategy="parallel",
+            )
+
+    def test_unique_names_ok(self):
+        a = Agent(name="worker_a", model="openai/gpt-4o")
+        b = Agent(name="worker_b", model="openai/gpt-4o")
+        team = Agent(
+            name="team",
+            model="openai/gpt-4o",
+            agents=[a, b],
+            strategy="parallel",
+        )
+        assert len(team.agents) == 2
+
+    def test_error_message_includes_duplicates(self):
+        w = Agent(name="dup", model="openai/gpt-4o")
+        with pytest.raises(ValueError, match="dup") as exc_info:
+            Agent(name="team", model="openai/gpt-4o", agents=[w, w])
+        assert "unique name" in str(exc_info.value).lower()

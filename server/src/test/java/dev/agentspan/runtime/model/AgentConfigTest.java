@@ -102,4 +102,57 @@ class AgentConfigTest {
         assertThat(deserialized.getType()).isEqualTo("and");
         assertThat(deserialized.getConditions()).hasSize(2);
     }
+
+    @Test
+    void testRequiredToolsSerialization() throws Exception {
+        AgentConfig config = AgentConfig.builder()
+            .name("filing_agent")
+            .model("openai/gpt-4o")
+            .requiredTools(List.of("submit_filing", "approve_offer"))
+            .build();
+
+        String json = mapper.writeValueAsString(config);
+        assertThat(json).contains("\"requiredTools\"");
+        assertThat(json).contains("submit_filing");
+        assertThat(json).contains("approve_offer");
+
+        AgentConfig deserialized = mapper.readValue(json, AgentConfig.class);
+        assertThat(deserialized.getRequiredTools()).containsExactly("submit_filing", "approve_offer");
+    }
+
+    @Test
+    void testRequiredToolsNullOmitted() throws Exception {
+        AgentConfig config = AgentConfig.builder()
+            .name("simple")
+            .model("openai/gpt-4o")
+            .build();
+
+        String json = mapper.writeValueAsString(config);
+        assertThat(json).doesNotContain("\"requiredTools\"");
+    }
+
+    @Test
+    void testStartRequestTimeoutSeconds() throws Exception {
+        StartRequest request = StartRequest.builder()
+            .agentConfig(AgentConfig.builder().name("test").model("openai/gpt-4o").build())
+            .prompt("hello")
+            .timeoutSeconds(30)
+            .build();
+
+        String json = mapper.writeValueAsString(request);
+        assertThat(json).contains("\"timeoutSeconds\":30");
+
+        StartRequest deserialized = mapper.readValue(json, StartRequest.class);
+        assertThat(deserialized.getTimeoutSeconds()).isEqualTo(30);
+    }
+
+    @Test
+    void testStartRequestTimeoutSecondsNullWhenNotSet() throws Exception {
+        StartRequest request = StartRequest.builder()
+            .agentConfig(AgentConfig.builder().name("test").model("openai/gpt-4o").build())
+            .prompt("hello")
+            .build();
+
+        assertThat(request.getTimeoutSeconds()).isNull();
+    }
 }

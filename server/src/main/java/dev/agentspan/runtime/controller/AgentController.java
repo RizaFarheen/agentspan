@@ -106,8 +106,9 @@ public class AgentController {
             @RequestParam(defaultValue = "startTime:DESC") String sort,
             @RequestParam(required = false) String freeText,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String agentName) {
-        return agentService.searchAgentExecutions(start, size, sort, freeText, status, agentName);
+            @RequestParam(required = false) String agentName,
+            @RequestParam(required = false) String sessionId) {
+        return agentService.searchAgentExecutions(start, size, sort, freeText, status, agentName, sessionId);
     }
 
     @GetMapping("/get/{name}")

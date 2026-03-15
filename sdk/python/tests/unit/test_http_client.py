@@ -123,14 +123,16 @@ async def test_auth_headers():
 
 @pytest.mark.asyncio
 async def test_http_error_raises():
-    """Non-2xx responses raise httpx.HTTPStatusError."""
+    """Non-2xx responses raise AgentAPIError (wrapping httpx.HTTPStatusError)."""
+    from agentspan.agents.exceptions import AgentAPIError
 
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="Internal Server Error")
 
     client = _make_client(handler)
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(AgentAPIError) as exc_info:
         await client.start_agent({"prompt": "test"})
+    assert exc_info.value.status_code == 500
     await client.close()
 
 

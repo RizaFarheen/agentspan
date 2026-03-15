@@ -24,6 +24,21 @@ if TYPE_CHECKING:
     from agentspan.agents.tool import ToolDef
 
 
+class _SchemaRegistryFilter(logging.Filter):
+    """Allow the first schema-registry warning through, suppress the rest."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._seen = False
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if "Schema registry" in record.getMessage():
+            if self._seen:
+                return False
+            self._seen = True
+        return True
+
+
 class WorkerManager:
     """Manages Conductor worker processes for ``@tool`` functions."""
 
@@ -40,6 +55,11 @@ class WorkerManager:
         self._daemon = daemon
         self._task_handler: Optional["TaskHandler"] = None
         self._lock = threading.Lock()
+
+        # Suppress repeated schema-registry warnings from Conductor
+        logging.getLogger("conductor.client.automator.task_runner").addFilter(
+            _SchemaRegistryFilter()
+        )
 
     def start(self) -> None:
         """Start worker processes for all registered tools."""

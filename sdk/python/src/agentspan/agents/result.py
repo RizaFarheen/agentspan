@@ -44,6 +44,7 @@ class FinishReason(str, Enum):
     CANCELLED = "cancelled"    # User cancelled / workflow terminated
     TIMEOUT = "timeout"        # Execution timed out
     GUARDRAIL = "guardrail"    # Blocked by guardrail
+    REJECTED = "rejected"      # HITL tool was rejected
 
 
 # ── TokenUsage ──────────────────────────────────────────────────────────
@@ -71,9 +72,17 @@ class TokenUsage:
 class AgentResult:
     """The result of a completed agent execution.
 
+    ``output`` is always a ``dict``.  For single agents and strategies that
+    produce a single answer (handoff, sequential, router), the dict contains
+    ``{"result": "<final text>"}``.  For the **parallel** strategy the per-agent
+    results are in :attr:`sub_results` (keyed by agent name) and ``output``
+    contains ``{"result": "<joined text>", "sub_results": {...}}``.
+
     Attributes:
-        output: The agent's final answer.  If ``output_type`` was set on the
-            agent, this is a validated instance of that type.
+        output: The agent's final answer as a dict.  Always contains a
+            ``"result"`` key whose value is a string (or ``None``).
+            If ``output_type`` was set on the agent, this is a validated
+            instance of that type instead.
         workflow_id: The Conductor workflow ID (for debugging in the UI).
         messages: Full conversation history (list of message dicts).
         tool_calls: All tool invocations with inputs and outputs.
@@ -83,6 +92,8 @@ class AgentResult:
         error: Human-readable error message when the agent failed.
         token_usage: Aggregated token usage across all LLM calls.
         metadata: Extra data from the workflow execution.
+        sub_results: Per-agent outputs for multi-agent strategies (parallel).
+            Empty dict for single-agent runs. Keyed by agent name.
     """
 
     output: Any = None
@@ -96,6 +107,7 @@ class AgentResult:
     finish_reason: Optional[FinishReason] = None
     error: Optional[str] = None
     events: List["AgentEvent"] = field(default_factory=list)
+    sub_results: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_success(self) -> bool:
@@ -106,6 +118,11 @@ class AgentResult:
     def is_failed(self) -> bool:
         """Whether the agent execution failed."""
         return self.status in (Status.FAILED, Status.TERMINATED, Status.TIMED_OUT)
+
+    @property
+    def is_rejected(self) -> bool:
+        """Whether the agent's HITL tool was rejected."""
+        return self.finish_reason == FinishReason.REJECTED
 
     def print_result(self) -> None:
         """Pretty-print the agent output with clear visual separators."""
@@ -119,12 +136,23 @@ class AgentResult:
             print(f"ERROR: {self.error}")
             print()
         elif isinstance(self.output, dict):
-            for key, value in self.output.items():
-                print(f"--- {key} ---")
-                print(value)
+            result_val = self.output.get("result")
+            if result_val is not None:
+                print(result_val)
                 print()
+            else:
+                for key, value in self.output.items():
+                    print(f"--- {key} ---")
+                    print(value)
+                    print()
         else:
             print(self.output)
+            print()
+
+        if self.sub_results:
+            print("--- Per-agent results ---")
+            for agent_name, agent_output in self.sub_results.items():
+                print(f"  [{agent_name}]: {agent_output}")
             print()
 
         if self.tool_calls:
@@ -322,6 +350,9 @@ class AgentEvent:
         guardrail_name: Guardrail name (for ``guardrail_pass``, ``guardrail_fail``).
     """
 
+    # Keys injected by Conductor that should not appear in user-facing args.
+    _INTERNAL_ARG_KEYS = frozenset({"_agent_state", "method"})
+
     type: str
     content: Optional[str] = None
     tool_name: Optional[str] = None
@@ -331,6 +362,11 @@ class AgentEvent:
     output: Any = None
     workflow_id: str = ""
     guardrail_name: Optional[str] = None
+
+    def __post_init__(self):
+        if self.args and isinstance(self.args, dict):
+            cleaned = {k: v for k, v in self.args.items() if k not in self._INTERNAL_ARG_KEYS}
+            object.__setattr__(self, "args", cleaned if cleaned else None)
 
 
 # ── AgentStream (returned by stream()) ────────────────────────────────
@@ -420,6 +456,10 @@ class AgentStream:
                 finish_reason = FinishReason.GUARDRAIL
                 error_message = ev.content
 
+        # Normalize output to always be a dict
+        output = _normalize_event_output(output, status, error_message)
+
+        sub_results = output.get("subResults", {}) if isinstance(output, dict) else {}
         self.result = AgentResult(
             output=output,
             workflow_id=self.handle.workflow_id,
@@ -429,6 +469,7 @@ class AgentStream:
             finish_reason=finish_reason,
             error=error_message,
             events=list(self.events),
+            sub_results=sub_results,
         )
 
     # ── HITL convenience (delegates to handle) ────────────────────
@@ -459,6 +500,31 @@ class AgentStream:
             f"AgentStream(workflow_id={self.handle.workflow_id!r}, "
             f"events={len(self.events)}, exhausted={self._exhausted})"
         )
+
+
+# ── Output normalization ──────────────────────────────────────────────
+
+
+def _normalize_event_output(output: Any, status: Status, error: Optional[str] = None) -> Dict[str, Any]:
+    """Normalize output to always be a dict for a consistent contract.
+
+    On failure, wraps string errors in ``{"error": ..., "status": "FAILED"}``.
+    On success, wraps non-dict values in ``{"result": ...}``.
+
+    The server is responsible for normalizing strategy-specific outputs
+    (e.g. parallel ``subResults``).  This method only handles the
+    dict/string/None wrapping.
+    """
+    if isinstance(output, dict):
+        return output
+    if status in (Status.FAILED, Status.TERMINATED, Status.TIMED_OUT):
+        return {
+            "error": str(output) if output else (error or "Unknown error"),
+            "status": str(status.value),
+        }
+    if output is None:
+        return {"result": None}
+    return {"result": output}
 
 
 # ── Helper for building results from events ──────────────────────────
@@ -501,6 +567,10 @@ def _build_result_from_events(
             finish_reason = FinishReason.GUARDRAIL
             error_message = ev.content
 
+    # Normalize output to always be a dict
+    output = _normalize_event_output(output, status, error_message)
+
+    sub_results = output.get("subResults", {}) if isinstance(output, dict) else {}
     return AgentResult(
         output=output,
         workflow_id=handle.workflow_id,
@@ -510,6 +580,7 @@ def _build_result_from_events(
         finish_reason=finish_reason,
         error=error_message,
         events=list(events),
+        sub_results=sub_results,
     )
 
 

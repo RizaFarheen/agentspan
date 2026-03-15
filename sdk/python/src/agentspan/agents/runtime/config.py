@@ -14,10 +14,23 @@ Usage::
 
 from __future__ import annotations
 
+import logging
+import os
 from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger("agentspan.agents.config")
+
+
+def _env(agentspan_var: str, fallback_var: str, default: Optional[str] = None) -> Optional[str]:
+    """Read an env var with optional fallback name.
+
+    Tries *agentspan_var* first, then *fallback_var*, returning *default*
+    if neither is set.
+    """
+    return os.environ.get(agentspan_var, os.environ.get(fallback_var, default))
 
 
 class AgentConfig(BaseSettings):
@@ -30,7 +43,6 @@ class AgentConfig(BaseSettings):
         server_url: Agentspan server API URL.
         auth_key: Auth key (optional for OSS).
         auth_secret: Auth secret (optional for OSS).
-        default_timeout_seconds: Default workflow timeout.
         worker_poll_interval_ms: Worker polling interval in milliseconds.
         worker_thread_count: Number of threads per worker.
         auto_start_workers: Whether to auto-start worker processes.
@@ -52,7 +64,6 @@ class AgentConfig(BaseSettings):
     )
 
     @field_validator(
-        "default_timeout_seconds",
         "llm_retry_count",
         "worker_poll_interval_ms",
         "worker_thread_count",
@@ -61,6 +72,7 @@ class AgentConfig(BaseSettings):
         "daemon_workers",
         "auto_register_integrations",
         "streaming_enabled",
+        "log_level",
         mode="before",
     )
     @classmethod
@@ -69,6 +81,22 @@ class AgentConfig(BaseSettings):
         if isinstance(v, str) and v.strip() == "":
             return cls.model_fields[info.field_name].default
         return v
+
+    @field_validator("server_url", mode="after")
+    @classmethod
+    def _normalise_server_url(cls, v: str) -> str:
+        """Auto-append ``/api`` if the URL is missing the path suffix.
+
+        ``configure(server_url="http://localhost:8080")`` is a common mistake
+        that otherwise produces a cryptic 404/500 from the server.
+        """
+        if not v:
+            return v
+        stripped = v.rstrip("/")
+        if not stripped.endswith("/api"):
+            logger.info("server_url %r does not end with '/api' — appending automatically.", v)
+            return stripped + "/api"
+        return stripped
 
     server_url: str = Field(
         default="http://localhost:8080/api",
@@ -81,10 +109,6 @@ class AgentConfig(BaseSettings):
     auth_secret: Optional[str] = Field(
         default=None,
         validation_alias="AGENTSPAN_AUTH_SECRET",
-    )
-    default_timeout_seconds: int = Field(
-        default=0,
-        validation_alias="AGENTSPAN_AGENT_TIMEOUT",
     )
     llm_retry_count: int = Field(
         default=3,
@@ -118,6 +142,10 @@ class AgentConfig(BaseSettings):
         default=True,
         validation_alias="AGENTSPAN_STREAMING_ENABLED",
     )
+    log_level: str = Field(
+        default="INFO",
+        validation_alias="AGENTSPAN_LOG_LEVEL",
+    )
 
     @property
     def api_key(self) -> Optional[str]:
@@ -128,6 +156,16 @@ class AgentConfig(BaseSettings):
     def api_secret(self) -> Optional[str]:
         """Alias for :attr:`auth_secret` (industry-standard naming)."""
         return self.auth_secret
+
+    @classmethod
+    def from_env(cls) -> "AgentConfig":
+        """Create a config instance from environment variables.
+
+        This is equivalent to ``AgentConfig()`` — pydantic-settings reads env
+        vars automatically — but provides an explicit factory method that makes
+        the intent clearer in calling code.
+        """
+        return cls()
 
     def to_conductor_configuration(self) -> "Configuration":
         """Convert to a ``conductor-python`` :class:`Configuration` object."""

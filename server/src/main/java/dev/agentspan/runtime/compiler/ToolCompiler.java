@@ -983,13 +983,21 @@ public class ToolCompiler {
         List<WorkflowTask> approvedChain = buildForkChainDynamic(agentName, llmRef, tools, "approved", mcpConfigRef);
         approvalRoute.setDecisionCases(Map.of("approved", approvedChain));
 
+        WorkflowTask setRejectionOutput = new WorkflowTask();
+        setRejectionOutput.setType("SET_VARIABLE");
+        setRejectionOutput.setTaskReferenceName(agentName + "_approval_reject_output");
+        setRejectionOutput.setInputParameters(Map.of(
+            "rejectedToolCall", "${" + approvalCheckRef + ".output.result.rejected_tool}",
+            "rejectionReason", "${" + approvalCheckRef + ".output.result.reason}",
+            "finishReason", "rejected"));
+
         WorkflowTask rejectTerminate = new WorkflowTask();
         rejectTerminate.setType("TERMINATE");
         rejectTerminate.setTaskReferenceName(agentName + "_approval_reject");
         rejectTerminate.setInputParameters(Map.of(
             "terminationReason", "${" + approvalCheckRef + ".output.result.reason}",
-            "terminationStatus", "FAILED"));
-        approvalRoute.setDefaultCase(List.of(rejectTerminate));
+            "terminationStatus", "COMPLETED"));
+        approvalRoute.setDefaultCase(List.of(setRejectionOutput, rejectTerminate));
         tasks.add(approvalRoute);
 
         return tasks;
@@ -1233,21 +1241,52 @@ public class ToolCompiler {
         routeInputs.put("approved", "${" + approvalCheckRef + ".output.result.approved}");
         approvalRoute.setInputParameters(routeInputs);
 
-        // "approved" case: execute tools
-        List<WorkflowTask> approvedChain = buildForkChain(agentName, llmRef, tools, "approved");
+        // "approved" case: store human feedback, then execute tools
+        List<WorkflowTask> approvedTasks = new ArrayList<>();
+
+        // Format and store custom data from human response in workflow variable.
+        // The INLINE task converts the extra fields into a readable message for the LLM.
+        String formatFeedbackRef = agentName + "_approval_format_feedback";
+        WorkflowTask formatFeedback = new WorkflowTask();
+        formatFeedback.setTaskReferenceName(formatFeedbackRef);
+        formatFeedback.setType("INLINE");
+        Map<String, Object> formatInputs = new LinkedHashMap<>();
+        formatInputs.put("evaluatorType", "graaljs");
+        formatInputs.put("expression", JavaScriptBuilder.formatHumanFeedbackScript());
+        formatInputs.put("extra", "${" + approvalCheckRef + ".output.result.extra}");
+        formatInputs.put("reason", "${" + approvalCheckRef + ".output.result.reason}");
+        formatFeedback.setInputParameters(formatInputs);
+        approvedTasks.add(formatFeedback);
+
+        WorkflowTask storeHumanFeedback = new WorkflowTask();
+        storeHumanFeedback.setType("SET_VARIABLE");
+        storeHumanFeedback.setTaskReferenceName(agentName + "_approval_store_feedback");
+        storeHumanFeedback.setInputParameters(Map.of(
+            "_human_feedback", "${" + formatFeedbackRef + ".output.result}"));
+        approvedTasks.add(storeHumanFeedback);
+
+        approvedTasks.addAll(buildForkChain(agentName, llmRef, tools, "approved"));
         Map<String, List<WorkflowTask>> routeCases = new LinkedHashMap<>();
-        routeCases.put("approved", approvedChain);
+        routeCases.put("approved", approvedTasks);
         approvalRoute.setDecisionCases(routeCases);
 
-        // default (rejected): terminate
+        // default (rejected): set rejection output then terminate as COMPLETED
+        WorkflowTask setRejectionOutput2 = new WorkflowTask();
+        setRejectionOutput2.setType("SET_VARIABLE");
+        setRejectionOutput2.setTaskReferenceName(agentName + "_approval_reject_output");
+        setRejectionOutput2.setInputParameters(Map.of(
+            "rejectedToolCall", "${" + approvalCheckRef + ".output.result.rejected_tool}",
+            "rejectionReason", "${" + approvalCheckRef + ".output.result.reason}",
+            "finishReason", "rejected"));
+
         WorkflowTask rejectTerminate = new WorkflowTask();
         rejectTerminate.setType("TERMINATE");
         rejectTerminate.setTaskReferenceName(agentName + "_approval_reject");
         Map<String, Object> rejectInputs = new LinkedHashMap<>();
         rejectInputs.put("terminationReason", "${" + approvalCheckRef + ".output.result.reason}");
-        rejectInputs.put("terminationStatus", "FAILED");
+        rejectInputs.put("terminationStatus", "COMPLETED");
         rejectTerminate.setInputParameters(rejectInputs);
-        approvalRoute.setDefaultCase(List.of(rejectTerminate));
+        approvalRoute.setDefaultCase(List.of(setRejectionOutput2, rejectTerminate));
         approvalCaseTasks.add(approvalRoute);
 
         gateCases.put("needs_approval", approvalCaseTasks);

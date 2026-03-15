@@ -20,6 +20,8 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 import httpx
 
+from agentspan.agents.exceptions import _raise_api_error
+
 logger = logging.getLogger("agentspan.agents.runtime.http_client")
 
 _SSE_NO_EVENT_TIMEOUT = 15  # seconds to wait for first real event before fallback
@@ -67,29 +69,45 @@ class AgentHttpClient:
     async def start_agent(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """POST /agent/start — start an agent workflow."""
         client = await self._get_client()
-        resp = await client.post(self._url("/start"), json=payload)
-        resp.raise_for_status()
+        url = self._url("/start")
+        resp = await client.post(url, json=payload)
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_api_error(exc, url=url)
         return resp.json()
 
     async def compile_agent(self, config_json: Dict[str, Any]) -> Dict[str, Any]:
         """POST /agent/compile — compile agent config to workflow def."""
         client = await self._get_client()
-        resp = await client.post(self._url("/compile"), json=config_json)
-        resp.raise_for_status()
+        url = self._url("/compile")
+        resp = await client.post(url, json=config_json)
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_api_error(exc, url=url)
         return resp.json()
 
     async def get_status(self, workflow_id: str) -> Dict[str, Any]:
         """GET /agent/{id}/status — fetch workflow status."""
         client = await self._get_client()
-        resp = await client.get(self._url(f"/{workflow_id}/status"))
-        resp.raise_for_status()
+        url = self._url(f"/{workflow_id}/status")
+        resp = await client.get(url)
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_api_error(exc, url=url)
         return resp.json()
 
     async def respond(self, workflow_id: str, body: Dict[str, Any]) -> None:
         """POST /agent/{id}/respond — complete a pending human task."""
         client = await self._get_client()
-        resp = await client.post(self._url(f"/{workflow_id}/respond"), json=body)
-        resp.raise_for_status()
+        url = self._url(f"/{workflow_id}/respond")
+        resp = await client.post(url, json=body)
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            _raise_api_error(exc, url=url)
 
     async def stream_sse(self, workflow_id: str) -> AsyncIterator[Dict[str, Any]]:
         """GET /agent/stream/{id} — consume SSE events.

@@ -107,6 +107,63 @@ class ToolCompilerTest {
     }
 
     @Test
+    void testApprovalRejectionUsesCompletedStatus() {
+        ToolConfig tool = ToolConfig.builder()
+            .name("send_email")
+            .description("Send an email")
+            .inputSchema(Map.of("type", "object"))
+            .toolType("worker")
+            .approvalRequired(true)
+            .build();
+
+        ToolCompiler tc = new ToolCompiler();
+        WorkflowTask router = tc.buildToolCallRouting("agent", "agent_llm", List.of(tool), true, "openai/gpt-4o");
+
+        // Navigate into the tool_call case -> approval routing
+        List<WorkflowTask> toolCallTasks = router.getDecisionCases().get("tool_call");
+        assertThat(toolCallTasks).isNotEmpty();
+
+        // Find the TERMINATE task for rejection (search recursively through the task tree)
+        WorkflowTask terminateTask = findTaskByRef(toolCallTasks, "agent_approval_reject");
+        assertThat(terminateTask).isNotNull();
+        assertThat(terminateTask.getType()).isEqualTo("TERMINATE");
+        assertThat(terminateTask.getInputParameters().get("terminationStatus")).isEqualTo("COMPLETED");
+
+        // Find the SET_VARIABLE task for rejection output
+        WorkflowTask setVarTask = findTaskByRef(toolCallTasks, "agent_approval_reject_output");
+        assertThat(setVarTask).isNotNull();
+        assertThat(setVarTask.getType()).isEqualTo("SET_VARIABLE");
+        assertThat(setVarTask.getInputParameters().get("finishReason")).isEqualTo("rejected");
+    }
+
+    /** Recursively find a task whose reference name exactly matches. */
+    private WorkflowTask findTaskByRef(List<WorkflowTask> tasks, String refName) {
+        for (WorkflowTask t : tasks) {
+            if (refName.equals(t.getTaskReferenceName())) {
+                return t;
+            }
+            // Check decision cases
+            if (t.getDecisionCases() != null) {
+                for (List<WorkflowTask> caseTasks : t.getDecisionCases().values()) {
+                    WorkflowTask found = findTaskByRef(caseTasks, refName);
+                    if (found != null) return found;
+                }
+            }
+            // Check default case
+            if (t.getDefaultCase() != null) {
+                WorkflowTask found = findTaskByRef(t.getDefaultCase(), refName);
+                if (found != null) return found;
+            }
+            // Check loop body
+            if (t.getLoopOver() != null) {
+                WorkflowTask found = findTaskByRef(t.getLoopOver(), refName);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    @Test
     void testBuildEnrichTask_AgentTool() {
         ToolConfig agentTool = ToolConfig.builder()
             .name("researcher")

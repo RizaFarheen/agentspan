@@ -63,6 +63,10 @@ public class AgentService {
     @SuppressWarnings("unchecked")
     public CompileResponse compile(StartRequest request) {
         AgentConfig config = resolveConfig(request);
+        // Assign a default name for plan/compile if not provided
+        if (config.getName() == null || config.getName().isEmpty()) {
+            config.setName("agent_plan");
+        }
         log.info("Compiling agent: {}", config.getName());
         WorkflowDef def = agentCompiler.compile(config);
         Map<String, Object> defMap = MAPPER.convertValue(def, Map.class);
@@ -76,6 +80,12 @@ public class AgentService {
     @SuppressWarnings("unchecked")
     public StartResponse start(StartRequest request) {
         AgentConfig config = resolveConfig(request);
+
+        // Apply per-call timeout override from StartRequest
+        if (request.getTimeoutSeconds() != null && request.getTimeoutSeconds() > 0) {
+            config.setTimeoutSeconds(request.getTimeoutSeconds());
+        }
+
         log.info("Starting agent: {}", config.getName());
 
         // 0. Pre-register child workflows for agent_tool types
@@ -109,8 +119,18 @@ public class AgentService {
         input.put("session_id", request.getSessionId() != null ? request.getSessionId() : "");
         startReq.setInput(input);
 
-        if (request.getIdempotencyKey() != null) {
-            startReq.setIdempotencyKey(request.getIdempotencyKey());
+        // Idempotency: use the key as correlationId and check for existing executions
+        if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isEmpty()) {
+            startReq.setCorrelationId(request.getIdempotencyKey());
+            String existing = findExistingExecution(def.getName(), request.getIdempotencyKey());
+            if (existing != null) {
+                log.info("Idempotent hit: returning existing workflow {} for key '{}'",
+                        existing, request.getIdempotencyKey());
+                return StartResponse.builder()
+                    .workflowId(existing)
+                    .workflowName(def.getName())
+                    .build();
+            }
         }
 
         String workflowId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
@@ -186,7 +206,7 @@ public class AgentService {
      */
     public Map<String, Object> searchAgentExecutions(int start, int size, String sort,
                                                       String freeText, String status,
-                                                      String agentName) {
+                                                      String agentName, String sessionId) {
         // Determine which workflow types to query
         List<String> workflowNames;
         if (agentName != null && !agentName.isEmpty()) {
@@ -213,8 +233,14 @@ public class AgentService {
             query.append(" AND status = '").append(status).append("'");
         }
 
+        // Use sessionId as freeText search if provided
+        String searchText = freeText != null ? freeText : "*";
+        if (sessionId != null && !sessionId.isEmpty()) {
+            searchText = sessionId;
+        }
+
         SearchResult<WorkflowSummary> searchResult = workflowService.searchWorkflows(
-                start, size, sort, freeText != null ? freeText : "*", query.toString());
+                start, size, sort, searchText, query.toString());
 
         List<AgentExecutionSummary> results = searchResult.getResults().stream()
                 .map(ws -> AgentExecutionSummary.builder()
@@ -294,6 +320,27 @@ public class AgentService {
                     .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name));
             metadataDAO.removeWorkflowDef(name, def.getVersion());
         }
+    }
+
+    /**
+     * Search for an existing workflow with the given correlationId (idempotency key).
+     * Returns the workflow ID if a RUNNING or COMPLETED execution exists, null otherwise.
+     */
+    private String findExistingExecution(String workflowName, String idempotencyKey) {
+        try {
+            String query = "workflowType = '" + workflowName + "' AND status IN ('RUNNING', 'COMPLETED')";
+            SearchResult<WorkflowSummary> results = workflowService.searchWorkflows(
+                    0, 1, "startTime:DESC", idempotencyKey, query);
+            if (results.getTotalHits() > 0) {
+                WorkflowSummary match = results.getResults().get(0);
+                if (idempotencyKey.equals(match.getCorrelationId())) {
+                    return match.getWorkflowId();
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Idempotency check failed for key '{}': {}", idempotencyKey, e.getMessage());
+        }
+        return null;
     }
 
     /**

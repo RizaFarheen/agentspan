@@ -30,10 +30,12 @@ class TestTypeToJsonSchema:
         assert _type_to_json_schema(bool) == {"type": "boolean"}
 
     def test_list(self):
-        assert _type_to_json_schema(list) == {"type": "array"}
+        # Bare list must include "items" for OpenAI API compliance (BUG-P0-01)
+        assert _type_to_json_schema(list) == {"type": "array", "items": {}}
 
     def test_dict(self):
-        assert _type_to_json_schema(dict) == {"type": "object"}
+        # Bare dict must include "additionalProperties" for schema compliance
+        assert _type_to_json_schema(dict) == {"type": "object", "additionalProperties": {}}
 
     def test_none_type(self):
         assert _type_to_json_schema(type(None)) == {"type": "null"}
@@ -210,3 +212,81 @@ class TestTypeToJsonSchemaEdgeCases:
         """Plain object returns empty dict."""
         result = _type_to_json_schema(object)
         assert result == {}
+
+
+class TestBareCollectionTypes:
+    """Regression tests for BUG-P0-01: bare list/dict must produce valid schemas.
+
+    OpenAI API requires "items" on array schemas. Without it, tool calls
+    fail with 400: 'array schema missing items'.
+    """
+
+    def test_bare_list_has_items(self):
+        """Bare `list` includes empty 'items' dict."""
+        result = _type_to_json_schema(list)
+        assert result == {"type": "array", "items": {}}
+
+    def test_bare_dict_has_additional_properties(self):
+        """Bare `dict` includes empty 'additionalProperties' dict."""
+        result = _type_to_json_schema(dict)
+        assert result == {"type": "object", "additionalProperties": {}}
+
+    def test_parameterized_list_still_works(self):
+        """List[str] still generates correct typed items."""
+        result = _type_to_json_schema(List[str])
+        assert result == {"type": "array", "items": {"type": "string"}}
+
+    def test_parameterized_dict_still_works(self):
+        """Dict[str, int] still generates correct additionalProperties."""
+        result = _type_to_json_schema(Dict[str, int])
+        assert result == {"type": "object", "additionalProperties": {"type": "integer"}}
+
+    def test_function_with_bare_list_param(self):
+        """A function with bare `list` param produces schema with 'items'."""
+        def process_items(items: list) -> str:
+            return str(items)
+
+        result = schema_from_function(process_items)
+        items_schema = result["input"]["properties"]["items"]
+        assert items_schema == {"type": "array", "items": {}}
+
+    def test_function_with_bare_dict_param(self):
+        """A function with bare `dict` param produces schema with 'additionalProperties'."""
+        def process_data(data: dict) -> str:
+            return str(data)
+
+        result = schema_from_function(process_data)
+        data_schema = result["input"]["properties"]["data"]
+        assert data_schema == {"type": "object", "additionalProperties": {}}
+
+
+class TestStringAnnotations:
+    """Test BUG-P2-07: PEP 563 string annotations are resolved correctly."""
+
+    def test_string_dict_str_float(self):
+        result = _type_to_json_schema("Dict[str, float]")
+        assert result == {"type": "object", "additionalProperties": {"type": "number"}}
+
+    def test_string_list_int(self):
+        result = _type_to_json_schema("List[int]")
+        assert result == {"type": "array", "items": {"type": "integer"}}
+
+    def test_string_optional_str(self):
+        result = _type_to_json_schema("Optional[str]")
+        assert result == {"type": "string"}
+
+    def test_string_basic_str(self):
+        result = _type_to_json_schema("str")
+        assert result == {"type": "string"}
+
+    def test_string_basic_int(self):
+        result = _type_to_json_schema("int")
+        assert result == {"type": "integer"}
+
+    def test_unresolvable_string(self):
+        result = _type_to_json_schema("SomeUnknownType")
+        assert result == {}
+
+    def test_string_dict_str_any(self):
+        result = _type_to_json_schema("Dict[str, Any]")
+        assert result == {"type": "object", "additionalProperties": {}}

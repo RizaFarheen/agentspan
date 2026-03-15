@@ -88,6 +88,9 @@ public class AgentConfig {
     /** Whether the agent should plan before executing. */
     private Boolean planner;
 
+    /** Tools that must be called before the agent can complete. */
+    private List<String> requiredTools;
+
     /** Whether this is an external agent (no model, references existing workflow). */
     @Builder.Default
     private boolean external = false;

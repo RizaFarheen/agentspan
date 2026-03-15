@@ -328,6 +328,7 @@ class Agent:
         after_model_callback: Optional[Callable[..., Any]] = None,
         include_contents: Optional[str] = None,
         thinking_budget_tokens: Optional[int] = None,
+        required_tools: Optional[List[str]] = None,
     ) -> None:
         if not name or not isinstance(name, str):
             raise ValueError("Agent name must be a non-empty string")
@@ -359,6 +360,18 @@ class Agent:
         self.agents: List[Agent] = (
             [_resolve_agent(a, model) for a in agents] if agents else []
         )
+        # Validate sub-agent name uniqueness
+        if self.agents:
+            seen: Dict[str, int] = {}
+            for a in self.agents:
+                seen[a.name] = seen.get(a.name, 0) + 1
+            duplicates = [n for n, count in seen.items() if count > 1]
+            if duplicates:
+                raise ValueError(
+                    f"Duplicate sub-agent names in '{name}': {duplicates}. "
+                    "Each sub-agent must have a unique name. "
+                    "If reusing the same agent, create separate instances with distinct names."
+                )
         self.strategy = strategy
         self.router = router
         self.output_type = output_type
@@ -397,6 +410,7 @@ class Agent:
                 )
         self.include_contents = include_contents
         self.thinking_budget_tokens = thinking_budget_tokens
+        self.required_tools: List[str] = list(required_tools) if required_tools else []
 
         # ── Code execution setup ─────────────────────────────────────
         self.code_execution_config: Optional[Any] = None

@@ -122,6 +122,9 @@ from agentspan.agents.handoff import HandoffCondition, OnCondition, OnTextMentio
 # Extended agent types
 from agentspan.agents.ext import GPTAssistantAgent, UserProxyAgent
 
+# Exceptions
+from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError, AgentspanError
+
 # Tracing (optional — only activates if opentelemetry is installed)
 from agentspan.agents.tracing import is_tracing_enabled
 
@@ -208,6 +211,10 @@ __all__ = [
     "OnToolResult",
     "OnTextMention",
     "OnCondition",
+    # Exceptions
+    "AgentspanError",
+    "AgentAPIError",
+    "AgentNotFoundError",
     # Tracing
     "is_tracing_enabled",
 ]

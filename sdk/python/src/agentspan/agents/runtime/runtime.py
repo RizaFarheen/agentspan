@@ -34,6 +34,7 @@ from agentspan.agents.result import (
     Status,
     TokenUsage,
 )
+from agentspan.agents.exceptions import _raise_api_error
 from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailableError
 
 logger = logging.getLogger("agentspan.agents.runtime")
@@ -85,8 +86,9 @@ def _normalize_handoff_target(task_ref: str) -> str:
 
     # Step 2: strip strategy-indexed prefixes
     # Matches: <parent>_<indicator>_<idx>_<agent_name>
+    # Also handles the no-index variant: <parent>_<indicator>_<agent_name>
     strategy_pattern = re.match(
-        r"^.+?_(?:handoff|agent|step|sequential|parallel|round_robin|router|swarm|random|manual)_\d+_(.*)",
+        r"^.+?_(?:handoff|agent|step|sequential|parallel|round_robin|router|swarm|random|manual|transfer)_(?:\d+_)?(.*)",
         name,
     )
     if strategy_pattern:
@@ -256,6 +258,12 @@ class AgentRuntime:
         self._prompt_client_instance: Optional[Any] = None
         self._ensured_models: set = set()
         self._integration_api_available: Optional[bool] = None
+        self._sse_fallback_warned = False
+
+        # Apply user-configured log level to all agentspan loggers
+        logging.getLogger("agentspan").setLevel(
+            getattr(logging, self._config.log_level.upper(), logging.INFO)
+        )
 
         # Async HTTP client for agent API endpoints
         self._http = AgentHttpClient(
@@ -312,6 +320,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        timeout: Optional[int] = None,
     ) -> str:
         """Start an agent via the server's /api/agent/start endpoint.
 
@@ -336,10 +345,15 @@ class AgentRuntime:
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
+        if timeout is not None:
+            payload["timeoutSeconds"] = timeout
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
         data = resp.json()
         workflow_id = data["workflowId"]
         logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
@@ -353,6 +367,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        timeout: Optional[int] = None,
     ) -> str:
         """Async version of :meth:`_start_via_server`."""
         from agentspan.agents.config_serializer import AgentConfigSerializer
@@ -368,6 +383,8 @@ class AgentRuntime:
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
+        if timeout is not None:
+            payload["timeoutSeconds"] = timeout
 
         data = await self._http.start_agent(payload)
         workflow_id = data["workflowId"]
@@ -459,8 +476,12 @@ class AgentRuntime:
         if self._config.auth_secret:
             headers["X-Auth-Secret"] = self._config.auth_secret
 
-        response = requests.post(url, json=config_json, headers=headers, timeout=30)
-        response.raise_for_status()
+        payload = {"agentConfig": config_json}
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
         data = response.json()
 
         workflow_def_dict = data.get("workflowDef", data)
@@ -477,7 +498,7 @@ class AgentRuntime:
         serializer = AgentConfigSerializer()
         config_json = serializer.serialize(agent)
 
-        data = await self._http.compile_agent(config_json)
+        data = await self._http.compile_agent({"agentConfig": config_json})
         workflow_def_dict = data.get("workflowDef", data)
 
         return ServerCompiledWorkflow(
@@ -515,7 +536,7 @@ class AgentRuntime:
                     self._workers_started = False
                 self._registered_tool_names.update(worker_names)
             if not self._workers_started:
-                logger.info("Starting workers for agent '%s'", agent.name)
+                logger.debug("Starting workers for agent '%s'", agent.name)
                 self._worker_manager.start()
                 self._workers_started = True
 
@@ -552,7 +573,7 @@ class AgentRuntime:
                     self._workers_started = False
                 self._registered_tool_names.update(worker_names)
             if not self._workers_started:
-                logger.info("Starting workers for agent '%s'", agent.name)
+                logger.debug("Starting workers for agent '%s'", agent.name)
                 self._worker_manager.start()
                 self._workers_started = True
 
@@ -1441,6 +1462,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent synchronously and return the result.
@@ -1477,15 +1499,24 @@ class AgentRuntime:
                 agent, framework, prompt,
                 media=media, session_id=session_id,
                 idempotency_key=idempotency_key,
-                on_event=on_event, **kwargs,
+                on_event=on_event, timeout=timeout, **kwargs,
             )
+
+        if kwargs:
+            logger.warning("Unrecognized keyword arguments: %s", ", ".join(kwargs.keys()))
 
         if on_event is not None:
             return self._run_with_events(
                 agent, prompt, on_event=on_event,
                 media=media, session_id=session_id,
-                idempotency_key=idempotency_key, **kwargs,
+                idempotency_key=idempotency_key, timeout=timeout,
             )
+
+        # Session continuity: inject prior conversation into memory
+        if session_id:
+            prior_messages = self._get_session_messages(session_id, agent.name)
+            if prior_messages:
+                agent = self._inject_session_memory(agent, prior_messages)
 
         # Register workers locally, then start via server
         self._prepare_workers(agent)
@@ -1501,10 +1532,12 @@ class AgentRuntime:
             agent, resolved_prompt,
             media=media, session_id=session_id,
             idempotency_key=idempotency_key,
+            timeout=timeout,
         )
 
         # Poll until complete
-        status = self._poll_status_until_complete(workflow_id)
+        effective_timeout = timeout or (agent.timeout_seconds if agent.timeout_seconds > 0 else None)
+        status = self._poll_status_until_complete(workflow_id, timeout=effective_timeout)
 
         output = status.output
         raw_status = status.status
@@ -1518,6 +1551,25 @@ class AgentRuntime:
             if not has_output and status.reason:
                 output = status.reason
 
+        # Normalize output to always be a dict
+        output = self._normalize_output(output, raw_status, status.reason)
+
+        # Fetch full workflow execution to populate tool_calls, messages,
+        # and token_usage — these are not available from the status endpoint.
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        try:
+            wf = self._workflow_client.get_workflow(
+                workflow_id=workflow_id,
+                include_tasks=True,
+            )
+            tool_calls = self._extract_tool_calls(wf)
+            messages = self._extract_messages(wf)
+            token_usage = self._extract_token_usage(wf)
+        except Exception as exc:
+            logger.debug("Could not fetch workflow details for %s: %s", workflow_id, exc)
+
         logger.info("Agent '%s' completed (workflow_id=%s)", agent.name, workflow_id)
         return AgentResult(
             output=output,
@@ -1526,6 +1578,10 @@ class AgentRuntime:
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
             error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+            sub_results=self._extract_sub_results(output),
         )
 
     # ── Foreign framework support ────────────────────────────────────
@@ -1540,6 +1596,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Run a foreign-framework agent via server-side normalization."""
@@ -1569,11 +1626,11 @@ class AgentRuntime:
 
         if on_event is not None:
             return self._run_framework_with_events(
-                workflow_id, correlation_id, on_event,
+                workflow_id, correlation_id, on_event, timeout=timeout,
             )
 
         # Poll until complete
-        status = self._poll_status_until_complete(workflow_id)
+        status = self._poll_status_until_complete(workflow_id, timeout=timeout)
 
         output = status.output
         raw_status = status.status
@@ -1586,6 +1643,7 @@ class AgentRuntime:
             if not has_output and status.reason:
                 output = status.reason
 
+        output = self._normalize_output(output, raw_status, status.reason)
         logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
         return AgentResult(
             output=output,
@@ -1594,6 +1652,7 @@ class AgentRuntime:
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
             error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+            sub_results=self._extract_sub_results(output),
         )
 
     def _start_framework(
@@ -1651,7 +1710,10 @@ class AgentRuntime:
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
         data = resp.json()
         workflow_id = data["workflowId"]
         logger.info(
@@ -1692,7 +1754,7 @@ class AgentRuntime:
                     self._workers_started = False
                 self._registered_tool_names.update(new_names)
             if not self._workers_started:
-                logger.info("Starting workers for framework agent")
+                logger.debug("Starting workers for framework agent")
                 self._worker_manager.start()
                 self._workers_started = True
 
@@ -1701,6 +1763,8 @@ class AgentRuntime:
         workflow_id: str,
         correlation_id: str,
         on_event: Any,
+        *,
+        timeout: Optional[int] = None,
     ) -> AgentResult:
         """Run a framework agent with event streaming."""
         events: List[AgentEvent] = []
@@ -1708,26 +1772,28 @@ class AgentRuntime:
             events.append(event)
             on_event(event)
 
-        status = self._poll_status_until_complete(workflow_id)
+        status = self._poll_status_until_complete(workflow_id, timeout=timeout)
+        output = self._normalize_output(status.output, status.status, status.reason)
         return AgentResult(
-            output=status.output,
+            output=output,
             workflow_id=workflow_id,
             correlation_id=correlation_id,
             status=status.status,
             finish_reason=self._derive_finish_reason(status.status, status.output),
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             events=events,
+            sub_results=self._extract_sub_results(output),
         )
 
     # ── Workflow execution helpers ──────────────────────────────────
 
-    def _poll_status_until_complete(self, workflow_id: str) -> AgentStatus:
+    def _poll_status_until_complete(self, workflow_id: str, *, timeout: Optional[int] = None) -> AgentStatus:
         """Poll ``/api/agent/{id}/status`` until the workflow completes."""
-        timeout = self._config.default_timeout_seconds or 300
+        effective_timeout = timeout if timeout and timeout > 0 else 300
         poll_interval = 1
         elapsed = 0
 
-        while elapsed < timeout:
+        while elapsed < effective_timeout:
             status = self.get_status(workflow_id)
             if status.is_complete:
                 return status
@@ -1736,17 +1802,17 @@ class AgentRuntime:
 
         logger.warning(
             "Workflow %s did not complete within %ds.",
-            workflow_id, timeout,
+            workflow_id, effective_timeout,
         )
         return self.get_status(workflow_id)
 
-    async def _poll_status_until_complete_async(self, workflow_id: str) -> AgentStatus:
+    async def _poll_status_until_complete_async(self, workflow_id: str, *, timeout: Optional[int] = None) -> AgentStatus:
         """Async version of :meth:`_poll_status_until_complete`."""
-        timeout = self._config.default_timeout_seconds or 300
+        effective_timeout = timeout if timeout and timeout > 0 else 300
         poll_interval = 1
         elapsed = 0
 
-        while elapsed < timeout:
+        while elapsed < effective_timeout:
             status = await self.get_status_async(workflow_id)
             if status.is_complete:
                 return status
@@ -1755,7 +1821,7 @@ class AgentRuntime:
 
         logger.warning(
             "Workflow %s did not complete within %ds.",
-            workflow_id, timeout,
+            workflow_id, effective_timeout,
         )
         return await self.get_status_async(workflow_id)
 
@@ -1770,7 +1836,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
-        **kwargs: Any,
+        timeout: Optional[int] = None,
     ) -> AgentResult:
         """Run an agent with real-time event callbacks, then return full result.
 
@@ -1812,6 +1878,7 @@ class AgentRuntime:
                         {"name": ev.tool_name, "result": ev.result}
                     )
 
+        output = self._normalize_output(output, status.status, status.reason)
         return AgentResult(
             output=output,
             workflow_id=handle.workflow_id,
@@ -1821,6 +1888,7 @@ class AgentRuntime:
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             events=captured_events,
             tool_calls=tool_calls,
+            sub_results=self._extract_sub_results(output),
         )
 
     async def _run_with_events_async(
@@ -1832,7 +1900,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
-        **kwargs: Any,
+        timeout: Optional[int] = None,
     ) -> AgentResult:
         """Async version of :meth:`_run_with_events`."""
         handle = await self.start_async(
@@ -1867,6 +1935,7 @@ class AgentRuntime:
                         {"name": ev.tool_name, "result": ev.result}
                     )
 
+        output = self._normalize_output(output, status.status, status.reason)
         return AgentResult(
             output=output,
             workflow_id=handle.workflow_id,
@@ -1876,6 +1945,7 @@ class AgentRuntime:
             error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
             events=captured_events,
             tool_calls=tool_calls,
+            sub_results=self._extract_sub_results(output),
         )
 
     # ── SSE streaming ────────────────────────────────────────────────
@@ -2163,7 +2233,9 @@ class AgentRuntime:
                 yield from self._stream_sse(workflow_id)
                 return
             except _SSEUnavailableError:
-                logger.info("SSE unavailable, falling back to polling-based stream")
+                if not self._sse_fallback_warned:
+                    logger.info("SSE unavailable, falling back to polling-based stream")
+                    self._sse_fallback_warned = True
 
         yield from self._stream_polling(workflow_id)
 
@@ -2366,6 +2438,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent asynchronously (async-first implementation).
@@ -2393,15 +2466,24 @@ class AgentRuntime:
                 agent, framework, prompt,
                 media=media, session_id=session_id,
                 idempotency_key=idempotency_key,
-                on_event=on_event, **kwargs,
+                on_event=on_event, timeout=timeout, **kwargs,
             )
+
+        if kwargs:
+            logger.warning("Unrecognized keyword arguments: %s", ", ".join(kwargs.keys()))
 
         if on_event is not None:
             return await self._run_with_events_async(
                 agent, prompt, on_event=on_event,
                 media=media, session_id=session_id,
-                idempotency_key=idempotency_key, **kwargs,
+                idempotency_key=idempotency_key, timeout=timeout,
             )
+
+        # Session continuity: inject prior conversation into memory
+        if session_id:
+            prior_messages = self._get_session_messages(session_id, agent.name)
+            if prior_messages:
+                agent = self._inject_session_memory(agent, prior_messages)
 
         # Register workers locally (sync), then start via server (async)
         self._prepare_workers(agent)
@@ -2417,9 +2499,11 @@ class AgentRuntime:
             agent, resolved_prompt,
             media=media, session_id=session_id,
             idempotency_key=idempotency_key,
+            timeout=timeout,
         )
 
-        status = await self._poll_status_until_complete_async(workflow_id)
+        effective_timeout = timeout or (agent.timeout_seconds if agent.timeout_seconds > 0 else None)
+        status = await self._poll_status_until_complete_async(workflow_id, timeout=effective_timeout)
 
         output = status.output
         raw_status = status.status
@@ -2432,6 +2516,29 @@ class AgentRuntime:
             if not has_output and status.reason:
                 output = status.reason
 
+        # Normalize output to always be a dict
+        output = self._normalize_output(output, raw_status, status.reason)
+
+        # Fetch full workflow execution to populate tool_calls, messages,
+        # and token_usage — these are not available from the status endpoint.
+        tool_calls: List[Dict[str, Any]] = []
+        messages: List[Dict[str, Any]] = []
+        token_usage: Optional[TokenUsage] = None
+        try:
+            loop = asyncio.get_event_loop()
+            wf = await loop.run_in_executor(
+                None,
+                lambda: self._workflow_client.get_workflow(
+                    workflow_id=workflow_id,
+                    include_tasks=True,
+                ),
+            )
+            tool_calls = self._extract_tool_calls(wf)
+            messages = self._extract_messages(wf)
+            token_usage = self._extract_token_usage(wf)
+        except Exception as exc:
+            logger.debug("Could not fetch workflow details for %s: %s", workflow_id, exc)
+
         logger.info("Agent '%s' completed (workflow_id=%s)", agent.name, workflow_id)
         return AgentResult(
             output=output,
@@ -2440,6 +2547,10 @@ class AgentRuntime:
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
             error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+            tool_calls=tool_calls,
+            messages=messages,
+            token_usage=token_usage,
+            sub_results=self._extract_sub_results(output),
         )
 
     async def start_async(
@@ -2536,7 +2647,9 @@ class AgentRuntime:
                     yield event
                 return
             except _SSEUnavailableError:
-                logger.info("SSE unavailable, falling back to async polling stream")
+                if not self._sse_fallback_warned:
+                    logger.info("SSE unavailable, falling back to async polling stream")
+                    self._sse_fallback_warned = True
 
         async for event in self._stream_polling_async(workflow_id):
             yield event
@@ -2734,6 +2847,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
+        timeout: Optional[int] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Async version of :meth:`_run_framework`."""
@@ -2766,13 +2880,14 @@ class AgentRuntime:
                 captured_events.append(event)
                 on_event(event)
 
-            status = await self._poll_status_until_complete_async(workflow_id)
+            status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
             output = status.output
             has_output = output and not (
                 isinstance(output, dict) and all(v is None for v in output.values())
             )
             if not has_output and status.reason and status.status in ("FAILED", "TERMINATED"):
                 output = status.reason
+            output = self._normalize_output(output, status.status, status.reason)
             return AgentResult(
                 output=output,
                 workflow_id=workflow_id,
@@ -2781,9 +2896,10 @@ class AgentRuntime:
                 finish_reason=self._derive_finish_reason(status.status, status.output),
                 error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
                 events=captured_events,
+                sub_results=self._extract_sub_results(output),
             )
 
-        status = await self._poll_status_until_complete_async(workflow_id)
+        status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
 
         output = status.output
         raw_status = status.status
@@ -2796,6 +2912,7 @@ class AgentRuntime:
             if not has_output and status.reason:
                 output = status.reason
 
+        output = self._normalize_output(output, raw_status, status.reason)
         logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
         return AgentResult(
             output=output,
@@ -2804,6 +2921,7 @@ class AgentRuntime:
             status=raw_status,
             finish_reason=self._derive_finish_reason(raw_status, status.output),
             error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+            sub_results=self._extract_sub_results(output),
         )
 
     async def _start_framework_async(
@@ -2882,7 +3000,10 @@ class AgentRuntime:
 
         url = self._agent_api_url(f"/{workflow_id}/status")
         resp = req_lib.get(url, headers=self._agent_api_headers(content_type=""), timeout=30)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
         data = resp.json()
 
         raw_status = data.get("status", "UNKNOWN")
@@ -2922,7 +3043,10 @@ class AgentRuntime:
         url = self._agent_api_url(f"/{workflow_id}/respond")
         body = output if isinstance(output, dict) else {"output": output}
         resp = req_lib.post(url, json=body, headers=self._agent_api_headers(), timeout=30)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except req_lib.exceptions.HTTPError as exc:
+            _raise_api_error(exc, url=url)
         logger.info("Responded to workflow %s", workflow_id)
 
     def approve(self, workflow_id: str) -> None:
@@ -3014,7 +3138,99 @@ class AgentRuntime:
             ),
         )
 
+    # ── Session continuity helpers ────────────────────────────────────
+
+    def _get_session_messages(self, session_id: str, agent_name: str) -> List[Dict[str, Any]]:
+        """Fetch conversation messages from the most recent execution with this session_id."""
+        try:
+            import requests as req_lib
+
+            url = self._agent_api_url("/executions")
+            params = {
+                "agentName": agent_name,
+                "freeText": session_id,
+                "sort": "startTime:DESC",
+                "size": 5,
+                "status": "COMPLETED",
+            }
+            resp = req_lib.get(
+                url, params=params,
+                headers=self._agent_api_headers(content_type=""),
+                timeout=10,
+            )
+            try:
+                resp.raise_for_status()
+            except req_lib.exceptions.HTTPError as exc:
+                _raise_api_error(exc, url=url)
+            executions = resp.json().get("results", [])
+
+            for execution in executions:
+                wf_id = execution.get("workflowId")
+                if not wf_id:
+                    continue
+                wf = self._workflow_client.get_workflow(wf_id, include_tasks=False)
+                if hasattr(wf, "variables") and wf.variables:
+                    messages = wf.variables.get("messages", [])
+                    if messages:
+                        return messages
+            return []
+        except Exception as e:
+            logger.debug("Could not fetch session history for %s: %s", session_id, e)
+            return []
+
+    @staticmethod
+    def _inject_session_memory(agent: Agent, prior_messages: List[Dict[str, Any]]) -> Agent:
+        """Create a shallow copy of the agent with session messages injected into memory."""
+        import copy as _copy
+
+        from agentspan.agents.memory import ConversationMemory
+
+        agent_copy = _copy.copy(agent)
+        if agent_copy.memory is None:
+            agent_copy.memory = ConversationMemory()
+
+        existing = list(agent_copy.memory.messages) if agent_copy.memory.messages else []
+        agent_copy.memory = ConversationMemory(
+            messages=prior_messages + existing,
+            max_messages=agent_copy.memory.max_messages if agent_copy.memory else None,
+        )
+        return agent_copy
+
     # ── Result extraction helpers ───────────────────────────────────
+
+    @staticmethod
+    def _normalize_output(output: Any, raw_status: str, reason: Optional[str] = None) -> Dict[str, Any]:
+        """Normalize output to always be a dict.
+
+        Ensures a consistent contract: ``result.output`` is always a dict,
+        whether the agent succeeded or failed.  On failure the raw
+        ``reasonForIncompletion`` string is wrapped in
+        ``{"error": ..., "status": "FAILED"}``.
+
+        The server is responsible for normalizing strategy-specific outputs
+        (e.g. parallel ``subResults``).  This method only handles the
+        dict/string/None wrapping.
+        """
+        if isinstance(output, dict):
+            # Rejection is a valid completion — keep as-is
+            if output.get("finishReason") == "rejected":
+                return output
+            return output
+        if raw_status in ("FAILED", "TERMINATED", "TIMED_OUT"):
+            return {
+                "error": str(output) if output else (reason or "Unknown error"),
+                "status": raw_status,
+            }
+        if output is None:
+            return {"result": None}
+        return {"result": output}
+
+    @staticmethod
+    def _extract_sub_results(output: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract subResults from server-normalized output, if present."""
+        if isinstance(output, dict):
+            return output.get("subResults", {})
+        return {}
 
     @staticmethod
     def _derive_finish_reason(raw_status: str, output: Any) -> FinishReason:
@@ -3022,6 +3238,8 @@ class AgentRuntime:
         if raw_status == "COMPLETED":
             if isinstance(output, dict):
                 fr = output.get("finishReason")
+                if fr == "rejected":
+                    return FinishReason.REJECTED
                 if fr == "LENGTH":
                     return FinishReason.LENGTH
                 if fr == "tool_calls":

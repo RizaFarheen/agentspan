@@ -19,28 +19,26 @@ from agentspan.agents.runtime.config import AgentConfig, _env
 class TestEnvHelper:
     """Tests for the _env() helper function."""
 
-    def test_reads_agentspan_var(self):
-        with mock.patch.dict(os.environ, {"AGENTSPAN_FOO": "bar"}, clear=False):
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") == "bar"
+    def test_reads_primary_var(self):
+        with mock.patch.dict(os.environ, {"AGENTSPAN_FOO": "bar"}, clear=True):
+            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO") == "bar"
 
-    def test_falls_back_to_conductor_var(self):
-        env = {"AGENTSPAN_FOO": "legacy"}
-        with mock.patch.dict(os.environ, env, clear=False):
-            os.environ.pop("AGENTSPAN_FOO", None)
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") == "legacy"
+    def test_falls_back_to_secondary_var(self):
+        with mock.patch.dict(os.environ, {"CONDUCTOR_FOO": "legacy"}, clear=True):
+            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO") == "legacy"
 
-    def test_agentspan_takes_precedence(self):
-        env = {"AGENTSPAN_FOO": "new", "AGENTSPAN_FOO": "old"}
-        with mock.patch.dict(os.environ, env, clear=False):
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") == "new"
+    def test_primary_takes_precedence(self):
+        env = {"AGENTSPAN_FOO": "new", "CONDUCTOR_FOO": "old"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO") == "new"
 
     def test_returns_default_when_neither_set(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO", "default") == "default"
+            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO", "default") == "default"
 
     def test_returns_none_when_no_default(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            assert _env("AGENTSPAN_FOO", "AGENTSPAN_FOO") is None
+            assert _env("AGENTSPAN_FOO", "CONDUCTOR_FOO") is None
 
 
 class TestAgentConfigFromEnv:
@@ -52,20 +50,11 @@ class TestAgentConfigFromEnv:
             config = AgentConfig.from_env()
             assert config.server_url == "http://myhost:9090/api"
 
-    def test_falls_back_to_conductor_server_url(self):
-        env = {"AGENTSPAN_SERVER_URL": "http://legacy:7001/api"}
+    def test_reads_server_url_env(self):
+        env = {"AGENTSPAN_SERVER_URL": "http://other:7001/api"}
         with mock.patch.dict(os.environ, env, clear=True):
             config = AgentConfig.from_env()
-            assert config.server_url == "http://legacy:7001/api"
-
-    def test_agentspan_url_takes_precedence(self):
-        env = {
-            "AGENTSPAN_SERVER_URL": "http://new:8080/api",
-            "AGENTSPAN_SERVER_URL": "http://old:7001/api",
-        }
-        with mock.patch.dict(os.environ, env, clear=True):
-            config = AgentConfig.from_env()
-            assert config.server_url == "http://new:8080/api"
+            assert config.server_url == "http://other:7001/api"
 
     def test_defaults_to_localhost_when_nothing_set(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -79,12 +68,12 @@ class TestAgentConfigFromEnv:
             assert config.auth_key == "mykey"
             assert config.auth_secret == "mysecret"
 
-    def test_falls_back_to_conductor_auth(self):
-        env = {"AGENTSPAN_AUTH_KEY": "oldkey", "AGENTSPAN_AUTH_SECRET": "oldsecret"}
+    def test_reads_auth_with_api_key_alias(self):
+        env = {"AGENTSPAN_AUTH_KEY": "key2"}
         with mock.patch.dict(os.environ, env, clear=True):
             config = AgentConfig.from_env()
-            assert config.auth_key == "oldkey"
-            assert config.auth_secret == "oldsecret"
+            assert config.auth_key == "key2"
+            assert config.api_key == "key2"
 
     def test_auto_start_server_defaults_true(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -111,15 +100,47 @@ class TestAgentConfigFromEnv:
 
     def test_numeric_env_vars(self):
         env = {
-            "AGENTSPAN_AGENT_TIMEOUT": "120",
             "AGENTSPAN_LLM_RETRY_COUNT": "5",
             "AGENTSPAN_WORKER_THREADS": "4",
         }
         with mock.patch.dict(os.environ, env, clear=True):
             config = AgentConfig.from_env()
-            assert config.default_timeout_seconds == 120
             assert config.llm_retry_count == 5
             assert config.worker_thread_count == 4
+
+
+class TestServerUrlNormalisation:
+    """Tests for BUG-P2-10: auto-append /api when missing."""
+
+    def test_appends_api_when_missing(self):
+        config = AgentConfig(server_url="http://localhost:8080")
+        assert config.server_url == "http://localhost:8080/api"
+
+    def test_appends_api_with_trailing_slash(self):
+        config = AgentConfig(server_url="http://localhost:8080/")
+        assert config.server_url == "http://localhost:8080/api"
+
+    def test_leaves_correct_url_unchanged(self):
+        config = AgentConfig(server_url="http://localhost:8080/api")
+        assert config.server_url == "http://localhost:8080/api"
+
+    def test_leaves_correct_url_with_trailing_slash(self):
+        config = AgentConfig(server_url="http://localhost:8080/api/")
+        assert config.server_url == "http://localhost:8080/api"
+
+    def test_remote_url_without_api(self):
+        config = AgentConfig(server_url="https://play.orkes.io")
+        assert config.server_url == "https://play.orkes.io/api"
+
+    def test_from_env_auto_appends(self):
+        with mock.patch.dict(os.environ, {"AGENTSPAN_SERVER_URL": "http://myhost:9090"}, clear=True):
+            config = AgentConfig.from_env()
+            assert config.server_url == "http://myhost:9090/api"
+
+    def test_default_url_has_api(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            config = AgentConfig.from_env()
+            assert config.server_url == "http://localhost:8080/api"
 
 
 class TestServerAutoStart:
@@ -204,3 +225,45 @@ class TestServerAutoStart:
             stdout=mock.ANY,
             stderr=mock.ANY,
         )
+
+
+class TestLogLevelConfig:
+    """Tests for BUG-P3-04: log_level configuration field."""
+
+    def test_default_log_level(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            config = AgentConfig.from_env()
+            assert config.log_level == "INFO"
+
+    def test_log_level_from_env(self):
+        with mock.patch.dict(os.environ, {"AGENTSPAN_LOG_LEVEL": "WARNING"}, clear=True):
+            config = AgentConfig.from_env()
+            assert config.log_level == "WARNING"
+
+    def test_log_level_debug(self):
+        with mock.patch.dict(os.environ, {"AGENTSPAN_LOG_LEVEL": "DEBUG"}, clear=True):
+            config = AgentConfig.from_env()
+            assert config.log_level == "DEBUG"
+
+    def test_log_level_empty_string_uses_default(self):
+        with mock.patch.dict(os.environ, {"AGENTSPAN_LOG_LEVEL": ""}, clear=True):
+            config = AgentConfig.from_env()
+            assert config.log_level == "INFO"
+
+    @mock.patch("agentspan.agents.runtime.server._is_server_ready", return_value=True)
+    def test_log_level_applied_to_logger(self, mock_ready):
+        """AgentRuntime.__init__ applies log_level to the agentspan logger."""
+        import logging
+
+        config = AgentConfig(
+            server_url="http://localhost:8080/api",
+            log_level="WARNING",
+        )
+        with mock.patch("conductor.client.orkes_clients.OrkesClients"):
+            with mock.patch("agentspan.agents.runtime.worker_manager.WorkerManager"):
+                from agentspan.agents.runtime.runtime import AgentRuntime
+                rt = AgentRuntime(config=config)
+
+        assert logging.getLogger("agentspan").level == logging.WARNING
+        # Reset to avoid affecting other tests
+        logging.getLogger("agentspan").setLevel(logging.INFO)

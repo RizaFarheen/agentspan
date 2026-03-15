@@ -5,7 +5,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from agentspan.agents.runtime.worker_manager import WorkerManager
+from agentspan.agents.runtime.worker_manager import WorkerManager, _SchemaRegistryFilter
 
 
 class TestWorkerManagerInit:
@@ -299,3 +299,55 @@ class TestWorkerManagerLoggerCleanup:
 
         cleanup_fn = mock_atexit_reg.call_args[0][0]
         cleanup_fn()  # Should not raise
+
+
+class TestSchemaRegistryFilter:
+    """Test BUG-P3-02: _SchemaRegistryFilter suppresses duplicate warnings."""
+
+    def _make_record(self, msg):
+        import logging
+        record = logging.LogRecord(
+            name="conductor.client.automator.task_runner",
+            level=logging.WARNING,
+            pathname="",
+            lineno=0,
+            msg=msg,
+            args=(),
+            exc_info=None,
+        )
+        return record
+
+    def test_allows_first_schema_registry_warning(self):
+        f = _SchemaRegistryFilter()
+        record = self._make_record("Schema registry not available at http://localhost:8080")
+        assert f.filter(record) is True
+
+    def test_suppresses_subsequent_schema_registry_warnings(self):
+        f = _SchemaRegistryFilter()
+        r1 = self._make_record("Schema registry not available at http://localhost:8080")
+        r2 = self._make_record("Schema registry not available for task foo")
+        r3 = self._make_record("Schema registry not available for task bar")
+
+        assert f.filter(r1) is True
+        assert f.filter(r2) is False
+        assert f.filter(r3) is False
+
+    def test_allows_non_schema_messages(self):
+        f = _SchemaRegistryFilter()
+        # First suppress a schema message
+        f.filter(self._make_record("Schema registry not available"))
+        # Non-schema messages should still pass through
+        record = self._make_record("Some other warning")
+        assert f.filter(record) is True
+
+    def test_filter_installed_on_conductor_logger(self):
+        """WorkerManager.__init__ installs the filter on the conductor logger."""
+        import logging
+        config = MagicMock()
+        wm = WorkerManager(configuration=config)
+        conductor_logger = logging.getLogger("conductor.client.automator.task_runner")
+        schema_filters = [f for f in conductor_logger.filters if isinstance(f, _SchemaRegistryFilter)]
+        assert len(schema_filters) >= 1
+        # Clean up
+        for f in schema_filters:
+            conductor_logger.removeFilter(f)

@@ -7,6 +7,7 @@ Tests runtime helper methods (extract_output, extract_handoff_result, etc.)
 using mock workflow objects. Does NOT require a running Conductor server.
 """
 
+import logging
 import uuid
 
 import pytest
@@ -253,12 +254,10 @@ class TestAgentRuntimeInit:
                 from agentspan.agents.runtime.config import AgentConfig
                 cfg = AgentConfig(
                     server_url="http://config/api",
-                    default_timeout_seconds=600,
                     worker_thread_count=4,
                 )
                 rt = AgentRuntime(config=cfg, server_url="http://override/api")
                 assert rt._config.server_url == "http://override/api"
-                assert rt._config.default_timeout_seconds == 600
                 assert rt._config.worker_thread_count == 4
 
 
@@ -272,7 +271,6 @@ class TestAgentConfig:
         with patch.dict("os.environ", {}, clear=True):
             config = AgentConfig()
             assert config.server_url == "http://localhost:8080/api"
-            assert config.default_timeout_seconds == 0
             assert config.llm_retry_count == 3
             assert config.worker_poll_interval_ms == 100
 
@@ -284,10 +282,9 @@ class TestAgentConfig:
             config = AgentConfig()
             assert config.server_url == "http://custom:9090/api"
 
-    def test_custom_timeout(self):
+    def test_custom_retry_count(self):
         from agentspan.agents.runtime.config import AgentConfig
-        config = AgentConfig(default_timeout_seconds=600, llm_retry_count=5)
-        assert config.default_timeout_seconds == 600
+        config = AgentConfig(llm_retry_count=5)
         assert config.llm_retry_count == 5
 
 
@@ -398,7 +395,8 @@ class TestMediaParameter:
 
         call_kwargs = runtime._start_via_server.call_args
         assert call_kwargs[1]["media"] == ["https://example.com/cat.jpg"]
-        assert result.output == "I see a cat"
+        # Output is normalized to a dict (BUG-P1-02 fix)
+        assert result.output == {"result": "I see a cat"}
 
     def test_run_defaults_media_to_none(self, runtime):
         """Verify media defaults to None when not provided."""
@@ -749,6 +747,21 @@ class TestRuntimePlan:
         mock_wf.to_workflow_def.assert_called_once()
         runtime._compile_agent.assert_called_once_with(agent)
 
+    def test_compile_via_server_wraps_config_in_start_request(self, runtime):
+        """_compile_via_server sends agentConfig wrapped in a StartRequest payload."""
+        agent = Agent(name="test", model="openai/gpt-4o", instructions="Be helpful.")
+
+        mock_post = _mock_requests_post({"workflowDef": {"name": "test", "tasks": []}})
+        with patch("requests.post", mock_post):
+            runtime._compile_via_server(agent)
+
+        call_kwargs = mock_post.call_args
+        payload = call_kwargs[1]["json"]
+        # The payload must wrap the config in {"agentConfig": ...}
+        assert "agentConfig" in payload
+        assert payload["agentConfig"]["name"] == "test"
+        assert payload["agentConfig"]["model"] == "openai/gpt-4o"
+
 
 # ── run() with guardrails ──────────────────────────────────────────────
 
@@ -794,7 +807,7 @@ class TestRuntimeRunGuardrails:
         self._setup_run(runtime)
 
         result = runtime.run(agent, "good prompt")
-        assert result.output == "Hello"
+        assert result.output == {"result": "Hello"}
 
     def test_output_guardrail_compiled_single_execution(self, runtime):
         """All output guardrails now use compiled path (single workflow execution).
@@ -812,7 +825,7 @@ class TestRuntimeRunGuardrails:
 
         result = runtime.run(agent, "show data")
         # Compiled path: workflow runs once, guardrails handled server-side
-        assert result.output == "workflow handled fix"
+        assert result.output == {"result": "workflow handled fix"}
         runtime._start_via_server.assert_called_once()
 
     def test_output_guardrail_compiled_raise_returns_failed(self, runtime):
@@ -842,7 +855,7 @@ class TestRuntimeRunGuardrails:
 
         result = runtime.run(agent, "test")
         # Retries happen inside the workflow's DoWhile loop
-        assert result.output == "retried answer"
+        assert result.output == {"result": "retried answer"}
         runtime._start_via_server.assert_called_once()
 
     def test_run_with_compiled_output_guardrails(self, runtime):
@@ -866,7 +879,7 @@ class TestRuntimeRunGuardrails:
         self._setup_run(runtime, output="tool answer")
 
         result = runtime.run(agent, "test")
-        assert result.output == "tool answer"
+        assert result.output == {"result": "tool answer"}
         # Compiled path: single execution (no retry loop)
         runtime._start_via_server.assert_called_once()
 
@@ -911,7 +924,7 @@ class TestRuntimeRunGuardrails:
         self._setup_run(runtime, output="answer")
 
         result = runtime.run(agent, "SELECT * FROM users; DROP TABLE users")
-        assert result.output == "answer"
+        assert result.output == {"result": "answer"}
         # Verify the sanitized prompt was passed to _start_via_server
         call_args = runtime._start_via_server.call_args
         assert call_args is not None
@@ -947,6 +960,79 @@ class TestRuntimeRunGuardrails:
 
         with pytest.raises(ValueError, match="Input guardrail"):
             runtime.start(agent, "bad prompt")
+
+
+class TestRunPopulatesToolCalls:
+    """Regression tests for BUG-P1-01: run() must populate tool_calls, messages, token_usage."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.runtime import AgentRuntime
+                from agentspan.agents.runtime.config import AgentConfig
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_run_populates_tool_calls(self, runtime):
+        """run() fetches workflow execution and populates tool_calls."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server = MagicMock(return_value="wf-tools")
+        runtime._poll_status_until_complete = MagicMock(return_value=AgentStatus(
+            workflow_id="wf-tools", is_complete=True,
+            output={"result": "done", "finishReason": "STOP"}, status="COMPLETED",
+        ))
+
+        # Mock workflow with tool tasks
+        tool_task = MagicMock()
+        tool_task.task_type = "tool_execution"
+        tool_task.reference_task_name = "get_weather"
+        tool_task.input_data = {"city": "NYC"}
+        tool_task.output_data = {"temp": 72}
+
+        llm_task = MagicMock()
+        llm_task.task_type = "LLM_CHAT_COMPLETE"
+        llm_task.reference_task_name = "llm_call"
+        llm_task.input_data = {}
+        llm_task.output_data = {
+            "tokenUsed": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+        }
+
+        wf = MagicMock()
+        wf.tasks = [tool_task, llm_task]
+        wf.variables = {"messages": [{"role": "user", "content": "hi"}]}
+        runtime._workflow_client.get_workflow = MagicMock(return_value=wf)
+
+        result = runtime.run(agent, "What's the weather?")
+
+        assert len(result.tool_calls) == 1
+        assert result.tool_calls[0]["name"] == "get_weather"
+        assert result.token_usage is not None
+        assert result.token_usage.total_tokens == 150
+        assert len(result.messages) > 0
+
+    def test_run_without_tool_calls(self, runtime):
+        """run() works when workflow has no tool tasks."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        runtime._prepare_workers = MagicMock()
+        runtime._start_via_server = MagicMock(return_value="wf-notool")
+        runtime._poll_status_until_complete = MagicMock(return_value=AgentStatus(
+            workflow_id="wf-notool", is_complete=True,
+            output={"result": "Hello!", "finishReason": "STOP"}, status="COMPLETED",
+        ))
+
+        wf = MagicMock()
+        wf.tasks = []
+        wf.variables = {}
+        runtime._workflow_client.get_workflow = MagicMock(return_value=wf)
+
+        result = runtime.run(agent, "Hi")
+
+        assert result.tool_calls == []
+        assert result.token_usage is None
 
 
 class TestHasWorkerTools:
@@ -1370,7 +1456,7 @@ class TestStartViaServer:
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
                 from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
-                config = AgentConfig(server_url="http://fake:8080", default_timeout_seconds=10)
+                config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
 
     def test_start_via_server_returns_workflow_id(self, runtime):
@@ -1419,6 +1505,18 @@ class TestStartViaServer:
         payload = call_kwargs[1]["json"]
         assert payload["idempotencyKey"] == "idem-123"
 
+    def test_start_via_server_omits_idempotency_key_when_none(self, runtime):
+        """Idempotency key is not in the payload when not provided."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_via_server(agent, "hi")
+
+        call_kwargs = mock_post.call_args
+        payload = call_kwargs[1]["json"]
+        assert "idempotencyKey" not in payload
+
 
 class TestPollStatusUntilComplete:
     """Test _poll_status_until_complete() polling logic."""
@@ -1429,7 +1527,7 @@ class TestPollStatusUntilComplete:
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
                 from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
-                config = AgentConfig(server_url="http://fake:8080", default_timeout_seconds=5)
+                config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
 
     @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
@@ -1498,7 +1596,7 @@ class TestPollStatusUntilComplete:
         )
         runtime.get_status = MagicMock(return_value=running)
 
-        result = runtime._poll_status_until_complete("wf-1")
+        result = runtime._poll_status_until_complete("wf-1", timeout=5)
 
         # Should have polled for ~5 iterations (timeout=5s, interval=1s)
         assert runtime.get_status.call_count >= 5
@@ -1713,3 +1811,406 @@ class TestAssociateTemplatesWithModels:
         )
         # Should not raise
         rt._associate_templates_with_models(agent)
+
+
+class TestDeriveFinishReason:
+    """Test _derive_finish_reason static method."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients") as MockClients:
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                mock_clients = MagicMock()
+                MockClients.return_value = mock_clients
+                from agentspan.agents.runtime.runtime import AgentRuntime
+                from agentspan.agents.runtime.config import AgentConfig
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_rejected_finish_reason(self, runtime):
+        """COMPLETED with finishReason=rejected maps to FinishReason.REJECTED."""
+        from agentspan.agents.result import FinishReason
+        result = runtime._derive_finish_reason("COMPLETED", {"finishReason": "rejected"})
+        assert result == FinishReason.REJECTED
+
+    def test_stop_finish_reason(self, runtime):
+        from agentspan.agents.result import FinishReason
+        result = runtime._derive_finish_reason("COMPLETED", {"finishReason": "STOP"})
+        assert result == FinishReason.STOP
+
+    def test_length_finish_reason(self, runtime):
+        from agentspan.agents.result import FinishReason
+        result = runtime._derive_finish_reason("COMPLETED", {"finishReason": "LENGTH"})
+        assert result == FinishReason.LENGTH
+
+
+class TestNormalizeOutput:
+    """Test _normalize_output static method."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients") as MockClients:
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                mock_clients = MagicMock()
+                MockClients.return_value = mock_clients
+                from agentspan.agents.runtime.runtime import AgentRuntime
+                from agentspan.agents.runtime.config import AgentConfig
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_rejected_output_preserved(self, runtime):
+        """Rejection output with finishReason=rejected is kept as-is."""
+        output = {"finishReason": "rejected", "rejectionReason": "Not allowed"}
+        result = runtime._normalize_output(output, "COMPLETED")
+        assert result == output
+        assert result["finishReason"] == "rejected"
+
+    def test_dict_output_preserved(self, runtime):
+        result = runtime._normalize_output({"result": "ok"}, "COMPLETED")
+        assert result == {"result": "ok"}
+
+    def test_string_output_wrapped(self, runtime):
+        result = runtime._normalize_output("hello", "COMPLETED")
+        assert result == {"result": "hello"}
+
+    def test_server_normalized_parallel_output_passthrough(self, runtime):
+        """Server-normalized parallel output is passed through as-is."""
+        output = {
+            "result": "[agent_a]: Answer A\n\n[agent_b]: Answer B",
+            "subResults": {"agent_a": "Answer A", "agent_b": "Answer B"},
+        }
+        result = runtime._normalize_output(output, "COMPLETED")
+        assert result == output  # no SDK-side transformation
+
+
+class TestExtractSubResults:
+    """Test _extract_sub_results static method."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients") as MockClients:
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                mock_clients = MagicMock()
+                MockClients.return_value = mock_clients
+                from agentspan.agents.runtime.runtime import AgentRuntime
+                from agentspan.agents.runtime.config import AgentConfig
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_extracts_sub_results_from_server_output(self, runtime):
+        output = {"result": "joined text", "subResults": {"a": "X", "b": "Y"}}
+        assert runtime._extract_sub_results(output) == {"a": "X", "b": "Y"}
+
+    def test_returns_empty_dict_when_no_sub_results(self, runtime):
+        output = {"result": "simple text"}
+        assert runtime._extract_sub_results(output) == {}
+
+    def test_returns_empty_dict_for_non_dict(self, runtime):
+        assert runtime._extract_sub_results("not a dict") == {}
+
+
+class TestInjectSessionMemory:
+    """Test _inject_session_memory static method."""
+
+    def test_injects_messages_into_empty_memory(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+        agent = Agent(name="test", model="openai/gpt-4o")
+        prior = [{"role": "user", "message": "Hi"}, {"role": "assistant", "message": "Hello"}]
+
+        result = AgentRuntime._inject_session_memory(agent, prior)
+
+        assert result is not agent  # shallow copy
+        assert result.memory is not None
+        assert len(result.memory.messages) == 2
+        assert result.memory.messages[0]["message"] == "Hi"
+
+    def test_prepends_to_existing_memory(self):
+        from agentspan.agents.runtime.runtime import AgentRuntime
+        from agentspan.agents.memory import ConversationMemory
+
+        existing_messages = [{"role": "system", "message": "You are helpful"}]
+        agent = Agent(name="test", model="openai/gpt-4o", memory=ConversationMemory(messages=existing_messages))
+        prior = [{"role": "user", "message": "Hi"}]
+
+        result = AgentRuntime._inject_session_memory(agent, prior)
+
+        assert len(result.memory.messages) == 2
+        assert result.memory.messages[0]["role"] == "user"
+        assert result.memory.messages[1]["role"] == "system"
+
+
+class TestRequiredToolsAgent:
+    """Test that required_tools parameter works on Agent."""
+
+    def test_required_tools_default_empty(self):
+        agent = Agent(name="test", model="openai/gpt-4o")
+        assert agent.required_tools == []
+
+    def test_required_tools_set(self):
+        agent = Agent(name="test", model="openai/gpt-4o", required_tools=["submit_filing"])
+        assert agent.required_tools == ["submit_filing"]
+
+    def test_required_tools_serialized(self):
+        from agentspan.agents.config_serializer import AgentConfigSerializer
+        agent = Agent(name="test", model="openai/gpt-4o", required_tools=["submit", "approve"])
+        serializer = AgentConfigSerializer()
+        config = serializer.serialize(agent)
+        assert config["requiredTools"] == ["submit", "approve"]
+
+    def test_required_tools_not_serialized_when_empty(self):
+        from agentspan.agents.config_serializer import AgentConfigSerializer
+        agent = Agent(name="test", model="openai/gpt-4o")
+        serializer = AgentConfigSerializer()
+        config = serializer.serialize(agent)
+        assert "requiredTools" not in config
+
+
+class TestNormalizeHandoffTarget:
+    """Test _normalize_handoff_target() strips strategy prefixes correctly."""
+
+    def test_indexed_handoff(self):
+        """Standard handoff: {parent}_handoff_{idx}_{child}."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("support_handoff_0_billing") == "billing"
+
+    def test_indexed_agent(self):
+        """Round-robin/swarm: {parent}_agent_{idx}_{child}."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("panel_agent_1_expert") == "expert"
+
+    def test_indexed_step(self):
+        """Sequential: {parent}_step_{idx}_{child}."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("pipeline_step_0_researcher") == "researcher"
+
+    def test_indexed_parallel(self):
+        """Parallel: {parent}_parallel_{idx}_{child}."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("analysis_parallel_0_pros_analyst") == "pros_analyst"
+
+    def test_no_index_handoff(self):
+        """Handoff without index: {parent}_handoff_{child}."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("test_handoff_agent_b") == "agent_b"
+
+    def test_no_index_transfer(self):
+        """Transfer without index: {parent}_transfer_{child}."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("test_transfer_agent_b") == "agent_b"
+
+    def test_trailing_turn_counter(self):
+        """Strips trailing __N turn counter."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("0_billing__1") == "billing"
+
+    def test_round_robin_with_turn_counter(self):
+        """Round-robin with trailing turn counter."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("debate_round_robin_1_optimist__1") == "optimist"
+
+    def test_leading_digit_prefix(self):
+        """Fallback: strips leading digit_ prefix."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("0_billing") == "billing"
+
+    def test_already_clean(self):
+        """Already clean name returned as-is."""
+        from agentspan.agents.runtime.runtime import _normalize_handoff_target
+        assert _normalize_handoff_target("billing") == "billing"
+
+
+class TestTimeoutParameter:
+    """Test run(timeout=N) threading through to start payload and polling."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.runtime import AgentRuntime
+                from agentspan.agents.runtime.config import AgentConfig
+                config = AgentConfig(server_url="http://fake:8080")
+                return AgentRuntime(config=config)
+
+    def test_timeout_included_in_start_payload(self, runtime):
+        """run(timeout=5) sends timeoutSeconds: 5 in the start payload."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_via_server(agent, "hello", timeout=5)
+
+        payload = mock_post.call_args[1]["json"]
+        assert payload["timeoutSeconds"] == 5
+
+    def test_no_timeout_omits_field(self, runtime):
+        """run() with no timeout does not include timeoutSeconds in payload."""
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_via_server(agent, "hello")
+
+        payload = mock_post.call_args[1]["json"]
+        assert "timeoutSeconds" not in payload
+
+    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    def test_poll_uses_agent_timeout_seconds(self, mock_sleep, runtime):
+        """Agent(timeout_seconds=60) + run() → polling uses 60s."""
+        running = AgentStatus(
+            workflow_id="wf-1", is_complete=False, is_running=True, status="RUNNING",
+        )
+        runtime.get_status = MagicMock(return_value=running)
+
+        runtime._poll_status_until_complete("wf-1", timeout=3)
+
+        # Should have polled for ~3 iterations (timeout=3s, interval=1s)
+        assert runtime.get_status.call_count >= 3
+        assert runtime.get_status.call_count <= 4
+
+    @patch("agentspan.agents.runtime.runtime.time.sleep", return_value=None)
+    def test_poll_defaults_to_300s_without_timeout(self, mock_sleep, runtime):
+        """Polling defaults to 300s when no timeout is specified."""
+        completed = AgentStatus(
+            workflow_id="wf-1", is_complete=True, status="COMPLETED", output="done",
+        )
+        runtime.get_status = MagicMock(return_value=completed)
+
+        result = runtime._poll_status_until_complete("wf-1")
+
+        assert result.is_complete is True
+
+
+class TestUnrecognizedKwargs:
+    """Test that unrecognized kwargs produce a warning."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.runtime import AgentRuntime
+                from agentspan.agents.runtime.config import AgentConfig
+                config = AgentConfig(server_url="http://fake:8080")
+                return AgentRuntime(config=config)
+
+    def test_warns_on_unrecognized_kwargs(self, runtime, caplog):
+        """run(agent, prompt, foo=1) logs a warning."""
+        import logging
+
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        # Patch the framework detection to return None (native agent)
+        with patch("agentspan.agents.frameworks.serializer.detect_framework", return_value=None):
+            with patch.object(runtime, "_prepare_workers"):
+                with patch.object(runtime, "_start_via_server", return_value="wf-1"):
+                    with patch.object(runtime, "_poll_status_until_complete") as mock_poll:
+                        mock_poll.return_value = AgentStatus(
+                            workflow_id="wf-1", is_complete=True, status="COMPLETED",
+                            output={"result": "ok"},
+                        )
+                        with patch.object(runtime, "_workflow_client") as mock_wf:
+                            mock_wf.get_workflow.side_effect = Exception("skip")
+                            with caplog.at_level(logging.WARNING, logger="agentspan.agents.runtime"):
+                                runtime.run(agent, "hello", foo=1)
+
+        assert "Unrecognized keyword arguments: foo" in caplog.text
+
+
+class TestExceptionWrapping:
+    """Test BUG-P3-05: HTTP errors are wrapped in SDK exceptions."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.runtime import AgentRuntime
+                from agentspan.agents.runtime.config import AgentConfig
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_get_status_404_raises_agent_not_found(self, runtime):
+        """get_status with a 404 response raises AgentNotFoundError."""
+        from agentspan.agents.exceptions import AgentNotFoundError
+        import requests
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_resp.text = "Not Found"
+        mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=mock_resp
+        )
+
+        with patch("requests.get", return_value=mock_resp):
+            with pytest.raises(AgentNotFoundError) as exc_info:
+                runtime.get_status("nonexistent-id")
+            assert exc_info.value.status_code == 404
+
+    def test_get_status_500_raises_agent_api_error(self, runtime):
+        """get_status with a 500 response raises AgentAPIError (not AgentNotFoundError)."""
+        from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError
+        import requests
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_resp.text = "Internal Server Error"
+        mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=mock_resp
+        )
+
+        with patch("requests.get", return_value=mock_resp):
+            with pytest.raises(AgentAPIError) as exc_info:
+                runtime.get_status("some-id")
+            assert exc_info.value.status_code == 500
+            assert not isinstance(exc_info.value, AgentNotFoundError)
+
+    def test_respond_error_wrapped(self, runtime):
+        """respond() wraps HTTPError in AgentAPIError."""
+        from agentspan.agents.exceptions import AgentAPIError
+        import requests
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        mock_resp.text = "Bad Request"
+        mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=mock_resp
+        )
+
+        with patch("requests.post", return_value=mock_resp):
+            with pytest.raises(AgentAPIError) as exc_info:
+                runtime.respond("wf-id", "some output")
+            assert exc_info.value.status_code == 400
+
+
+class TestSSEFallbackWarnsOnce:
+    """Test BUG-P3-03: SSE fallback warning fires only once."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.runtime import AgentRuntime
+                from agentspan.agents.runtime.config import AgentConfig
+                config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
+                return AgentRuntime(config=config)
+
+    def test_sse_fallback_logs_once(self, runtime, caplog):
+        """SSE fallback message should be logged only on the first failure."""
+        from agentspan.agents.runtime.http_client import SSEUnavailableError
+
+        call_count = 0
+
+        def mock_stream_sse(workflow_id):
+            raise SSEUnavailableError("no SSE")
+
+        def mock_stream_polling(workflow_id):
+            yield from []
+
+        with patch.object(runtime, "_stream_sse", side_effect=mock_stream_sse):
+            with patch.object(runtime, "_stream_polling", side_effect=mock_stream_polling):
+                with caplog.at_level(logging.INFO, logger="agentspan.agents.runtime"):
+                    # First call — should log
+                    list(runtime._stream_workflow("wf-1"))
+                    # Second call — should NOT log again
+                    list(runtime._stream_workflow("wf-2"))
+
+        fallback_messages = [r for r in caplog.records if "SSE unavailable" in r.message]
+        assert len(fallback_messages) == 1

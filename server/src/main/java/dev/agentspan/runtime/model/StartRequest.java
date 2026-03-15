@@ -35,4 +35,7 @@ public class StartRequest {
 
     /** Raw framework-specific agent config. Used when {@code framework} is non-null. */
     private Map<String, Object> rawConfig;
+
+    /** Per-call timeout override (seconds). Applied server-side to the workflow definition. */
+    private Integer timeoutSeconds;
 }

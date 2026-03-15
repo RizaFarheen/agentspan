@@ -334,6 +334,65 @@ class AgentCompilerTest {
     }
 
     @Test
+    void testCompileWithRequiredTools() {
+        ToolConfig tool = ToolConfig.builder()
+            .name("submit_filing")
+            .description("Submit a filing")
+            .inputSchema(Map.of("type", "object"))
+            .toolType("worker")
+            .build();
+
+        AgentConfig config = AgentConfig.builder()
+            .name("filing_agent")
+            .model("openai/gpt-4o")
+            .instructions("You must submit a filing.")
+            .tools(List.of(tool))
+            .requiredTools(List.of("submit_filing"))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // Should have: init_state + outer DO_WHILE (containing inner loop + check)
+        assertThat(wf.getTasks()).hasSize(2);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SET_VARIABLE");
+
+        WorkflowTask outerLoop = wf.getTasks().get(1);
+        assertThat(outerLoop.getType()).isEqualTo("DO_WHILE");
+        assertThat(outerLoop.getTaskReferenceName()).isEqualTo("filing_agent_required_tools_loop");
+
+        // Outer loop should contain: inner loop + INLINE check
+        assertThat(outerLoop.getLoopOver()).hasSize(2);
+        assertThat(outerLoop.getLoopOver().get(0).getType()).isEqualTo("DO_WHILE");
+        assertThat(outerLoop.getLoopOver().get(0).getTaskReferenceName()).isEqualTo("filing_agent_loop");
+        assertThat(outerLoop.getLoopOver().get(1).getType()).isEqualTo("INLINE");
+        assertThat(outerLoop.getLoopOver().get(1).getTaskReferenceName()).isEqualTo("filing_agent_required_tools_check");
+    }
+
+    @Test
+    void testCompileWithoutRequiredToolsHasNoOuterLoop() {
+        ToolConfig tool = ToolConfig.builder()
+            .name("search")
+            .description("Search")
+            .inputSchema(Map.of("type", "object"))
+            .toolType("worker")
+            .build();
+
+        AgentConfig config = AgentConfig.builder()
+            .name("normal_agent")
+            .model("openai/gpt-4o")
+            .tools(List.of(tool))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // Should have init_state + inner loop (no outer loop)
+        assertThat(wf.getTasks()).hasSize(2);
+        WorkflowTask loop = wf.getTasks().get(1);
+        assertThat(loop.getType()).isEqualTo("DO_WHILE");
+        assertThat(loop.getTaskReferenceName()).isEqualTo("normal_agent_loop");
+    }
+
+    @Test
     void testCompileWithAgentTool() {
         // Agent tool: a tool that wraps another agent
         ToolConfig agentTool = ToolConfig.builder()

@@ -212,6 +212,7 @@ public class MultiAgentCompiler {
 
         wf.setTasks(List.of(initVar, loop, finalLlm));
         wf.setOutputParameters(Map.of("result", ref(config.getName() + "_final.output.result")));
+        agentCompiler.applyTimeout(wf, config);
         return wf;
     }
 
@@ -248,6 +249,7 @@ public class MultiAgentCompiler {
 
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of("result", prevOutputRef));
+        agentCompiler.applyTimeout(wf, config);
         return wf;
     }
 
@@ -281,17 +283,62 @@ public class MultiAgentCompiler {
         joinTask.setTaskReferenceName(config.getName() + "_fork_join");
         joinTask.setJoinOn(joinOn);
 
-        wf.setTasks(List.of(forkTask, joinTask));
+        // INLINE task to aggregate per-agent results into a consistent format:
+        //   { "result": "<joined string>", "subResults": { "agentName": "output", ... } }
+        WorkflowTask aggregateTask = new WorkflowTask();
+        aggregateTask.setType("INLINE");
+        aggregateTask.setTaskReferenceName(config.getName() + "_aggregate");
+        Map<String, Object> aggInputs = new LinkedHashMap<>();
+        aggInputs.put("evaluatorType", "graaljs");
 
-        // Aggregate results
-        Map<String, Object> results = new LinkedHashMap<>();
+        // Pass each agent's result as a named input
+        Map<String, Object> agentResults = new LinkedHashMap<>();
         for (int i = 0; i < config.getAgents().size(); i++) {
             AgentConfig sub = config.getAgents().get(i);
             String taskRef = config.getName() + "_parallel_" + i + "_" + sub.getName();
-            results.put(sub.getName(), AgentCompiler.subAgentResultRef(sub, taskRef));
+            agentResults.put(sub.getName(), AgentCompiler.subAgentResultRef(sub, taskRef));
         }
-        wf.setOutputParameters(Map.of("result", results));
+        aggInputs.put("agentResults", agentResults);
+
+        // Build the aggregation script
+        List<String> agentNames = config.getAgents().stream()
+            .map(AgentConfig::getName)
+            .collect(java.util.stream.Collectors.toList());
+        aggInputs.put("expression", buildParallelAggregateScript(agentNames));
+        aggregateTask.setInputParameters(aggInputs);
+
+        wf.setTasks(List.of(forkTask, joinTask, aggregateTask));
+
+        // Output references the INLINE task's result
+        String aggRef = config.getName() + "_aggregate";
+        wf.setOutputParameters(Map.of(
+            "result", "${" + aggRef + ".output.result.result}",
+            "subResults", "${" + aggRef + ".output.result.subResults}"
+        ));
+        agentCompiler.applyTimeout(wf, config);
         return wf;
+    }
+
+    /**
+     * Build a GraalJS script that aggregates parallel agent results into a
+     * consistent output format with a joined string result and per-agent subResults.
+     */
+    private String buildParallelAggregateScript(List<String> agentNames) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("(function() {\n");
+        sb.append("  var results = $.agentResults;\n");
+        sb.append("  var subResults = {};\n");
+        sb.append("  var parts = [];\n");
+        for (String name : agentNames) {
+            sb.append("  var v_").append(name).append(" = results['").append(name).append("'];\n");
+            sb.append("  subResults['").append(name).append("'] = (v_").append(name).append(" != null) ? String(v_").append(name).append(") : '';\n");
+            sb.append("  if (v_").append(name).append(" != null && String(v_").append(name).append(") !== '') {\n");
+            sb.append("    parts.push('[").append(name).append("]: ' + String(v_").append(name).append("));\n");
+            sb.append("  }\n");
+        }
+        sb.append("  return { result: parts.join('\\n\\n'), subResults: subResults };\n");
+        sb.append("})();");
+        return sb.toString();
     }
 
     // ── Router strategy ─────────────────────────────────────────────
@@ -471,6 +518,7 @@ public class MultiAgentCompiler {
 
         wf.setTasks(List.of(initVar, loop, finalLlm));
         wf.setOutputParameters(Map.of("result", ref(config.getName() + "_final.output.result")));
+        agentCompiler.applyTimeout(wf, config);
         return wf;
     }
 
@@ -541,6 +589,7 @@ public class MultiAgentCompiler {
 
         wf.setTasks(List.of(initVar, loop));
         wf.setOutputParameters(Map.of("result", "${workflow.variables.conversation}"));
+        agentCompiler.applyTimeout(wf, config);
         return wf;
     }
 
@@ -662,6 +711,7 @@ public class MultiAgentCompiler {
 
         wf.setTasks(List.of(initVar, loop, finalLlm));
         wf.setOutputParameters(Map.of("result", ref(config.getName() + "_final.output.result")));
+        agentCompiler.applyTimeout(wf, config);
         return wf;
     }
 
@@ -925,6 +975,7 @@ public class MultiAgentCompiler {
 
         wf.setTasks(List.of(initVar, loop));
         wf.setOutputParameters(Map.of("result", "${workflow.variables.conversation}"));
+        agentCompiler.applyTimeout(wf, config);
         return wf;
     }
 
@@ -1167,7 +1218,6 @@ public class MultiAgentCompiler {
         routerWf.setName(taskRef + "_wf");
         routerWf.setVersion(1);
         routerWf.setDescription("Router sub-workflow for " + taskRef);
-        routerWf.setTimeoutSeconds(60L);
         routerWf.setInputParameters(List.of("conversation"));
         routerWf.setTasks(List.of(llm));
         routerWf.setOutputParameters(Map.of("result", ref(taskRef + "_llm.output.result")));

@@ -105,10 +105,16 @@ class MultiAgentCompilerTest {
 
         WorkflowDef wf = compiler.compile(config);
 
-        // Fork + Join
-        assertThat(wf.getTasks()).hasSize(2);
+        // Fork + Join + Aggregate INLINE
+        assertThat(wf.getTasks()).hasSize(3);
         assertThat(wf.getTasks().get(0).getType()).isEqualTo("FORK_JOIN");
         assertThat(wf.getTasks().get(1).getType()).isEqualTo("JOIN");
+        assertThat(wf.getTasks().get(2).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(2).getTaskReferenceName()).isEqualTo("parallel_team_aggregate");
+
+        // Output references the aggregate task — result is always a string
+        assertThat(wf.getOutputParameters().get("result").toString()).contains("_aggregate");
+        assertThat(wf.getOutputParameters()).containsKey("subResults");
     }
 
     @Test
@@ -690,5 +696,135 @@ class MultiAgentCompilerTest {
         assertThat(systemMsg).contains("COMPLETE request");
         // Should NOT contain the old early-termination language
         assertThat(systemMsg).doesNotContain("Once an agent has responded, you should typically respond DONE");
+    }
+
+    // ── Timeout tests ──────────────────────────────────────────────────
+
+    @Test
+    void testHandoffAppliesTimeout() {
+        AgentConfig config = AgentConfig.builder()
+            .name("team")
+            .model("openai/gpt-4o")
+            .instructions("Route tasks.")
+            .strategy("handoff")
+            .timeoutSeconds(120)
+            .agents(List.of(
+                simpleSubAgent("a", "A"),
+                simpleSubAgent("b", "B")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+        assertThat(wf.getTimeoutSeconds()).isEqualTo(120L);
+        assertThat(wf.getTimeoutPolicy()).isEqualTo(WorkflowDef.TimeoutPolicy.TIME_OUT_WF);
+    }
+
+    @Test
+    void testSequentialAppliesTimeout() {
+        AgentConfig config = AgentConfig.builder()
+            .name("pipeline")
+            .model("openai/gpt-4o")
+            .instructions("Run steps.")
+            .strategy("sequential")
+            .timeoutSeconds(60)
+            .agents(List.of(
+                simpleSubAgent("step1", "First"),
+                simpleSubAgent("step2", "Second")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+        assertThat(wf.getTimeoutSeconds()).isEqualTo(60L);
+        assertThat(wf.getTimeoutPolicy()).isEqualTo(WorkflowDef.TimeoutPolicy.TIME_OUT_WF);
+    }
+
+    @Test
+    void testParallelAppliesTimeout() {
+        AgentConfig config = AgentConfig.builder()
+            .name("parallel_team")
+            .model("openai/gpt-4o")
+            .instructions("Run in parallel.")
+            .strategy("parallel")
+            .timeoutSeconds(90)
+            .agents(List.of(
+                simpleSubAgent("p1", "Agent 1"),
+                simpleSubAgent("p2", "Agent 2")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+        assertThat(wf.getTimeoutSeconds()).isEqualTo(90L);
+    }
+
+    @Test
+    void testRouterAppliesTimeout() {
+        AgentConfig config = AgentConfig.builder()
+            .name("router_team")
+            .model("openai/gpt-4o")
+            .instructions("Route intelligently.")
+            .strategy("router")
+            .timeoutSeconds(45)
+            .agents(List.of(
+                simpleSubAgent("r1", "Agent 1"),
+                simpleSubAgent("r2", "Agent 2")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+        assertThat(wf.getTimeoutSeconds()).isEqualTo(45L);
+    }
+
+    @Test
+    void testSwarmAppliesTimeout() {
+        AgentConfig config = AgentConfig.builder()
+            .name("swarm_team")
+            .model("openai/gpt-4o")
+            .instructions("Swarm orchestration.")
+            .strategy("swarm")
+            .timeoutSeconds(200)
+            .agents(List.of(
+                simpleSubAgent("s1", "Agent 1"),
+                simpleSubAgent("s2", "Agent 2")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+        assertThat(wf.getTimeoutSeconds()).isEqualTo(200L);
+    }
+
+    @Test
+    void testRoundRobinAppliesTimeout() {
+        AgentConfig config = AgentConfig.builder()
+            .name("rr_team")
+            .model("openai/gpt-4o")
+            .instructions("Take turns.")
+            .strategy("round_robin")
+            .timeoutSeconds(30)
+            .agents(List.of(
+                simpleSubAgent("rr1", "Agent 1"),
+                simpleSubAgent("rr2", "Agent 2")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+        assertThat(wf.getTimeoutSeconds()).isEqualTo(30L);
+    }
+
+    @Test
+    void testMultiAgentNoTimeoutSetsNoPolicy() {
+        AgentConfig config = AgentConfig.builder()
+            .name("no_timeout_team")
+            .model("openai/gpt-4o")
+            .instructions("No timeout set.")
+            .strategy("handoff")
+            .agents(List.of(
+                simpleSubAgent("a", "A"),
+                simpleSubAgent("b", "B")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+        // Default AgentCompiler timeoutSeconds is 0, so no timeout should be set
+        assertThat(wf.getTimeoutPolicy()).isNull();
     }
 }

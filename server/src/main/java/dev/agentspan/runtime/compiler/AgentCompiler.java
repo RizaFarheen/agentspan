@@ -206,6 +206,19 @@ public class AgentCompiler {
             llmTask = buildLlmTask(config, parsed, llmRef, toolSpecs);
         }
 
+        // Inject human feedback context for agents with approval-required tools.
+        // When a human responds with custom data (e.g. {"approved": true, "department": "eng"}),
+        // the extra fields are stored in workflow.variables._human_feedback.
+        // This message makes those fields visible to the LLM on subsequent iterations.
+        if (hasApproval) {
+            @SuppressWarnings("unchecked")
+            List<Object> msgs = (List<Object>) llmTask.getInputParameters().get("messages");
+            msgs.add(Map.of(
+                "role", "system",
+                "message", "${workflow.variables._human_feedback}"
+            ));
+        }
+
         // Tool call routing SwitchTask
         WorkflowTask toolRouter;
         if (mcpResult != null) {
@@ -348,7 +361,34 @@ public class AgentCompiler {
         initState.setInputParameters(Map.of("_agent_state", new LinkedHashMap<>()));
         allTasks.add(initState);
 
-        allTasks.add(loop);
+        // Required tools enforcement: wrap loop + check in outer DO_WHILE
+        if (config.getRequiredTools() != null && !config.getRequiredTools().isEmpty()) {
+            String checkRef = config.getName() + "_required_tools_check";
+            WorkflowTask checkTask = new WorkflowTask();
+            checkTask.setType("INLINE");
+            checkTask.setTaskReferenceName(checkRef);
+            checkTask.setInputParameters(Map.of(
+                "evaluatorType", "graaljs",
+                "expression", JavaScriptBuilder.requiredToolsCheckScript(config.getRequiredTools()),
+                "completedTaskNames", ref(loopRef + ".output")
+            ));
+
+            String outerLoopRef = config.getName() + "_required_tools_loop";
+            String outerCondition = String.format(
+                "if ( $.%s.output.satisfied == false && $.%s['iteration'] < 3 ) { true; } else { false; }",
+                checkRef, outerLoopRef
+            );
+            Map<String, Object> outerInputs = new LinkedHashMap<>();
+            outerInputs.put(checkRef, "${" + checkRef + "}");
+            outerInputs.put(outerLoopRef, "${" + outerLoopRef + "}");
+
+            WorkflowTask outerLoop = buildDoWhile(
+                outerLoopRef, outerCondition, List.of(loop, checkTask), outerInputs
+            );
+            allTasks.add(outerLoop);
+        } else {
+            allTasks.add(loop);
+        }
 
         // Callback: after_agent (runs once after the loop)
         CallbackConfig afterAgent = findCallback(config, "after_agent");
@@ -358,10 +398,12 @@ public class AgentCompiler {
 
         wf.setTasks(allTasks);
 
-        wf.setOutputParameters(Map.of(
-            "result", ref(llmRef + ".output.result"),
-            "finishReason", ref(llmRef + ".output.finishReason")
-        ));
+        Map<String, Object> outputParams = new LinkedHashMap<>();
+        outputParams.put("result", ref(llmRef + ".output.result"));
+        outputParams.put("finishReason", ref(llmRef + ".output.finishReason"));
+        // Include rejection info if present
+        outputParams.put("rejectionReason", "${workflow.variables.rejectionReason}");
+        wf.setOutputParameters(outputParams);
         applyTimeout(wf, config);
         return wf;
     }
