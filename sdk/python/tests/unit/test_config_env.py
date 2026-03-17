@@ -222,8 +222,8 @@ class TestServerAutoStart:
 
         mock_subprocess.run.assert_called_once_with(
             ["/usr/local/bin/agentspan", "server", "start"],
-            stdout=mock.ANY,
-            stderr=mock.ANY,
+            capture_output=True,
+            text=True,
         )
 
 
