@@ -14,6 +14,11 @@
 - Validation/verification is a separate stage that comes BEFORE documentation.
 - Documentation updates are a separate final stage.
 
+## Native Execution
+
+- Native mode runs examples directly via provider SDK (no server needed)
+- Shim: `uv run python3 -m validation.native.shim <example_script.py>`
+
 ## Reference
 
 - SDK API docs: `AGENTS.md`
