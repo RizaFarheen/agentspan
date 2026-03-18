@@ -652,8 +652,8 @@ public class AgentService {
         taskDef.setRetryCount(2);
         taskDef.setRetryDelaySeconds(2);
         taskDef.setRetryLogic(TaskDef.RetryLogic.LINEAR_BACKOFF);
-        taskDef.setTimeoutSeconds(600);
-        taskDef.setResponseTimeoutSeconds(600);
+        taskDef.setTimeoutSeconds(120);
+        taskDef.setResponseTimeoutSeconds(120);
         taskDef.setTimeoutPolicy(TaskDef.TimeoutPolicy.RETRY);
 
         try {

@@ -49,8 +49,8 @@ def _default_task_def(name: str) -> Any:
     td.retry_count = 2
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
-    td.timeout_seconds = 600
-    td.response_timeout_seconds = 600
+    td.timeout_seconds = 120
+    td.response_timeout_seconds = 120
     td.timeout_policy = "RETRY"
     return td
 
@@ -2810,14 +2810,6 @@ class AgentRuntime:
                         output_data = getattr(task, "output_data", {}) or {}
 
                         # Built-in Conductor task types (not tool workers)
-                        _BUILTIN_TYPES = {
-                            "DO_WHILE", "LLM_CHAT_COMPLETE", "SWITCH", "INLINE",
-                            "FORK", "JOIN", "SUB_WORKFLOW", "HUMAN", "TERMINATE",
-                            "SET_VARIABLE", "WAIT", "HTTP", "EVENT", "LAMBDA",
-                            "FORK_JOIN", "FORK_JOIN_DYNAMIC", "EXCLUSIVE_JOIN",
-                            "SIMPLE",
-                        }
-
                         # LLM task -> THINKING
                         if "LLM_CHAT_COMPLETE" in task_type:
                             yield AgentEvent(
@@ -2845,8 +2837,8 @@ class AgentRuntime:
 
                         # Worker/tool task -> TOOL_CALL + TOOL_RESULT (server compile)
                         # Server-compiled workflows use the tool function name as
-                        # the task type (e.g. "get_weather") with a call-ID ref.
-                        elif task_type not in _BUILTIN_TYPES and task_status == "COMPLETED":
+                        # the task type (e.g. "get_weather") with a "call_" ref.
+                        elif task_ref.startswith("call_") and task_type not in self._SYSTEM_TASK_TYPES and task_status == "COMPLETED":
                             fn_name = task_type.lower()
                             yield AgentEvent(
                                 type=EventType.TOOL_CALL,
@@ -3262,14 +3254,6 @@ class AgentRuntime:
                         task_status = str(getattr(task, "status", "")).upper()
                         output_data = getattr(task, "output_data", {}) or {}
 
-                        _BUILTIN_TYPES = {
-                            "DO_WHILE", "LLM_CHAT_COMPLETE", "SWITCH", "INLINE",
-                            "FORK", "JOIN", "SUB_WORKFLOW", "HUMAN", "TERMINATE",
-                            "SET_VARIABLE", "WAIT", "HTTP", "EVENT", "LAMBDA",
-                            "FORK_JOIN", "FORK_JOIN_DYNAMIC", "EXCLUSIVE_JOIN",
-                            "SIMPLE",
-                        }
-
                         if "LLM_CHAT_COMPLETE" in task_type:
                             yield AgentEvent(
                                 type=EventType.THINKING,
@@ -3291,7 +3275,7 @@ class AgentRuntime:
                                     result=output_data.get("result"),
                                     workflow_id=workflow_id,
                                 )
-                        elif task_type not in _BUILTIN_TYPES and task_status == "COMPLETED":
+                        elif task_ref.startswith("call_") and task_type not in self._SYSTEM_TASK_TYPES and task_status == "COMPLETED":
                             fn_name = task_type.lower()
                             yield AgentEvent(
                                 type=EventType.TOOL_CALL,
@@ -3881,21 +3865,47 @@ class AgentRuntime:
             return workflow_run.variables.get("messages", [])
         return []
 
+    # System task types that are never user-defined tool calls
+    _SYSTEM_TASK_TYPES = frozenset({
+        "LLM_CHAT_COMPLETE", "SWITCH", "DO_WHILE", "INLINE", "SET_VARIABLE",
+        "FORK", "FORK_JOIN_DYNAMIC", "JOIN", "SUB_WORKFLOW", "HUMAN",
+        "TERMINATE", "HTTP", "CALL_MCP_TOOL", "LIST_MCP_TOOLS",
+        "WAIT", "EVENT", "DECISION",
+    })
+
     def _extract_tool_calls(self, workflow_run: Any) -> List[Dict[str, Any]]:
-        """Extract tool call history from workflow tasks."""
+        """Extract tool call history from workflow tasks.
+
+        Tool tasks are identified by their reference task name starting with
+        ``call_`` (the pattern the compiler uses for all tool invocations).
+        """
         tool_calls: List[Dict[str, Any]] = []
-        if hasattr(workflow_run, "tasks") and workflow_run.tasks:
-            for task in workflow_run.tasks:
-                if hasattr(task, "task_type") and "tool" in str(
-                    getattr(task, "task_type", "")
-                ).lower():
-                    tool_calls.append(
-                        {
-                            "name": getattr(task, "reference_task_name", ""),
-                            "input": getattr(task, "input_data", {}),
-                            "output": getattr(task, "output_data", {}),
-                        }
-                    )
+        if not (hasattr(workflow_run, "tasks") and workflow_run.tasks):
+            return tool_calls
+
+        for task in workflow_run.tasks:
+            task_type = str(getattr(task, "task_type", "")).upper()
+            ref = str(getattr(task, "reference_task_name", ""))
+
+            # Skip known system tasks
+            if task_type in self._SYSTEM_TASK_TYPES:
+                continue
+
+            # Tool invocation refs follow the pattern call_<hash>__<turn>
+            if not ref.startswith("call_"):
+                continue
+
+            input_data = dict(getattr(task, "input_data", {}) or {})
+            # Strip internal Conductor keys from the displayed args
+            for k in ("_agent_state", "method", "__humanTaskDefinition"):
+                input_data.pop(k, None)
+
+            tool_calls.append({
+                "name": task_type.lower(),
+                "args": input_data,
+                "result": getattr(task, "output_data", {}),
+            })
+
         return tool_calls
 
     def _extract_token_usage(self, workflow_run: Any) -> Optional[TokenUsage]:
