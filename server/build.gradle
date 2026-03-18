@@ -82,7 +82,7 @@ configurations.all {
     exclude group: 'com.oracle.coherence.ce'
 
     // Google Cloud Vertex AI / gRPC protos (~69MB) — not used
-    exclude group: 'com.google.cloud', module: 'google-cloud-aiplatform'
+    //exclude group: 'com.google.cloud', module: 'google-cloud-aiplatform'
 
     // Azure Application Insights (~7MB) — not used
     exclude group: 'com.microsoft.azure', module: 'applicationinsights-core'

@@ -78,6 +78,7 @@ class WorkerManager:
                 workers=[],
                 configuration=self._configuration,
                 scan_for_annotated_workers=True,
+                monitor_processes=False,
             )
 
             # Set worker processes to daemon BEFORE starting them.
@@ -113,7 +114,6 @@ class WorkerManager:
         try:
             from conductor.client.automator.task_handler import _decorated_functions
             from conductor.client.worker.worker import Worker
-            from conductor.client.automator.worker_config_resolver import resolve_worker_config
         except ImportError:
             return  # older SDK version — skip
 
@@ -130,31 +130,19 @@ class WorkerManager:
 
             fn = record["func"]
             try:
-                code_config = {
-                    "poll_interval": record["poll_interval"],
-                    "domain": domain,
-                    "worker_id": record["worker_id"],
-                    "thread_count": record.get("thread_count", 10),
-                    "register_task_def": record.get("register_task_def", False),
-                    "poll_timeout": record.get("poll_timeout", 100),
-                    "lease_extend_enabled": record.get("lease_extend_enabled", True),
-                    "overwrite_task_def": record.get("overwrite_task_def", True),
-                    "strict_schema": record.get("strict_schema", False),
-                }
-                resolved = resolve_worker_config(worker_name=task_def_name, **code_config)
                 worker = Worker(
                     task_definition_name=task_def_name,
                     execute_function=fn,
-                    worker_id=resolved["worker_id"],
-                    domain=resolved["domain"],
-                    poll_interval=resolved["poll_interval"],
-                    thread_count=resolved["thread_count"],
-                    register_task_def=resolved["register_task_def"],
-                    poll_timeout=resolved.get("poll_timeout", 100),
-                    lease_extend_enabled=resolved.get("lease_extend_enabled", True),
-                    strict_schema=resolved.get("strict_schema", False),
-                    task_def=record.get("task_def"),
-                    overwrite_task_def=resolved.get("overwrite_task_def", True),
+                    poll_interval=record.get("poll_interval", 100),
+                    domain=domain,
+                    worker_id=record.get("worker_id"),
+                    thread_count=record.get("thread_count", 10),
+                    register_task_def=record.get("register_task_def", False),
+                    poll_timeout=record.get("poll_timeout", 100),
+                    lease_extend_enabled=record.get("lease_extend_enabled", True),
+                    strict_schema=record.get("strict_schema", False),
+                    task_def_template=record.get("task_def"),
+                    overwrite_task_def=record.get("overwrite_task_def", True),
                 )
             except Exception as exc:
                 logger.debug("Skipping new worker '%s': %s", task_def_name, exc)

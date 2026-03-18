@@ -58,7 +58,6 @@ agent = Agent(
     output_schema=Recipe,
     generate_content_config={
         "temperature": 0.3,
-        "max_output_tokens": 1500,
     },
 )
 

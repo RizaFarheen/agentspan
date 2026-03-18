@@ -11,7 +11,15 @@ def _patch_runtime():
     """Monkey-patch AgentRuntime to bypass Conductor and run natively."""
     from agentspan.agents.frameworks.serializer import detect_framework
     from agentspan.agents.runtime.runtime import AgentRuntime
-    from validation.native.openai_runner import run_openai_native, run_openai_native_async
+    from validation.native.adk_runner import (
+        run_adk_native,
+        run_adk_native_stream,
+    )
+    from validation.native.openai_runner import (
+        run_openai_native,
+        run_openai_native_async,
+        run_openai_native_stream,
+    )
 
     def _init_noop(self, **kwargs):
         pass
@@ -20,6 +28,8 @@ def _patch_runtime():
         fw = detect_framework(agent)
         if fw == "openai":
             return run_openai_native(agent, str(prompt))
+        if fw == "google_adk":
+            return run_adk_native(agent, str(prompt))
         raise ValueError(f"Native mode unsupported for framework: {fw!r}")
 
     async def _run_native_async(self, agent, prompt="", **kwargs):
@@ -27,6 +37,14 @@ def _patch_runtime():
         if fw == "openai":
             return await run_openai_native_async(agent, str(prompt))
         raise ValueError(f"Native mode unsupported for framework: {fw!r}")
+
+    def _stream_native(self, agent, prompt="", **kwargs):
+        fw = detect_framework(agent)
+        if fw == "openai":
+            return run_openai_native_stream(agent, str(prompt))
+        if fw == "google_adk":
+            return run_adk_native_stream(agent, str(prompt))
+        raise ValueError(f"Native stream unsupported for framework: {fw!r}")
 
     def _noop(self, *args, **kwargs):
         pass
@@ -40,8 +58,8 @@ def _patch_runtime():
     AgentRuntime.__init__ = _init_noop
     AgentRuntime.run = _run_native
     AgentRuntime.run_async = _run_native_async
+    AgentRuntime.stream = _stream_native
     AgentRuntime.start = _noop
-    AgentRuntime.stream = _noop
     AgentRuntime.shutdown = _noop
     AgentRuntime.__enter__ = _enter
     AgentRuntime.__exit__ = _exit
@@ -61,10 +79,17 @@ def main():
 
     _patch_runtime()
 
-    # Execute the example script as __main__
+    # Execute the example script as __main__.
+    # We exec directly into sys.modules["__main__"].__dict__ so that Pydantic
+    # models defined in the example are registered in the real __main__ module.
+    # Without this, TypeAdapter resolves forward references via
+    # sys.modules["__main__"].__dict__ and fails to find sibling classes that
+    # only exist in the exec namespace.
     with open(script) as f:
         code = compile(f.read(), script, "exec")
-    exec(code, {"__name__": "__main__", "__file__": script})
+    main_ns = sys.modules["__main__"].__dict__
+    main_ns["__file__"] = script
+    exec(code, main_ns)
 
 
 if __name__ == "__main__":

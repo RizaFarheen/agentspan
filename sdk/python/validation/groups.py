@@ -76,6 +76,9 @@ GROUPS: dict[str, list[str]] = {
         "openai/09_dynamic_instructions",
         "openai/10_multi_model",
     ],
+    "ADK_HELLO": [
+        "adk/00_hello_world",
+    ],
     "ADK_EXAMPLES": [
         "adk/01_basic_agent",
         "adk/02_function_tools",

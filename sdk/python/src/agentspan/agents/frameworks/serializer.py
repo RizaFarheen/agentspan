@@ -101,6 +101,15 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
                 "parameters": worker.input_schema,
             }
 
+        # Agent-as-tool: framework tool wrapping a nested agent.
+        # Must be checked BEFORE generic tool extraction so the embedded
+        # agent is serialized as a child workflow, not a worker_ref.
+        agent_tool_result = _try_extract_agent_tool(obj)
+        if agent_tool_result is not None:
+            config_dict, child_workers = agent_tool_result
+            workers.extend(child_workers)
+            return config_dict
+
         # Tool-like object (has name + description + schema + embedded callable)
         # Frameworks like OpenAI wrap functions in tool objects that aren't
         # directly callable but contain the original function.
@@ -194,6 +203,37 @@ def _is_tool_callable(obj: Any) -> bool:
         return True
     except (ValueError, TypeError):
         return False
+
+
+def _try_extract_agent_tool(obj: Any) -> Optional[Tuple[Dict[str, Any], List[WorkerInfo]]]:
+    """Detect a framework agent-as-tool wrapper and return a serialized marker.
+
+    OpenAI agents SDK's ``Agent.as_tool()`` creates a ``FunctionTool`` with
+    ``_is_agent_tool=True`` and ``_agent_instance`` pointing to the child
+    agent.  We serialize this as ``{"_type": "AgentTool", ...}`` so the
+    server normalizer can produce a ``toolType="agent_tool"`` config and
+    run the child as a SUB_WORKFLOW.
+
+    Returns:
+        A tuple of (serialized_dict, child_workers) or ``None``.
+    """
+    if not getattr(obj, "_is_agent_tool", False):
+        return None
+
+    child_agent = getattr(obj, "_agent_instance", None)
+    if child_agent is None:
+        return None
+
+    child_config, child_workers = serialize_agent(child_agent)
+    return (
+        {
+            "_type": "AgentTool",
+            "name": getattr(obj, "name", None) or getattr(child_agent, "name", "agent_tool"),
+            "description": getattr(obj, "description", "") or "",
+            "agent": child_config,
+        },
+        child_workers,
+    )
 
 
 def _try_extract_tool_object(obj: Any) -> Optional[WorkerInfo]:

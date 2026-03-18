@@ -32,7 +32,6 @@ factual_agent = Agent(
     ),
     generate_content_config={
         "temperature": 0.1,
-        "max_output_tokens": 300,
     },
 )
 
@@ -46,7 +45,6 @@ creative_agent = Agent(
     ),
     generate_content_config={
         "temperature": 0.9,
-        "max_output_tokens": 500,
     },
 )
 

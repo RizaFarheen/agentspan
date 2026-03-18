@@ -15,6 +15,7 @@ Reports a summary table at the end.
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import os
 import re
@@ -23,6 +24,14 @@ import time
 import traceback
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from rich import box
+from rich.console import Console, Group
+from rich.live import Live
+from rich.table import Table
+from rich.text import Text
+
+_console = Console()
 
 # ---------------------------------------------------------------------------
 # Ensure examples/ is on sys.path so settings imports work
@@ -62,7 +71,21 @@ class ExampleResult:
     duration_s: float = 0.0
 
 
-results: List[ExampleResult] = []
+@dataclass
+class _RunState:
+    """Mutable live-display state for one running example (one per thread)."""
+    idx: str          # "01", "02", ...
+    display_name: str  # "basic_agent", "function_tools", ...
+    fn_name: str       # "ex01_basic_agent", ...
+    status: str = "PENDING"   # PENDING | RUNNING | PASS | FAIL | ERROR
+    workflow_id: str = ""
+    wf_status: str = ""
+    duration_s: float = 0.0
+    start_time: float = 0.0
+    error: str = ""
+
+
+_SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
 def _get_workflow_detail(runtime: AgentRuntime, workflow_id: str) -> Dict[str, Any]:
@@ -254,7 +277,7 @@ def ex03_structured_output(runtime: AgentRuntime) -> ExampleResult:
         model=settings.llm_model,
         instruction="You are a professional chef assistant. Provide complete recipes with precise measurements and timing.",
         output_schema=Recipe,
-        generate_content_config={"temperature": 0.3, "max_output_tokens": 1500},
+        generate_content_config={"temperature": 0.3},
     )
     result = runtime.run(agent, "Give me a recipe for classic Italian carbonara pasta.")
     r.workflow_id = result.workflow_id
@@ -388,13 +411,13 @@ def ex05_generation_config(runtime: AgentRuntime) -> ExampleResult:
         name="fact_checker",
         model=settings.llm_model,
         instruction="You are a precise fact-checker. Be concise and avoid speculation.",
-        generate_content_config={"temperature": 0.1, "max_output_tokens": 300},
+        generate_content_config={"temperature": 0.1},
     )
     creative_agent = Agent(
         name="storyteller",
         model=settings.llm_model,
         instruction="You are an imaginative storyteller. Create vivid narratives.",
-        generate_content_config={"temperature": 0.9, "max_output_tokens": 500},
+        generate_content_config={"temperature": 0.9},
     )
 
     result1 = runtime.run(factual_agent, "What is the speed of light in a vacuum?")
@@ -2099,67 +2122,261 @@ EXAMPLES = [
 
 
 def print_report(results: List[ExampleResult]) -> None:
-    """Print a summary report."""
-    w = 90
-    print(f"\n{'=' * w}")
-    print(f"  GOOGLE ADK EXAMPLES — TEST REPORT")
-    print(f"{'=' * w}")
-
+    """Print a detailed post-run report."""
     passed = sum(1 for r in results if r.passed)
     failed = sum(1 for r in results if not r.passed and not r.error)
     errored = sum(1 for r in results if r.error)
 
+    _console.print()
+    _console.rule("[bold white]GOOGLE ADK EXAMPLES — DETAILED REPORT[/bold white]")
+
     for r in results:
-        icon = "PASS" if r.passed else ("ERROR" if r.error else "FAIL")
-        print(f"\n  [{icon}] {r.name}  ({r.duration_s:.1f}s)")
-        print(f"         workflow: {r.workflow_id}")
-        print(f"         status:   {r.status}")
+        if r.passed:
+            icon, style = "✓ PASS", "bold green"
+        elif r.error:
+            icon, style = "✗ ERROR", "bold red"
+        else:
+            icon, style = "✗ FAIL", "bold yellow"
 
-        if r.checks:
-            for c in r.checks:
-                print(f"           + {c}")
-        if r.failures:
-            for f in r.failures:
-                print(f"           - {f}")
+        _console.print(f"\n  [{style}]{icon}[/{style}]  [bold]{r.name}[/bold]  [dim]({r.duration_s:.1f}s)[/dim]")
+        _console.print(f"         workflow:  [dim]{r.workflow_id or '—'}[/dim]")
+        _console.print(f"         wf status: [dim]{r.status or '—'}[/dim]")
+
+        for c in r.checks:
+            _console.print(f"           [green]+[/green] {c}")
+        for f in r.failures:
+            _console.print(f"           [yellow]-[/yellow] {f}")
         if r.error:
-            print(f"           ! {r.error}")
+            _console.print(f"           [red]![/red] {r.error}")
 
-    print(f"\n{'=' * w}")
-    print(f"  SUMMARY: {passed} passed, {failed} failed, {errored} errors  (out of {len(results)})")
-    print(f"{'=' * w}\n")
+    _console.rule()
+    summary = Text("  SUMMARY:  ", style="bold")
+    summary.append(f"{passed} passed", style="bold green")
+    summary.append("  /  ")
+    summary.append(f"{failed} failed", style="bold yellow")
+    summary.append("  /  ")
+    summary.append(f"{errored} errors", style="bold red")
+    summary.append(f"   (out of {len(results)})", style="dim")
+    _console.print(summary)
+    _console.print()
+
+
+MAX_WORKERS = 8
+EXAMPLE_TIMEOUT_S = 60  # per-example wall-clock timeout
+
+# Statuses that mean the workflow finished (one way or another)
+_TERMINAL_WF_STATUSES = {"COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"}
+
+
+class _TimedRuntime:
+    """Thin proxy injecting per-call timeout into runtime.run() and tracking workflow IDs."""
+
+    def __init__(self, runtime: AgentRuntime, timeout_s: int) -> None:
+        self._rt = runtime
+        self._timeout = timeout_s
+        self.workflow_ids: List[str] = []
+
+    def run(self, agent: Any, prompt: Any = "", **kwargs: Any) -> Any:
+        kwargs.setdefault("timeout", self._timeout)
+        result = self._rt.run(agent, prompt, **kwargs)
+        if result.workflow_id:
+            self.workflow_ids.append(result.workflow_id)
+        return result
+
+    def stream(self, agent: Any, prompt: Any = "", **kwargs: Any) -> Any:
+        return self._rt.stream(agent, prompt, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._rt, name)
+
+
+def _run_example_tracked(fn, runtime: AgentRuntime, state: _RunState) -> ExampleResult:
+    """Run one example and update the shared _RunState for live display."""
+    state.status = "RUNNING"
+    state.start_time = time.time()
+    proxy = _TimedRuntime(runtime, EXAMPLE_TIMEOUT_S)
+    try:
+        r = fn(proxy)
+        r.duration_s = time.time() - state.start_time
+        state.duration_s = r.duration_s
+        state.workflow_id = r.workflow_id
+
+        # Detect poll timeout: runtime.run() returned with a non-terminal status
+        if r.status not in _TERMINAL_WF_STATUSES:
+            state.wf_status = "TIMEOUT"
+            state.status = "FAIL"
+            state.error = f"timed out after {EXAMPLE_TIMEOUT_S}s (server status: {r.status})"
+            for wf_id in proxy.workflow_ids:
+                try:
+                    runtime.cancel(wf_id, reason=f"run_all: timeout after {EXAMPLE_TIMEOUT_S}s")
+                except Exception:
+                    pass
+            return ExampleResult(
+                name=state.display_name,
+                workflow_id=r.workflow_id,
+                status="TIMEOUT",
+                error=state.error,
+                duration_s=state.duration_s,
+            )
+
+        state.wf_status = r.status
+        state.status = "PASS" if r.passed else "FAIL"
+        return r
+    except Exception as e:
+        state.duration_s = time.time() - state.start_time
+        state.status = "ERROR"
+        state.error = f"{type(e).__name__}: {e}"
+        for wf_id in proxy.workflow_ids:
+            try:
+                runtime.cancel(wf_id, reason="run_all: example exception")
+            except Exception:
+                pass
+        return ExampleResult(
+            name=fn.__name__,
+            error=state.error,
+            duration_s=state.duration_s,
+        )
+
+
+def _make_display(states: List[_RunState], total: int) -> Group:
+    """Build the Rich renderable for the live display."""
+    n_done = sum(1 for s in states if s.status not in ("PENDING", "RUNNING"))
+    n_pass = sum(1 for s in states if s.status == "PASS")
+    n_fail = sum(1 for s in states if s.status == "FAIL")
+    n_err = sum(1 for s in states if s.status == "ERROR")
+    n_running = sum(1 for s in states if s.status == "RUNNING")
+
+    spin = _SPINNER[int(time.time() * 8) % len(_SPINNER)]
+
+    bar_width = 44
+    filled = int(bar_width * n_done / total) if total else bar_width
+    bar = "█" * filled + "░" * (bar_width - filled)
+
+    progress = Text()
+    progress.append(f"  {bar}  ", style="cyan")
+    progress.append(f"{n_done}/{total} done", style="bold")
+    progress.append("   ")
+    progress.append(f"✓ {n_pass} pass", style="green")
+    progress.append("  ")
+    progress.append(f"✗ {n_fail} fail", style="yellow")
+    if n_err:
+        progress.append("  ")
+        progress.append(f"! {n_err} error", style="red")
+    if n_running:
+        progress.append("  ")
+        progress.append(f"{spin} {n_running} running", style="yellow")
+
+    table = Table(
+        box=box.SIMPLE_HEAD, show_header=True, header_style="bold cyan",
+        padding=(0, 1), show_edge=False,
+    )
+    table.add_column("#", width=4, style="dim")
+    table.add_column("Example", min_width=30)
+    table.add_column("Status", width=12)
+    table.add_column("WF Status", width=11)
+    table.add_column("Workflow ID", min_width=36)
+    table.add_column("Time", width=7, justify="right")
+
+    for s in states:
+        if s.status == "PENDING":
+            status_cell = Text("  PENDING", style="dim")
+        elif s.status == "RUNNING":
+            status_cell = Text(f"{spin} RUNNING", style="yellow")
+        elif s.status == "PASS":
+            status_cell = Text("✓ PASS", style="bold green")
+        elif s.status == "FAIL":
+            status_cell = Text("✗ FAIL", style="bold yellow")
+        else:
+            status_cell = Text("✗ ERROR", style="bold red")
+
+        if s.wf_status == "COMPLETED":
+            wf_cell = Text("COMPLETED", style="green")
+        elif s.wf_status == "FAILED":
+            # FAILED can be correct (e.g. guardrail triggered)
+            wf_cell = Text("FAILED", style="yellow")
+        elif s.wf_status:
+            wf_cell = Text(s.wf_status[:10], style="dim")
+        else:
+            wf_cell = Text("—", style="dim")
+
+        wf_id_cell = Text(s.workflow_id or "—", style="dim")
+
+        if s.status == "RUNNING":
+            dur = f"{time.time() - s.start_time:.1f}s"
+        elif s.duration_s > 0:
+            dur = f"{s.duration_s:.1f}s"
+        else:
+            dur = "—"
+
+        display = s.display_name
+        if s.status == "ERROR" and s.error:
+            short = s.error[:28] + "…" if len(s.error) > 29 else s.error
+            display = f"{display} [dim red]({short})[/dim red]"
+
+        table.add_row(s.idx, display, status_cell, wf_cell, wf_id_cell, dur)
+
+    header = Text(
+        f"\n  Google ADK Examples — Parallel Run  [{MAX_WORKERS} workers]\n",
+        style="bold white",
+    )
+    return Group(header, progress, Text(""), table)
 
 
 def main() -> int:
-    print("Starting Google ADK examples test run...")
-    print(f"Server: {_cfg.server_url}\n")
+    states: List[_RunState] = []
+    for fn in EXAMPLES:
+        m = re.match(r"ex(\d+)_(.*)", fn.__name__)
+        idx, display = (m.group(1), m.group(2)) if m else (str(len(states) + 1), fn.__name__)
+        states.append(_RunState(idx=idx, display_name=display, fn_name=fn.__name__))
+
+    state_by_fn = {s.fn_name: s for s in states}
+    result_map: Dict[str, ExampleResult] = {}
+
+    _console.print(f"\n  Server: [cyan]{_cfg.server_url}[/cyan]")
 
     with AgentRuntime() as runtime:
-        for example_fn in EXAMPLES:
-            name = example_fn.__doc__.split("—")[0].strip() if example_fn.__doc__ else example_fn.__name__
-            print(f"Running {name} ...", end=" ", flush=True)
-            t0 = time.time()
-            try:
-                r = example_fn(runtime)
-                r.duration_s = time.time() - t0
-                results.append(r)
-                icon = "PASS" if r.passed else "FAIL"
-                print(f"[{icon}] ({r.duration_s:.1f}s)")
-            except Exception as e:
-                duration = time.time() - t0
-                er = ExampleResult(
-                    name=example_fn.__name__,
-                    error=f"{type(e).__name__}: {e}",
-                    duration_s=duration,
-                )
-                results.append(er)
-                print(f"[ERROR] ({duration:.1f}s) {e}")
-                traceback.print_exc()
+        with Live(
+            _make_display(states, len(EXAMPLES)),
+            refresh_per_second=8,
+            console=_console,
+            transient=False,
+        ) as live:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                futures = {
+                    executor.submit(
+                        _run_example_tracked, fn, runtime, state_by_fn[fn.__name__]
+                    ): fn
+                    for fn in EXAMPLES
+                }
+                pending = set(futures.keys())
+                while pending:
+                    done, pending = concurrent.futures.wait(
+                        pending, timeout=0.1,
+                        return_when=concurrent.futures.FIRST_COMPLETED,
+                    )
+                    for fut in done:
+                        try:
+                            r = fut.result()
+                        except Exception:
+                            fn = futures[fut]
+                            s = state_by_fn[fn.__name__]
+                            r = ExampleResult(
+                                name=s.display_name,
+                                error=s.error or "unknown error",
+                                duration_s=s.duration_s,
+                            )
+                        result_map[futures[fut].__name__] = r
+                    live.update(_make_display(states, len(EXAMPLES)))
 
-            # Small delay between examples to avoid rate limiting
-            time.sleep(2)
+    ordered = [result_map[fn.__name__] for fn in EXAMPLES if fn.__name__ in result_map]
+    print_report(ordered)
 
-    print_report(results)
-    return 0 if all(r.passed for r in results) else 1
+    missing = [fn.__name__ for fn in EXAMPLES if fn.__name__ not in result_map]
+    if missing:
+        _console.print(f"\n[red]WARNING: {len(missing)} examples did not complete: {missing}[/red]")
+        return 1
+
+    return 0 if all(r.passed for r in ordered) else 1
 
 
 if __name__ == "__main__":

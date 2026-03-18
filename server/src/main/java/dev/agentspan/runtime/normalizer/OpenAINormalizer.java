@@ -172,6 +172,39 @@ public class OpenAINormalizer implements AgentConfigNormalizer {
                         .toolType("worker")
                         .build();
 
+            case "AgentTool": {
+                // Agent-as-tool: wrap a child agent as a callable tool (SUB_WORKFLOW)
+                Map<String, Object> agentRaw = getMap(raw, "agent");
+                if (agentRaw == null) {
+                    log.warn("AgentTool '{}' has no embedded agent, skipping",
+                            getString(raw, "name", "unknown"));
+                    return null;
+                }
+                AgentConfig childAgent = normalize(agentRaw);
+                String toolName = getString(raw, "name", childAgent.getName());
+                String toolDesc = getString(raw, "description",
+                        "Invoke agent: " + childAgent.getName());
+
+                Map<String, Object> inputSchema = new LinkedHashMap<>();
+                inputSchema.put("type", "object");
+                inputSchema.put("properties", Map.of(
+                        "request", Map.of("type", "string",
+                                "description", "The request or question to send to this agent")
+                ));
+                inputSchema.put("required", List.of("request"));
+
+                Map<String, Object> toolConfig = new LinkedHashMap<>();
+                toolConfig.put("agentConfig", childAgent);
+
+                return ToolConfig.builder()
+                        .name(toolName)
+                        .description(toolDesc)
+                        .inputSchema(inputSchema)
+                        .toolType("agent_tool")
+                        .config(toolConfig)
+                        .build();
+            }
+
             default:
                 // Unknown tool type — pass through as worker
                 if (raw.containsKey("name")) {

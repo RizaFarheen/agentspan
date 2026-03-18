@@ -591,7 +591,25 @@ class AgentRuntime:
 
         framework = detect_framework(agent)
         if framework is not None:
-            return  # framework agents are handled in _start_framework
+            # Pre-register framework agent workers (e.g. Google ADK, OpenAI) so
+            # all workers land in _decorated_functions before the first
+            # TaskHandler is created — avoids incremental fork() on macOS.
+            from agentspan.agents.frameworks.serializer import serialize_agent
+            from agentspan.agents.runtime._dispatch import make_tool_worker
+            from conductor.client.worker.worker_task import worker_task
+
+            _, workers = serialize_agent(agent)
+            for w in workers:
+                wrapper = make_tool_worker(w.func, w.name)
+                worker_task(
+                    task_definition_name=w.name,
+                    task_def=_default_task_def(w.name),
+                    register_task_def=True,
+                    overwrite_task_def=True,
+                )(wrapper)
+            if workers:
+                self._registered_tool_names.update(w.name for w in workers)
+            return
 
         # Auto-register integrations if enabled
         if self._config.auto_register_integrations:

@@ -768,8 +768,9 @@ public class AgentCompiler {
             if (config.getOutputType() != null && config.getOutputType().getSchema() != null) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> schema = config.getOutputType().getSchema();
-                Object properties = schema.get("properties");
-                String schemaStr = properties != null ? pythonDictRepr(properties) : schema.toString();
+                // Inline $ref references and simplify to a human-readable type description
+                Map<String, Object> resolved = inlineRefs(schema);
+                String schemaStr = simplifySchema(resolved);
                 if (toolSpecs != null) {
                     instrText += "\n\nWhen providing your final answer, respond "
                         + "with a JSON object matching this schema: " + schemaStr + ". "
@@ -1036,7 +1037,149 @@ public class AgentCompiler {
      * Format a Java object as Python dict repr: {'key': 'value', ...}
      * This matches Python's str() on a dict for system prompt embedding.
      */
-    @SuppressWarnings("unchecked")
+    /**
+     * Convert an inlined JSON Schema map to a compact Python-style type string.
+     *
+     * <p>JSON Schema's structural keywords ({@code type}, {@code items},
+     * {@code properties}) are translated into idiomatic Python type notation:
+     * <ul>
+     *   <li>{@code {"type":"string"}} → {@code str}</li>
+     *   <li>{@code {"type":"integer"}} → {@code int}</li>
+     *   <li>{@code {"type":"number"}} → {@code float}</li>
+     *   <li>{@code {"type":"boolean"}} → {@code bool}</li>
+     *   <li>{@code {"type":"array","items":{...}}} → {@code [item_type]}</li>
+     *   <li>{@code {"type":"object","properties":{...}}} → {@code {key: type, ...}}</li>
+     * </ul>
+     * This avoids passing raw JSON Schema keywords like {@code items} and {@code title}
+     * to the LLM, which would otherwise interpret them as data field names.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    static String simplifySchema(Map<String, Object> schema) {
+        return simplifyNode(schema);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static String simplifyNode(Object node) {
+        if (!(node instanceof Map)) {
+            return String.valueOf(node);
+        }
+        Map<String, Object> m = (Map<String, Object>) node;
+        String type = m.containsKey("type") ? String.valueOf(m.get("type")) : null;
+
+        if ("array".equals(type)) {
+            Object items = m.get("items");
+            if (items instanceof Map) {
+                return "[" + simplifyNode(items) + "]";
+            }
+            return "list";
+        }
+
+        if ("object".equals(type) || m.containsKey("properties")) {
+            Object propsObj = m.get("properties");
+            if (propsObj instanceof Map) {
+                Map<String, Object> props = (Map<String, Object>) propsObj;
+                StringBuilder sb = new StringBuilder("{");
+                boolean first = true;
+                for (Map.Entry<String, Object> entry : props.entrySet()) {
+                    if (!first) sb.append(", ");
+                    first = false;
+                    sb.append("'").append(entry.getKey()).append("': ")
+                      .append(simplifyNode(entry.getValue()));
+                }
+                sb.append("}");
+                return sb.toString();
+            }
+            return "object";
+        }
+
+        if ("string".equals(type))  return "str";
+        if ("integer".equals(type)) return "int";
+        if ("number".equals(type))  return "float";
+        if ("boolean".equals(type)) return "bool";
+        if ("null".equals(type))    return "None";
+
+        // anyOf: Pydantic uses this for Optional[T] → [T, null] → render as "T | None"
+        if (m.containsKey("anyOf")) {
+            List<Object> variants = (List<Object>) m.get("anyOf");
+            List<String> parts = new java.util.ArrayList<>();
+            for (Object v : variants) {
+                String s = simplifyNode(v);
+                if (!"None".equals(s)) parts.add(s); // put None last
+            }
+            parts.add("None");
+            // deduplicate
+            java.util.LinkedHashSet<String> unique = new java.util.LinkedHashSet<>(parts);
+            return String.join(" | ", unique);
+        }
+
+        // enum: render as a list of allowed values
+        if (m.containsKey("enum")) {
+            return String.valueOf(m.get("enum"));
+        }
+
+        // Fallback: render as dict
+        if (m.containsKey("properties")) return simplifyNode(m);
+        return type != null ? type : "any";
+    }
+
+    /**
+     * Recursively inline all {@code $ref} references in a JSON Schema map.
+     *
+     * <p>Pydantic's {@code model_json_schema()} produces schemas with a
+     * top-level {@code $defs} section and {@code $ref: "#/$defs/Foo"} pointers
+     * inside {@code properties}.  This method resolves every {@code $ref} by
+     * substituting the referenced definition in-place, so the resulting map
+     * contains no unresolved references and can be understood by an LLM
+     * without needing JSON-Schema-aware tooling.
+     *
+     * @param schema the raw JSON Schema map (may contain {@code $defs} and {@code $ref})
+     * @return a new map with all references fully inlined
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    static Map<String, Object> inlineRefs(Map<String, Object> schema) {
+        Map<String, Object> defs = schema.containsKey("$defs")
+                ? (Map<String, Object>) schema.get("$defs")
+                : java.util.Collections.emptyMap();
+        return (Map<String, Object>) resolveNode(schema, defs);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object resolveNode(Object node, Map<String, Object> defs) {
+        if (node instanceof Map<?, ?> map) {
+            Map<String, Object> m = (Map<String, Object>) map;
+            // Resolve $ref first
+            if (m.containsKey("$ref")) {
+                String ref = (String) m.get("$ref");
+                // Format: "#/$defs/TypeName"
+                if (ref != null && ref.startsWith("#/$defs/")) {
+                    String typeName = ref.substring("#/$defs/".length());
+                    Object definition = defs.get(typeName);
+                    if (definition instanceof Map<?, ?>) {
+                        // Recursively resolve the referenced definition
+                        return resolveNode(definition, defs);
+                    }
+                }
+                return m; // unresolvable ref — pass through
+            }
+            // Recurse into all values, skip $defs (not part of the instance schema)
+            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : m.entrySet()) {
+                String key = (String) entry.getKey();
+                if ("$defs".equals(key)) continue; // drop the definitions section
+                result.put(key, resolveNode(entry.getValue(), defs));
+            }
+            return result;
+        }
+        if (node instanceof List<?> list) {
+            java.util.List<Object> result = new java.util.ArrayList<>();
+            for (Object item : list) {
+                result.add(resolveNode(item, defs));
+            }
+            return result;
+        }
+        return node; // primitive — pass through as-is
+    }
+
     static String pythonDictRepr(Object obj) {
         if (obj == null) return "None";
         if (obj instanceof Map<?, ?> map) {
