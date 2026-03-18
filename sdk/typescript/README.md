@@ -12,7 +12,7 @@ JavaScript SDK for building and running AI agents on [Conductor](https://github.
 ## Installation
 
 ```bash
-npm install
+npm install @agentspan/sdk
 ```
 
 Requires **Node 18+** (uses native `fetch`).
