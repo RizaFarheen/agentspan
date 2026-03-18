@@ -25,6 +25,7 @@ from agents import (
 )
 
 from agentspan.agents import AgentRuntime
+from settings import settings
 
 
 # ── Tools ─────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ def check_for_pii(ctx, agent, input_text) -> GuardrailFunctionOutput:
     """Input guardrail: check for sensitive PII in user messages."""
     import re
 
-from settings import settings
+    from settings import settings
 
     # Check for SSN patterns
     ssn_pattern = r"\b\d{3}-\d{2}-\d{4}\b"

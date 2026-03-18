@@ -303,6 +303,7 @@ def _run_single(
         "model": model_id,
         "native": run_cfg.native,
         "group": run_cfg.group,
+        "server_url": run_cfg.server_url if not run_cfg.native else "",
         "duration_s": round(elapsed, 1),
         "examples_total": total,
         "examples_completed": sum(1 for sr in results if sr.result.status == "COMPLETED"),

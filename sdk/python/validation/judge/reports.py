@@ -36,15 +36,19 @@ def _write_outputs(
     report_path = judge_dir / "report.md"
     _write_judge_report(report_path, judge_rows, run_names, baseline_name, elapsed)
 
-    # Load raw outputs for HTML
+    # Load raw outputs and workflow IDs for HTML
     raw_outputs: dict[str, dict[str, str]] = {}
+    workflow_ids: dict[str, dict[str, str]] = {}
     for row in judge_rows:
         example = row["example"]
         raw_outputs[example] = {}
+        workflow_ids[example] = {}
         for rn in run_names:
             ex_data = run_examples.get(rn, {}).get(example)
             if ex_data and ex_data.get("status") == "COMPLETED":
                 raw_outputs[example][rn] = _load_single_output(run_dirs[rn] / "outputs", example)
+            if ex_data and ex_data.get("workflow_id"):
+                workflow_ids[example][rn] = ex_data["workflow_id"]
 
     # Load per-run metadata
     run_meta_data: dict[str, dict] = {}
@@ -63,6 +67,7 @@ def _write_outputs(
         run_names=run_names,
         baseline=baseline_name,
         raw_outputs=raw_outputs,
+        workflow_ids=workflow_ids,
         meta=meta,
         run_meta=run_meta_data,
     )

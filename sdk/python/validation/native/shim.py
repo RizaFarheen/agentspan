@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
+
+logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s: %(message)s")
 
 
 def _patch_runtime():

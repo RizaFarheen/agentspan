@@ -29,6 +29,12 @@ def run_openai_native(agent_obj: Any, prompt: str) -> AgentResult:
     )
 
     prepared = _strip_model_prefix(agent_obj)
+    logger.info(
+        "Native sync: agents.Runner.run_sync(agent=%s, model=%s, prompt=%.80s...)",
+        getattr(prepared, "name", "?"),
+        getattr(prepared, "model", "?"),
+        prompt,
+    )
 
     try:
         run_result = Runner.run_sync(
@@ -58,6 +64,7 @@ def run_openai_native(agent_obj: Any, prompt: str) -> AgentResult:
             error=str(e),
         )
     except Exception as e:
+        logger.error("Native sync failed: %s", e)
         return AgentResult(
             output=None,
             status=Status.FAILED,
@@ -65,7 +72,14 @@ def run_openai_native(agent_obj: Any, prompt: str) -> AgentResult:
             error=str(e),
         )
 
-    return _map_run_result(run_result)
+    result = _map_run_result(run_result)
+    logger.info(
+        "Native sync completed: status=%s, tokens=%s, tool_calls=%d",
+        result.status,
+        result.token_usage.total_tokens if result.token_usage else 0,
+        len(result.tool_calls),
+    )
+    return result
 
 
 async def run_openai_native_async(agent_obj: Any, prompt: str) -> AgentResult:
@@ -78,6 +92,12 @@ async def run_openai_native_async(agent_obj: Any, prompt: str) -> AgentResult:
     )
 
     prepared = _strip_model_prefix(agent_obj)
+    logger.info(
+        "Native async: agents.Runner.run(agent=%s, model=%s, prompt=%.80s...)",
+        getattr(prepared, "name", "?"),
+        getattr(prepared, "model", "?"),
+        prompt,
+    )
 
     try:
         run_result = await Runner.run(
@@ -107,6 +127,7 @@ async def run_openai_native_async(agent_obj: Any, prompt: str) -> AgentResult:
             error=str(e),
         )
     except Exception as e:
+        logger.error("Native async failed: %s", e)
         return AgentResult(
             output=None,
             status=Status.FAILED,
@@ -114,7 +135,14 @@ async def run_openai_native_async(agent_obj: Any, prompt: str) -> AgentResult:
             error=str(e),
         )
 
-    return _map_run_result(run_result)
+    result = _map_run_result(run_result)
+    logger.info(
+        "Native async completed: status=%s, tokens=%s, tool_calls=%d",
+        result.status,
+        result.token_usage.total_tokens if result.token_usage else 0,
+        len(result.tool_calls),
+    )
+    return result
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
