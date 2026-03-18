@@ -88,6 +88,69 @@ export interface McpToolOptions {
 
 export declare function mcpTool(options: McpToolOptions): ToolDef;
 
+export interface MediaToolOptions {
+  name: string;
+  description: string;
+  llmProvider: string;
+  model: string;
+  inputSchema?: JsonSchema;
+  [key: string]: unknown;
+}
+
+export declare function imageTool(options: MediaToolOptions): ToolDef;
+export declare function audioTool(options: MediaToolOptions): ToolDef;
+export declare function videoTool(options: MediaToolOptions): ToolDef;
+
+export interface PdfToolOptions {
+  name?: string;
+  description?: string;
+  inputSchema?: JsonSchema;
+  [key: string]: unknown;
+}
+
+export declare function pdfTool(options?: PdfToolOptions): ToolDef;
+
+export interface IndexToolOptions {
+  name: string;
+  description: string;
+  vectorDb: string;
+  index: string;
+  embeddingModelProvider: string;
+  embeddingModel: string;
+  namespace?: string;
+  chunkSize?: number;
+  chunkOverlap?: number;
+  dimensions?: number;
+  inputSchema?: JsonSchema;
+}
+
+export declare function indexTool(options: IndexToolOptions): ToolDef;
+
+export interface SearchToolOptions {
+  name: string;
+  description: string;
+  vectorDb: string;
+  index: string;
+  embeddingModelProvider: string;
+  embeddingModel: string;
+  namespace?: string;
+  maxResults?: number;
+  dimensions?: number;
+  inputSchema?: JsonSchema;
+}
+
+export declare function searchTool(options: SearchToolOptions): ToolDef;
+
+export interface AgentToolOptions {
+  name?: string;
+  description?: string;
+  retryCount?: number;
+  retryDelaySeconds?: number;
+  optional?: boolean;
+}
+
+export declare function agentTool(agent: Agent, options?: AgentToolOptions): ToolDef;
+
 // ── Agent ─────────────────────────────────────────────────────────────────
 
 export type Strategy =

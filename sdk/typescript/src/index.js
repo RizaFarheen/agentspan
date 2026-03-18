@@ -33,7 +33,7 @@ const { Agent } = require('./agent');
 const { AgentConfig } = require('./config');
 const { AgentRuntime } = require('./runtime');
 const { makeAgentResult, EventType, Status, FinishReason } = require('./result');
-const { tool, getToolDef, httpTool, mcpTool, TOOL_DEF } = require('./tool');
+const { tool, getToolDef, httpTool, mcpTool, imageTool, audioTool, videoTool, pdfTool, indexTool, searchTool, agentTool, TOOL_DEF } = require('./tool');
 const { AgentConfigSerializer } = require('./serializer');
 
 module.exports = {
@@ -47,6 +47,13 @@ module.exports = {
   getToolDef,
   httpTool,
   mcpTool,
+  imageTool,
+  audioTool,
+  videoTool,
+  pdfTool,
+  indexTool,
+  searchTool,
+  agentTool,
   TOOL_DEF,
 
   // Results

@@ -70,7 +70,14 @@ class AgentConfigSerializer {
     if (td.outputSchema) result.outputSchema = td.outputSchema;
     if (td.approvalRequired) result.approvalRequired = true;
     if (td.timeoutSeconds != null) result.timeoutSeconds = td.timeoutSeconds;
-    if (td.config && Object.keys(td.config).length > 0) result.config = td.config;
+    if (td.config && Object.keys(td.config).length > 0) {
+      if (td.toolType === 'agent_tool' && td.config.agent) {
+        const { agent, ...rest } = td.config;
+        result.config = { ...rest, agentConfig: this._serializeAgent(agent) };
+      } else {
+        result.config = td.config;
+      }
+    }
 
     return result;
   }
