@@ -1,6 +1,6 @@
 {
   "name": "@agentspan/sdk",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "JavaScript SDK for Agentspan — define and run agents on Conductor",
   "main": "src/index.js",
   "types": "types/index.d.ts",
