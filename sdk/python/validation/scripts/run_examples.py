@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -54,6 +55,11 @@ def main():
         sys.exit(1)
 
     config = load_toml_config(config_path)
+
+    # Apply global [env] to os.environ (shell env takes priority via setdefault)
+    for k, v in config.env.items():
+        os.environ.setdefault(k, v)
+
     selected = args.run.split(",") if args.run else None
     runs = resolve_runs(config, selected)
 

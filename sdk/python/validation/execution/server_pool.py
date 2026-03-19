@@ -1,4 +1,4 @@
-"""Server pool — one agentspan server per provider for parallel execution."""
+"""Server pool — starts and manages a single shared agentspan server."""
 
 from __future__ import annotations
 
@@ -97,8 +97,9 @@ class ServerPool:
         self,
         models: dict[str, str],
         log_dir: Path | None = None,
+        extra_env: dict | None = None,
     ) -> None:
-        """Start one server per model. Reuses existing agentspan servers."""
+        """Start one fresh server per model on a free port."""
         if self._started:
             return
 
@@ -108,26 +109,18 @@ class ServerPool:
         port = self._base_port
         assignments: dict[str, int] = {}
 
-        # Assign ports
+        # Assign ports — skip ALL occupied ports to guarantee a free slot
         for model_name in models:
-            while _port_in_use(port) and not _is_agentspan_server(port):
-                port += 1  # skip non-agentspan ports
+            while _port_in_use(port):
+                port += 1
             assignments[model_name] = port
             port += 1
+
+        server_env = {**os.environ, **(extra_env or {})}
 
         # Start servers in parallel
         def _start_one(model_name: str, assigned_port: int) -> ServerInstance:
             url = f"http://localhost:{assigned_port}/api"
-
-            # Reuse if already healthy
-            if check_server_health(url):
-                return ServerInstance(
-                    port=assigned_port,
-                    url=url,
-                    model_name=model_name,
-                    process=None,
-                    we_started=False,
-                )
 
             # Start server
             cmd = ["agentspan", "server", "start", "-p", str(assigned_port)]
@@ -141,6 +134,7 @@ class ServerPool:
                 cmd,
                 stdout=log_file or subprocess.DEVNULL,
                 stderr=log_file or subprocess.DEVNULL,
+                env=server_env,
             )
 
             # Wait for health

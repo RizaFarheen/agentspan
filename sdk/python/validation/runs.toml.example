@@ -15,6 +15,11 @@ max_workers = 8        # max concurrent examples per run
 retries = 0            # retry count on failure
 server_url = "http://localhost:8080/api"
 
+# Global env vars — applied to all runs (and to the orchestrator process)
+[env]
+# AGENTSPAN_AUTH_KEY=<key>          # if authentication is enabled
+# AGENTSPAN_AUTH_SECRET=<secret>
+
 [judge]
 baseline_run = "openai"   # run name to use as comparison baseline
 model = "gpt-4o-mini"           # LLM model for judging
@@ -22,6 +27,9 @@ max_output_chars = 3000          # truncate outputs before judging
 max_tokens = 300                 # max tokens for judge response
 rate_limit = 0.5                 # seconds between judge calls
 max_calls = 0                    # 0 = unlimited
+
+[judge.env]
+# OPENAI_API_KEY = "<openai-api-key>"   # judge API key (falls back to shell env)
 
 [display]
 max_example_rows = 40       # max example rows shown in live progress (default: 40)
@@ -35,6 +43,12 @@ model = "openai/gpt-4o"
 [runs.anthropic]
 group = "OPENAI_EXAMPLES"
 model = "anthropic/claude-sonnet-4-20250514"
+
+# Per-run env vars — applied only to this run's subprocesses (never touches os.environ)
+[runs.anthropic.env]
+# ANTHROPIC_API_KEY = "<anthropic-api-key>"   # applied to this run only
+
+# ── Smoke tests ───────────────────────────────────────────────────────────
 
 [runs.openai-smoke-test]
 group = "SMOKE_TEST"

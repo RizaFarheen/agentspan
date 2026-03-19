@@ -30,9 +30,7 @@ def _resolve_latest(output_dir: Path) -> Path | None:
 
 
 def main():
-    settings = Settings.from_env()
-
-    parser = argparse.ArgumentParser(description="Cross-run judge for validation results")
+    parser = argparse.ArgumentParser(description="LLM judge for comparing model outputs")
     parser.add_argument(
         "--run-dir",
         type=str,
@@ -49,13 +47,6 @@ def main():
         "--judge-model", type=str, default=None, help="Override judge model (default: from config)"
     )
     args = parser.parse_args()
-
-    if args.judge_model:
-        settings.judge_model = args.judge_model
-
-    if not settings.openai_api_key:
-        print("ERROR: OPENAI_API_KEY not set.", file=sys.stderr)
-        sys.exit(1)
 
     from validation.judge import judge_across_runs
     from validation.toml_config import JudgeConfig
@@ -81,10 +72,19 @@ def main():
         config = load_toml_config(config_path)
         judge_config = config.judge
     else:
-        judge_config = JudgeConfig(model=settings.judge_model)
+        judge_config = JudgeConfig()
 
     if args.judge_model:
         judge_config.model = args.judge_model
+
+    settings = Settings.from_env().with_env_overrides(judge_config.env)
+
+    if not settings.openai_api_key:
+        print(
+            "ERROR: OPENAI_API_KEY not set for judge. Set it in shell or in [judge.env] in runs.toml.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     judge_across_runs(run_dir, judge_config, settings)
 

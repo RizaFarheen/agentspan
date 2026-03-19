@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -11,9 +11,6 @@ class Example:
     name: str  # "openai/01_basic_agent" or "01_basic_agent"
     path: Path  # absolute path to .py
     cwd: Path  # working directory for subprocess
-
-
-_CSV_EXCLUDE = {"stdout", "stderr", "output_text"}
 
 
 @dataclass
@@ -32,11 +29,6 @@ class RunResult:
     error_summary: str = ""
     stdout: str = ""
     stderr: str = ""
-
-    def to_csv_dict(self, prefix: str) -> dict[str, object]:
-        if prefix:
-            return {f"{prefix}_{k}": v for k, v in asdict(self).items() if k not in _CSV_EXCLUDE}
-        return {k: v for k, v in asdict(self).items() if k not in _CSV_EXCLUDE}
 
 
 @dataclass
