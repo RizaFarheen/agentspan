@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agentspan-config
+  namespace: agentspan
+data:
+  # Spring Boot profile — enables PostgreSQL backend
+  SPRING_PROFILES_ACTIVE: "postgres"
+
+  # PostgreSQL connection (matches postgres service name below)
+  POSTGRES_HOST: "agentspan-postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "agentspan"
+
+  # Server tuning
+  JAVA_OPTS: "-Xms512m -Xmx1536m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+
+  # Optional: Ollama endpoint for local model inference
+  # OLLAMA_HOST: "http://ollama:11434"
+
+  # Optional: log level
+  LOGGING_LEVEL_ROOT: "WARN"
+  LOGGING_LEVEL_DEV_AGENTSPAN: "INFO"

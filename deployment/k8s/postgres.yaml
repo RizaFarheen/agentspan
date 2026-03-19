@@ -1,0 +1,95 @@
+---
+# ── PostgreSQL StatefulSet ────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: agentspan-postgres
+  namespace: agentspan
+  labels:
+    app: agentspan-postgres
+spec:
+  serviceName: agentspan-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agentspan-postgres
+  template:
+    metadata:
+      labels:
+        app: agentspan-postgres
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: agentspan-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agentspan-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi
+        # storageClassName: gp2   # Uncomment for AWS EKS (gp2/gp3)
+        # storageClassName: standard  # GKE default
+        # storageClassName: managed-premium  # AKS
+
+---
+# ── PostgreSQL ClusterIP Service ─────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentspan-postgres
+  namespace: agentspan
+  labels:
+    app: agentspan-postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: agentspan-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP

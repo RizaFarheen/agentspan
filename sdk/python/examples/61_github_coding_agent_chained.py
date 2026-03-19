@@ -33,7 +33,7 @@ from agentspan.agents.handoff import OnTextMention
 
 REPO = "agentspan/codingexamples"
 WORK_DIR = f"/tmp/codingexamples-{uuid.uuid4().hex[:8]}"
-MODEL = "anthropic/claude-sonnet-4-20250514"
+MODEL = "anthropic/claude-sonnet-4-6"
 
 # -- Stage 1: Fetch issues -------------------------------------------------
 
@@ -52,7 +52,7 @@ You are a GitHub issue fetcher.  You fetch issues and if the issue is already fe
 """,
     cli_commands=True,
     cli_allowed_commands=["gh", "git", "mkdir", "ls"],
-    max_turns=5,
+    max_turns=10,
     gate=TextGate("NO_OPEN_ISSUES"),
 )
 
@@ -130,5 +130,6 @@ pipeline = git_fetch_issues >> coding_qa >> git_push_pr
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(pipeline, "Pick an open issue and create a PR.", timeout=240000)
-        result.print_result()
+        runtime.serve(pipeline)
+        # result = runtime.run(pipeline, "Pick an open issue and create a PR.", timeout=240000)
+        # result.print_result()
