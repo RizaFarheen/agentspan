@@ -115,4 +115,231 @@ function mcpTool({ name, description, serverUrl, headers = {}, inputSchema = {} 
   };
 }
 
-module.exports = { tool, getToolDef, httpTool, mcpTool, TOOL_DEF };
+// ── Media generation tool helpers ──────────────────────────────────────
+
+function _mediaTool(toolType, taskType, { name, description, llmProvider, model, inputSchema = null, ...defaults }) {
+  return {
+    name,
+    description,
+    inputSchema: inputSchema || {},
+    outputSchema: null,
+    func: null,
+    approvalRequired: false,
+    timeoutSeconds: null,
+    toolType,
+    config: { taskType, llmProvider, model, ...defaults },
+  };
+}
+
+/**
+ * imageTool() — generate images via an AI provider (Conductor GENERATE_IMAGE task).
+ */
+function imageTool({ name, description, llmProvider, model, inputSchema, ...defaults }) {
+  return _mediaTool('generate_image', 'GENERATE_IMAGE', {
+    name, description, llmProvider, model,
+    inputSchema: inputSchema || {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'Text description of the image to generate.' },
+        style: { type: 'string', description: "Image style: 'vivid' or 'natural'." },
+        width: { type: 'integer', description: 'Image width in pixels.', default: 1024 },
+        height: { type: 'integer', description: 'Image height in pixels.', default: 1024 },
+        size: { type: 'string', description: "Image size (e.g. '1024x1024'). Alternative to width/height." },
+        n: { type: 'integer', description: 'Number of images to generate.', default: 1 },
+        outputFormat: { type: 'string', description: "Output format: 'png', 'jpg', or 'webp'.", default: 'png' },
+      },
+      required: ['prompt'],
+    },
+    ...defaults,
+  });
+}
+
+/**
+ * audioTool() — generate audio / text-to-speech (Conductor GENERATE_AUDIO task).
+ */
+function audioTool({ name, description, llmProvider, model, inputSchema, ...defaults }) {
+  return _mediaTool('generate_audio', 'GENERATE_AUDIO', {
+    name, description, llmProvider, model,
+    inputSchema: inputSchema || {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Text to convert to speech.' },
+        voice: {
+          type: 'string',
+          description: 'Voice to use.',
+          enum: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
+          default: 'alloy',
+        },
+        speed: { type: 'number', description: 'Speech speed multiplier (0.25 to 4.0).', default: 1.0 },
+        responseFormat: { type: 'string', description: "Audio format: 'mp3', 'wav', 'opus', 'aac', or 'flac'.", default: 'mp3' },
+        n: { type: 'integer', description: 'Number of audio outputs to generate.', default: 1 },
+      },
+      required: ['text'],
+    },
+    ...defaults,
+  });
+}
+
+/**
+ * videoTool() — generate video (Conductor GENERATE_VIDEO task).
+ */
+function videoTool({ name, description, llmProvider, model, inputSchema, ...defaults }) {
+  return _mediaTool('generate_video', 'GENERATE_VIDEO', {
+    name, description, llmProvider, model,
+    inputSchema: inputSchema || {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'Text description of the video scene.' },
+        inputImage: { type: 'string', description: 'Base64-encoded or URL image for image-to-video generation.' },
+        duration: { type: 'integer', description: 'Video duration in seconds.', default: 5 },
+        width: { type: 'integer', description: 'Video width in pixels.', default: 1280 },
+        height: { type: 'integer', description: 'Video height in pixels.', default: 720 },
+        fps: { type: 'integer', description: 'Frames per second.', default: 24 },
+        outputFormat: { type: 'string', description: "Video format (e.g. 'mp4').", default: 'mp4' },
+        style: { type: 'string', description: "Video style (e.g. 'cinematic', 'natural')." },
+        aspectRatio: { type: 'string', description: "Aspect ratio (e.g. '16:9', '1:1')." },
+        n: { type: 'integer', description: 'Number of videos to generate.', default: 1 },
+      },
+      required: ['prompt'],
+    },
+    ...defaults,
+  });
+}
+
+/**
+ * pdfTool() — generate PDFs from markdown (Conductor GENERATE_PDF task).
+ * No AI provider needed — Conductor converts markdown directly.
+ */
+function pdfTool({ name = 'generate_pdf', description = 'Generate a PDF document from markdown text.', inputSchema, ...defaults } = {}) {
+  return {
+    name,
+    description,
+    inputSchema: inputSchema || {
+      type: 'object',
+      properties: {
+        markdown: { type: 'string', description: 'Markdown text to convert to PDF.' },
+        pageSize: { type: 'string', description: 'Page size: A4, LETTER, LEGAL, A3, or A5.', default: 'A4' },
+        theme: { type: 'string', description: "Style preset: 'default' or 'compact'.", default: 'default' },
+        baseFontSize: { type: 'number', description: 'Base font size in points.', default: 11 },
+      },
+      required: ['markdown'],
+    },
+    outputSchema: null,
+    func: null,
+    approvalRequired: false,
+    timeoutSeconds: null,
+    toolType: 'generate_pdf',
+    config: { taskType: 'GENERATE_PDF', ...defaults },
+  };
+}
+
+// ── RAG tool constructors ───────────────────────────────────────────────
+
+/**
+ * indexTool() — index documents into a vector database (Conductor LLM_INDEX_TEXT task).
+ */
+function indexTool({ name, description, vectorDb, index, embeddingModelProvider, embeddingModel, namespace = 'default_ns', chunkSize, chunkOverlap, dimensions, inputSchema } = {}) {
+  const config = {
+    taskType: 'LLM_INDEX_TEXT',
+    vectorDB: vectorDb,
+    namespace,
+    index,
+    embeddingModelProvider,
+    embeddingModel,
+  };
+  if (chunkSize != null) config.chunkSize = chunkSize;
+  if (chunkOverlap != null) config.chunkOverlap = chunkOverlap;
+  if (dimensions != null) config.dimensions = dimensions;
+
+  return {
+    name,
+    description,
+    inputSchema: inputSchema || {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The text content to index.' },
+        docId: { type: 'string', description: 'Unique document identifier.' },
+        metadata: { type: 'object', description: 'Optional metadata to store with the document.' },
+      },
+      required: ['text', 'docId'],
+    },
+    outputSchema: null,
+    func: null,
+    approvalRequired: false,
+    timeoutSeconds: null,
+    toolType: 'rag_index',
+    config,
+  };
+}
+
+/**
+ * searchTool() — search a vector database (Conductor LLM_SEARCH_INDEX task).
+ */
+function searchTool({ name, description, vectorDb, index, embeddingModelProvider, embeddingModel, namespace = 'default_ns', maxResults = 5, dimensions, inputSchema } = {}) {
+  const config = {
+    taskType: 'LLM_SEARCH_INDEX',
+    vectorDB: vectorDb,
+    namespace,
+    index,
+    embeddingModelProvider,
+    embeddingModel,
+    maxResults,
+  };
+  if (dimensions != null) config.dimensions = dimensions;
+
+  return {
+    name,
+    description,
+    inputSchema: inputSchema || {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query.' },
+      },
+      required: ['query'],
+    },
+    outputSchema: null,
+    func: null,
+    approvalRequired: false,
+    timeoutSeconds: null,
+    toolType: 'rag_search',
+    config,
+  };
+}
+
+// ── Agent-as-tool ───────────────────────────────────────────────────────
+
+/**
+ * agentTool() — wrap an Agent as a callable tool (invoked as a sub-workflow).
+ */
+function agentTool(agent, { name, description, retryCount, retryDelaySeconds, optional } = {}) {
+  const agentName = agent.name;
+  const config = { agent };
+  if (retryCount != null) config.retryCount = retryCount;
+  if (retryDelaySeconds != null) config.retryDelaySeconds = retryDelaySeconds;
+  if (optional != null) config.optional = optional;
+
+  return {
+    name: name || agentName,
+    description: description || `Invoke the ${agentName} agent`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        request: { type: 'string', description: 'The request or question to send to this agent.' },
+      },
+      required: ['request'],
+    },
+    outputSchema: null,
+    func: null,
+    approvalRequired: false,
+    timeoutSeconds: null,
+    toolType: 'agent_tool',
+    config,
+  };
+}
+
+module.exports = {
+  tool, getToolDef, httpTool, mcpTool,
+  imageTool, audioTool, videoTool, pdfTool,
+  indexTool, searchTool, agentTool,
+  TOOL_DEF,
+};
