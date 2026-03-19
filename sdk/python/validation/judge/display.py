@@ -1,9 +1,18 @@
-"""Rich display for cross-run judging."""
+"""Rich display for LLM judging."""
 
 from __future__ import annotations
 
 _MAX_COL_NAME = 14
 _MAX_EXAMPLE_WIDTH = 30
+
+
+def _avg_score(rows: list[dict], key: str) -> tuple[float, int]:
+    scores = [int(r[key]) for r in rows if r.get(key)]
+    return (sum(scores) / len(scores) if scores else 0.0, len(scores))
+
+
+def _score_color(avg: float) -> str:
+    return "green" if avg >= 4 else ("yellow" if avg >= 3 else "red")
 
 
 def _score_style(score) -> str:
@@ -43,7 +52,7 @@ def _judge_with_rich(
     from rich.table import Table
     from rich.text import Text
 
-    from .cross import _judge_example
+    from .engine import _judge_example
 
     total = len(all_example_names)
 
@@ -66,7 +75,9 @@ def _judge_with_rich(
 
         # Table 1: absolute scores
         score_table = Table(title="Run Scores", expand=False, show_edge=True)
-        score_table.add_column("Example", style="bold", min_width=ex_width, max_width=ex_width, no_wrap=True)
+        score_table.add_column(
+            "Example", style="bold", min_width=ex_width, max_width=ex_width, no_wrap=True
+        )
         for rn in run_names:
             score_table.add_column(_trunc(rn), justify="center", min_width=8)
 
@@ -83,10 +94,8 @@ def _judge_with_rich(
         if judge_rows:
             avg_cells: list = [Text("Average", style="bold")]
             for rn in run_names:
-                scores = [int(r[f"{rn}_score"]) for r in judge_rows if r.get(f"{rn}_score")]
-                avg = sum(scores) / len(scores) if scores else 0
-                style = "green" if avg >= 4 else ("yellow" if avg >= 3 else "red")
-                avg_cells.append(Text(f"{avg:.1f}", style=f"bold {style}"))
+                avg, _ = _avg_score(judge_rows, f"{rn}_score")
+                avg_cells.append(Text(f"{avg:.1f}", style=f"bold {_score_color(avg)}"))
             score_table.add_section()
             score_table.add_row(*avg_cells)
 
@@ -97,7 +106,9 @@ def _judge_with_rich(
             non_baseline = [rn for rn in run_names if rn != baseline_name]
             if non_baseline:
                 vs_table = Table(title=f"vs {_trunc(baseline_name)}", expand=False, show_edge=True)
-                vs_table.add_column("Example", style="bold", min_width=ex_width, max_width=ex_width, no_wrap=True)
+                vs_table.add_column(
+                    "Example", style="bold", min_width=ex_width, max_width=ex_width, no_wrap=True
+                )
                 for rn in non_baseline:
                     vs_table.add_column(_trunc(rn), justify="center", min_width=8)
 
@@ -109,21 +120,17 @@ def _judge_with_rich(
                     for rn in non_baseline:
                         bs = row.get(f"{rn}_vs_{baseline_name}", "")
                         cells.append(
-                            Text(f"{bs}/5", style=_score_style(bs)) if bs else Text("-", style="dim")
+                            Text(f"{bs}/5", style=_score_style(bs))
+                            if bs
+                            else Text("-", style="dim")
                         )
                     vs_table.add_row(*cells)
 
                 if judge_rows:
                     avg_cells2: list = [Text("Average", style="bold")]
                     for rn in non_baseline:
-                        scores = [
-                            int(r[f"{rn}_vs_{baseline_name}"])
-                            for r in judge_rows
-                            if r.get(f"{rn}_vs_{baseline_name}")
-                        ]
-                        avg = sum(scores) / len(scores) if scores else 0
-                        style = "green" if avg >= 4 else ("yellow" if avg >= 3 else "red")
-                        avg_cells2.append(Text(f"{avg:.1f}", style=f"bold {style}"))
+                        avg, _ = _avg_score(judge_rows, f"{rn}_vs_{baseline_name}")
+                        avg_cells2.append(Text(f"{avg:.1f}", style=f"bold {_score_color(avg)}"))
                     vs_table.add_section()
                     vs_table.add_row(*avg_cells2)
 
@@ -168,9 +175,9 @@ def _judge_plain(
     judge_rows,
 ):
     """Judge with plain print output."""
-    from .cross import _judge_example
+    from .engine import _judge_example
 
-    print(f"\n  Cross-run judge: {len(run_names)} runs | model: {settings.judge_model}")
+    print(f"\n  LLM judge: {len(run_names)} runs | model: {settings.judge_model}")
     if baseline_name:
         print(f"  Baseline: {baseline_name}")
 
@@ -211,10 +218,8 @@ def _print_rich_summary(console, judge_rows, run_names, baseline_name, state, el
     summary.add_column("Avg Score", justify="right")
 
     for rn in run_names:
-        scores = [int(r[f"{rn}_score"]) for r in judge_rows if r.get(f"{rn}_score")]
-        avg = sum(scores) / len(scores) if scores else 0
-        style = "green" if avg >= 4 else ("yellow" if avg >= 3 else "red")
-        summary.add_row(rn, str(len(scores)), Text(f"{avg:.2f}", style=style))
+        avg, count = _avg_score(judge_rows, f"{rn}_score")
+        summary.add_row(rn, str(count), Text(f"{avg:.2f}", style=_score_color(avg)))
 
     console.print()
     console.print(summary)
@@ -229,14 +234,8 @@ def _print_rich_summary(console, judge_rows, run_names, baseline_name, state, el
             vs_summary.add_column(f"Avg vs {_trunc(baseline_name)}", justify="right")
 
             for rn in non_baseline:
-                bscores = [
-                    int(r[f"{rn}_vs_{baseline_name}"])
-                    for r in judge_rows
-                    if r.get(f"{rn}_vs_{baseline_name}")
-                ]
-                bavg = sum(bscores) / len(bscores) if bscores else 0
-                bstyle = "green" if bavg >= 4 else ("yellow" if bavg >= 3 else "red")
-                vs_summary.add_row(rn, str(len(bscores)), Text(f"{bavg:.2f}", style=bstyle))
+                bavg, bcount = _avg_score(judge_rows, f"{rn}_vs_{baseline_name}")
+                vs_summary.add_row(rn, str(bcount), Text(f"{bavg:.2f}", style=_score_color(bavg)))
 
             console.print(vs_summary)
 

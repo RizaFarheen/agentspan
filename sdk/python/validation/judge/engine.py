@@ -1,4 +1,4 @@
-"""Cross-run judge: compare outputs across named runs."""
+"""LLM judge: scores and compares model outputs across named runs."""
 
 from __future__ import annotations
 

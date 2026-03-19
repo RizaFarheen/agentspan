@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-run LLM judge. Reads outputs from multi-run parent directory,
+"""LLM judge: scores and compares model outputs across named runs. Reads outputs from multi-run parent directory,
 scores each run individually (1-5), compares against baseline.
 
 Usage:

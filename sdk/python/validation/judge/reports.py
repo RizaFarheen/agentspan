@@ -56,7 +56,7 @@ def _write_judge_report(
 ) -> None:
     """Write markdown judge report."""
     with open(path, "w") as f:
-        f.write("# Cross-Run Judge Report\n\n")
+        f.write("# Model Comparison Report\n\n")
         f.write(f"Runs: {', '.join(run_names)}\n")
         if baseline_name:
             f.write(f"Baseline: {baseline_name}\n")
