@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from langchain_core.callbacks import BaseCallbackHandler
 
@@ -55,6 +55,12 @@ def make_langchain_worker(
     def tool_worker(task: Task) -> TaskResult:
         workflow_id = task.workflow_instance_id
         prompt = task.input_data.get("prompt", "")
+        session_id = (task.input_data.get("session_id") or "").strip()
+        if session_id:
+            logger.debug(
+                "session_id '%s' received but not forwarded — AgentExecutor does not support thread_id natively",
+                session_id,
+            )
 
         try:
             handler = AgentspanCallbackHandler(workflow_id, server_url, auth_key, auth_secret)
@@ -91,7 +97,7 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
         self._server_url = server_url
         self._auth_key = auth_key
         self._auth_secret = auth_secret
-        self._current_tool_name: Optional[str] = None
+        self._tool_names: dict = {}
 
     def on_llm_start(self, serialized, prompts, **kwargs):
         _push_event_nonblocking(
@@ -104,7 +110,9 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
 
     def on_tool_start(self, serialized, input_str, **kwargs):
         tool_name = serialized.get("name", "") if isinstance(serialized, dict) else ""
-        self._current_tool_name = tool_name
+        run_id = kwargs.get("run_id")
+        if run_id is not None:
+            self._tool_names[run_id] = tool_name
         _push_event_nonblocking(
             self._workflow_id,
             {"type": "tool_call", "toolName": tool_name, "args": {"input": input_str}},
@@ -114,32 +122,26 @@ class AgentspanCallbackHandler(BaseCallbackHandler):
         )
 
     def on_tool_end(self, output, **kwargs):
+        run_id = kwargs.get("run_id")
+        tool_name = self._tool_names.pop(run_id, "") if run_id is not None else ""
         _push_event_nonblocking(
             self._workflow_id,
-            {
-                "type": "tool_result",
-                "toolName": self._current_tool_name or "",
-                "result": str(output),
-            },
+            {"type": "tool_result", "toolName": tool_name, "result": str(output)},
             self._server_url,
             self._auth_key,
             self._auth_secret,
         )
-        self._current_tool_name = None
 
     def on_tool_error(self, error, **kwargs):
+        run_id = kwargs.get("run_id")
+        tool_name = self._tool_names.pop(run_id, "") if run_id is not None else ""
         _push_event_nonblocking(
             self._workflow_id,
-            {
-                "type": "tool_result",
-                "toolName": self._current_tool_name or "",
-                "result": f"ERROR: {error}",
-            },
+            {"type": "tool_result", "toolName": tool_name, "result": f"ERROR: {error}"},
             self._server_url,
             self._auth_key,
             self._auth_secret,
         )
-        self._current_tool_name = None
 
 
 def _push_event_nonblocking(

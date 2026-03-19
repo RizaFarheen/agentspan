@@ -70,6 +70,10 @@ class TestMakeLangchainWorker:
 
         call_args = executor.invoke.call_args
         assert call_args[0][0]["input"] == "search for python"
+        config = call_args[1]["config"]
+        assert len(config["callbacks"]) == 1
+        from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
+        assert isinstance(config["callbacks"][0], AgentspanCallbackHandler)
 
     def test_worker_returns_failed_on_exception(self):
         from agentspan.agents.frameworks.langchain import make_langchain_worker
@@ -88,10 +92,8 @@ class TestMakeLangchainWorker:
         assert "tool error" in result.reason_for_incompletion
 
     def test_worker_pushes_tool_call_event_via_callback(self):
-        from agentspan.agents.frameworks.langchain import make_langchain_worker, AgentspanCallbackHandler
-
-        executor = _make_executor()
-        task = _make_task(workflow_id="wf-push-test")
+        from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
+        from uuid import uuid4
 
         pushed_events = []
 
@@ -99,13 +101,14 @@ class TestMakeLangchainWorker:
             pushed_events.append(event)
 
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking", side_effect=fake_push):
-            # Simulate callback being triggered
+            run_id = uuid4()
             handler = AgentspanCallbackHandler("wf-push-test", "http://localhost:8080", "k", "s")
-            handler.on_tool_start({"name": "search"}, "python", run_id=None)
-            handler.on_tool_end("result text", run_id=None)
+            handler.on_tool_start({"name": "search"}, "python", run_id=run_id)
+            handler.on_tool_end("result text", run_id=run_id)
 
         tool_calls = [e for e in pushed_events if e["type"] == "tool_call"]
         tool_results = [e for e in pushed_events if e["type"] == "tool_result"]
         assert len(tool_calls) == 1
         assert tool_calls[0]["toolName"] == "search"
         assert len(tool_results) == 1
+        assert tool_results[0]["toolName"] == "search"  # verifies run_id keying
