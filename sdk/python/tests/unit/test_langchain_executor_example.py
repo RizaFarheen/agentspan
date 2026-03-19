@@ -4,7 +4,7 @@ Example 4: LangChain AgentExecutor.
 Verifies full pipeline from executor creation through worker invocation.
 """
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 
 @pytest.fixture
@@ -74,6 +74,7 @@ class TestLangChainWorkerInvocation:
 
     def test_callback_on_tool_start_pushes_event(self):
         """Callback pushes tool_call event on tool start."""
+        pytest.importorskip("langchain_core")
         from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
         from uuid import uuid4
 
@@ -89,6 +90,8 @@ class TestLangChainWorkerInvocation:
         assert pushed[0]["toolName"] == "calculator"
 
     def test_callback_on_tool_end_pushes_event(self):
+        """Callback pushes tool_result event on tool end."""
+        pytest.importorskip("langchain_core")
         from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
         from uuid import uuid4
 
