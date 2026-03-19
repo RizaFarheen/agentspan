@@ -195,20 +195,24 @@ def make_claude_worker(agent_config, session_client, event_client, conductor_cli
             hooks["PreToolUse"].append(HookMatcher(matcher="Agent", hooks=[subagent_hook]))
 
         async def run():
-            session_id = session_client.restore(workflow_id, cwd)
+            restored_session_id = session_client.restore(workflow_id, cwd)
+            # Pre-populate session_id_ref from the restored value so that PostToolUse
+            # checkpoints work correctly on resumes where the SDK may not re-emit
+            # SystemMessage(init). The init message will update this if/when it arrives.
+            session_id_ref["value"] = restored_session_id
             async for msg in query(
                 prompt=prompt,
                 options=ClaudeAgentOptions(
                     cwd=cwd,
                     allowed_tools=agent_config.get("allowed_tools", []),
                     max_turns=agent_config.get("max_turns", 100),
-                    resume=session_id,
+                    resume=restored_session_id,
                     system_prompt=agent_config.get("system_prompt"),  # None → SDK uses default
                     hooks=hooks,
                 ),
             ):
                 if isinstance(msg, SystemMessage) and msg.subtype == "init":
-                    session_id_ref["value"] = msg.session_id
+                    session_id_ref["value"] = msg.session_id  # overrides restored value
                 if isinstance(msg, ResultMessage):
                     return msg.result
             return None
@@ -556,6 +560,10 @@ class AgentspanTransport(Transport):
 
             # Serialize content blocks for the stream-json protocol.
             # Anthropic SDK objects must be converted to dicts before JSON serialization.
+            # IMPORTANT: when adaptive thinking is active, the response includes
+            # `thinking` content blocks. These MUST be preserved in content_dicts and
+            # echoed back in self._conversation — the Anthropic API requires thinking
+            # blocks to be round-tripped in subsequent turns. Do NOT filter them out.
             content_dicts = [block.model_dump() for block in response.content]
 
             # Emit assistant message to SDK
@@ -972,15 +980,15 @@ Events pushed by the worker (Tier 1/2) or Transport (Tier 3) to `POST /api/agent
 
 **There are two sources of subagent events with different payloads:**
 
-| Source | SSE event | Payload |
-|---|---|---|
-| `PreToolUse` fires for any non-Agent tool | `tool_call` | `{toolName, args}` |
-| `PostToolUse` fires for any tool | `tool_result` | `{toolName, result}` |
-| SDK `SubagentStart` hook (Tier 1 / native subagent) | `subagent_start` | `{agentId, agentType, subWorkflowId: null}` |
-| SDK `SubagentStop` hook (Tier 1 / native subagent) | `subagent_stop` | `{agentId, subWorkflowId: null}` |
-| Tier 2 `make_subagent_hook` (Conductor-routed subagent) | `subagent_start` | `{subWorkflowId, prompt, agentId: null}` |
-| Tier 2 `make_subagent_hook` (Conductor-routed subagent) | `subagent_stop` | `{subWorkflowId, result, agentId: null}` |
-| Conductor workflow → COMPLETED | `done` (fired by existing `AgentEventListener`, same as all agents) | — |
+| Source | SSE event | Payload | Notes |
+|---|---|---|---|
+| `PreToolUse` fires for any tool (including `Agent` in Tier 1) | `tool_call` | `{toolName, args}` | In Tier 2, `Agent` tool also fires `tool_call` (before the denial hook runs) — this extra event is harmless |
+| `PostToolUse` fires for any tool | `tool_result` | `{toolName, result}` | |
+| SDK `SubagentStart` hook (Tier 1 / native subagent) | `subagent_start` | `{agentId, agentType, subWorkflowId: null}` | |
+| SDK `SubagentStop` hook (Tier 1 / native subagent) | `subagent_stop` | `{agentId, subWorkflowId: null}` | |
+| Tier 2 `make_subagent_hook` (Conductor-routed subagent) | `subagent_start` | `{subWorkflowId, prompt, agentId: null}` | Native SDK SubagentStart/SubagentStop hooks do NOT fire for Conductor-routed subagents |
+| Tier 2 `make_subagent_hook` (Conductor-routed subagent) | `subagent_stop` | `{subWorkflowId, result, agentId: null}` | |
+| Conductor workflow → COMPLETED | `done` (fired by existing `AgentEventListener`, same as all agents) | — | |
 
 `AgentService.pushFrameworkEvent()` must handle both payload shapes for `subagent_start`/`subagent_stop`: use `subWorkflowId` when non-null, fall back to `agentId` for display.
 
