@@ -33,6 +33,10 @@ public class AgentSSEEvent {
     private String guardrailName;
     private Map<String, Object> pendingTool;
     private long timestamp;
+    // context_condensed fields
+    private Integer messagesBefore;
+    private Integer messagesAfter;
+    private Integer exchangesCondensed;
 
     public AgentSSEEvent() {}
 
@@ -102,6 +106,17 @@ public class AgentSSEEvent {
         return e;
     }
 
+    public static AgentSSEEvent contextCondensed(
+            String workflowId, String trigger,
+            int messagesBefore, int messagesAfter, int exchangesCondensed) {
+        AgentSSEEvent e = new AgentSSEEvent("context_condensed", workflowId);
+        e.content = trigger;
+        e.messagesBefore = messagesBefore;
+        e.messagesAfter = messagesAfter;
+        e.exchangesCondensed = exchangesCondensed;
+        return e;
+    }
+
     // ── Serialization ────────────────────────────────────────────────
 
     public String toJson() {
@@ -138,4 +153,10 @@ public class AgentSSEEvent {
     public void setPendingTool(Map<String, Object> pendingTool) { this.pendingTool = pendingTool; }
     public long getTimestamp() { return timestamp; }
     public void setTimestamp(long timestamp) { this.timestamp = timestamp; }
+    public Integer getMessagesBefore() { return messagesBefore; }
+    public void setMessagesBefore(Integer messagesBefore) { this.messagesBefore = messagesBefore; }
+    public Integer getMessagesAfter() { return messagesAfter; }
+    public void setMessagesAfter(Integer messagesAfter) { this.messagesAfter = messagesAfter; }
+    public Integer getExchangesCondensed() { return exchangesCondensed; }
+    public void setExchangesCondensed(Integer exchangesCondensed) { this.exchangesCondensed = exchangesCondensed; }
 }

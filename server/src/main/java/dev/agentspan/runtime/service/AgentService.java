@@ -759,6 +759,11 @@ public class AgentService {
             case "tool_result" -> AgentSSEEvent.toolResult(workflowId,
                 event.getOrDefault("toolName", "").toString(),
                 event.getOrDefault("result", ""));
+            case "context_condensed" -> AgentSSEEvent.contextCondensed(workflowId,
+                event.getOrDefault("trigger", "").toString(),
+                event.get("messagesBefore") instanceof Number n ? n.intValue() : 0,
+                event.get("messagesAfter") instanceof Number n ? n.intValue() : 0,
+                event.get("exchangesCondensed") instanceof Number n ? n.intValue() : 0);
             default -> {
                 log.debug("Unknown framework event type '{}' for workflow {}", type, workflowId);
                 yield null;

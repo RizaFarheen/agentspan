@@ -34,6 +34,8 @@ import com.netflix.conductor.model.WorkflowModel;
 import com.netflix.conductor.core.exception.TerminateWorkflowException;
 import com.netflix.conductor.core.execution.mapper.TaskMapperContext;
 
+import dev.agentspan.runtime.model.AgentSSEEvent;
+import dev.agentspan.runtime.service.AgentStreamRegistry;
 import dev.agentspan.runtime.util.ModelContextWindows;
 import lombok.extern.slf4j.Slf4j;
 
@@ -80,6 +82,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
 
     @Autowired(required = false)
     private ModelContextWindows modelContextWindows;
+
+    @Autowired(required = false)
+    private AgentStreamRegistry streamRegistry;
 
     public AgentChatCompleteTaskMapper() {
         super(ChatCompletion.NAME);
@@ -389,6 +394,11 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             return;
         }
 
+        int messagesBefore = initial.size() + history.size();
+        int totalExchanges = groupExchanges(history).size();
+        int keptExchanges = Math.min(recentExchangesToKeep, totalExchanges);
+        int exchangesCondensed = totalExchanges - keptExchanges;
+
         List<ChatMessage> condensed = condenseHistory(history);
 
         messages.clear();
@@ -396,8 +406,24 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         messages.addAll(condensed);
 
         String trigger = reactive ? "token limit hit" : "proactive (exceeds context window)";
+        int messagesAfter = messages.size();
         log.info("Condensed conversation from {} to {} messages (triggered by {})",
-                initial.size() + history.size(), messages.size(), trigger);
+                messagesBefore, messagesAfter, trigger);
+
+        // Store condensation metadata on the task for audit trail and UI visibility
+        task.getInputData().put("_condensation", Map.of(
+                "trigger", trigger,
+                "messagesBefore", messagesBefore,
+                "messagesAfter", messagesAfter,
+                "exchangesCondensed", exchangesCondensed
+        ));
+
+        // Emit SSE event so connected clients know condensation occurred
+        if (streamRegistry != null) {
+            streamRegistry.send(workflow.getWorkflowId(),
+                    AgentSSEEvent.contextCondensed(workflow.getWorkflowId(), trigger,
+                            messagesBefore, messagesAfter, exchangesCondensed));
+        }
 
         // Warn if still over budget after condensation — nothing more we can do at this point
         if (contextWindow > 0) {
