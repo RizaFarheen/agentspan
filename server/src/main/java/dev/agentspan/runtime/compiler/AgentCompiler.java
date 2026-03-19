@@ -1268,6 +1268,10 @@ public class AgentCompiler {
     private WorkflowDef compileFrameworkPassthrough(AgentConfig config) {
         log.debug("Compiling framework passthrough workflow: {}", config.getName());
 
+        if (config.getTools() == null || config.getTools().isEmpty()) {
+            throw new IllegalArgumentException(
+                "Passthrough agent '" + config.getName() + "' must have exactly one worker tool defined.");
+        }
         String workerName = config.getTools().get(0).getName();
 
         WorkflowTask fwTask = new WorkflowTask();
