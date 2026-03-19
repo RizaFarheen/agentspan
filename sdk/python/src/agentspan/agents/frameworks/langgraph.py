@@ -79,6 +79,22 @@ def _serialize_full(
     tool_refs: List[Dict[str, Any]] = []
     workers: List[WorkerInfo] = []
     for t in lc_tools:
+        # Sub-agent: another create_agent() graph — compile as AgentTool (SUB_WORKFLOW)
+        sub_graph = getattr(t, "_agentspan_sub_graph", None)
+        if sub_graph is not None and hasattr(sub_graph, "_agentspan_meta"):
+            sub_raw, sub_workers = _serialize_full(sub_graph, sub_graph._agentspan_meta)
+            agent_tool_name = getattr(sub_graph, "name", None) or getattr(t, "name", "sub_agent")
+            agent_tool_desc = getattr(t, "description", "") or f"Call agent: {agent_tool_name}"
+            tool_refs.append({
+                "_type": "AgentTool",
+                "name": agent_tool_name,
+                "description": agent_tool_desc,
+                "agent": sub_raw,
+            })
+            workers.extend(sub_workers)
+            continue
+
+        # Regular tool
         tool_name, description, schema, func = _extract_tool_parts(t)
         tool_refs.append({
             "_worker_ref": tool_name,

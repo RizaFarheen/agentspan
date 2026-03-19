@@ -317,6 +317,7 @@ public class GoogleADKNormalizer implements AgentConfigNormalizer {
                                 "description", "The request or question to send to this agent")
                 ));
                 inputSchema.put("required", List.of("request"));
+                inputSchema.put("additionalProperties", false);
 
                 Map<String, Object> toolConfig = new LinkedHashMap<>();
                 toolConfig.put("agentConfig", childAgent);

@@ -22,7 +22,7 @@ import { getCardVariant } from "components/flow/components/shapes/styles";
 import { ArrowRight, Check, Prohibit } from "@phosphor-icons/react";
 import CardIcon from "components/flow/components/shapes/TaskCard/CardIcon";
 import { TaskStatus, TaskType } from "types";
-import { AgentEvent, AgentRunData, AgentStatus, EventType } from "./types";
+import { AgentEvent, AgentRunData, AgentStatus, AgentTurn, EventType } from "./types";
 import { DetailNodeData } from "./AgentDetailPanel";
 import { formatTokens, formatDuration } from "./agentExecutionUtils";
 import "components/flow/ReaflowOverrides.scss";
@@ -34,7 +34,7 @@ const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 2.5;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Kind = "start" | "llm" | "tool" | "handoff" | "subagent" | "output" | "error" | "next" | "group";
+type Kind = "start" | "llm" | "tool" | "handoff" | "subagent" | "output" | "error" | "next" | "back" | "group";
 
 const KIND_TYPE: Record<Kind, TaskType> = {
   start:    TaskType.SUB_WORKFLOW,
@@ -43,8 +43,10 @@ const KIND_TYPE: Record<Kind, TaskType> = {
   llm:      TaskType.LLM_CHAT_COMPLETE,
   tool:     TaskType.SIMPLE,
   output:   TaskType.SIMPLE,
-  error:    TaskType.TERMINATE,    // X icon
+  error:    TaskType.TERMINATE,
   next:     TaskType.SIMPLE,
+  back:     TaskType.SIMPLE,
+  group:    TaskType.SIMPLE,
 };
 
 const KIND_LABEL: Record<Kind, string> = {
@@ -56,6 +58,8 @@ const KIND_LABEL: Record<Kind, string> = {
   output:   "OUTPUT",
   error:    "ERROR",
   next:     "",
+  back:     "",
+  group:    "",
 };
 
 
@@ -112,7 +116,7 @@ function NodeStatusBadge({ status }: { status: TaskStatus }) {
       <div style={{
         position: "absolute", top: -half, right: -half,
         width: size, height: size, zIndex: 1,
-        borderRadius: "50%", backgroundColor: "#fff8f0",
+        borderRadius: "50%", backgroundColor: "#fde8bb",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         <CircularProgress size={size} sx={{ color: "#f59e0b" }} />
@@ -138,13 +142,36 @@ function NodeStatusBadge({ status }: { status: TaskStatus }) {
 }
 
 // ─── Node card — all nodes use white TaskCard styling ─────────────────────────
-function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
+function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack }: {
   data: DiagramNodeData;
   width: number; height: number;
   selected: boolean;
   onSelect: () => void;
   onDrillIn?: (r: AgentRunData) => void;
+  onBack?: () => void;
 }) {
+  // ── "Back to parent" node ─────────────────────────────────────────────────────
+  if (data.kind === "back") {
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onBack?.(); }}
+        style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center" }}
+      >
+        <div style={{
+          width: 44, height: 44, borderRadius: "50%",
+          border: "2px dashed #6366f1",
+          backgroundColor: "#ede9fe",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          cursor: "pointer",
+        }}>
+          <span style={{ fontSize: "0.9rem", color: "#4f46e5", lineHeight: 1 }}>↑</span>
+          <span style={{ fontSize: "0.48rem", color: "#6366f1", lineHeight: 1.2, textTransform: "uppercase", letterSpacing: "0.06em" }}>Back</span>
+        </div>
+      </div>
+    );
+  }
+
   // ── "Next turn" node ─────────────────────────────────────────────────────────
   if (data.kind === "next") {
     return (
@@ -154,14 +181,14 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
       >
         <div style={{
           width: 44, height: 44, borderRadius: "50%",
-          border: "1.5px dashed #b3b3b3",
-          backgroundColor: "#f3f3f3",
+          border: "2px dashed #f59e0b",
+          backgroundColor: "#fef3c7",
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
           cursor: "pointer",
         }}>
-          <span style={{ fontSize: "0.5rem", color: "#b3b3b3", lineHeight: 1, textTransform: "uppercase", letterSpacing: "0.06em" }}>Turn</span>
-          <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#535353", lineHeight: 1.2 }}>{data.nextTurn}</span>
+          <span style={{ fontSize: "0.5rem", color: "#b45309", lineHeight: 1, textTransform: "uppercase", letterSpacing: "0.06em" }}>Turn</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#92400e", lineHeight: 1.2 }}>{data.nextTurn}</span>
         </div>
       </div>
     );
@@ -209,6 +236,48 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
               <TypeBadge label="PARALLEL" />
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Handoff pill ─────────────────────────────────────────────────────────────
+  if (data.kind === "handoff") {
+    const isSelected = selected;
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onSelect(); }}
+        style={{
+          width: "100%", height: "100%",
+          display: "flex", alignItems: "center",
+          borderRadius: 8,
+          cursor: "pointer",
+          backgroundColor: isSelected ? "#ede9fe" : "#f5f3ff",
+          border: `1.5px solid ${isSelected ? "#7c3aed" : "#c4b5fd"}`,
+          boxSizing: "border-box",
+          padding: "0 16px",
+          gap: 10,
+          transition: "background-color 0.15s, border-color 0.15s",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* Arrow accent stripe on the left */}
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0, width: 4,
+          backgroundColor: "#7c3aed", borderRadius: "8px 0 0 8px",
+        }} />
+        <span style={{ fontSize: "1rem", color: "#7c3aed", marginLeft: 4, flexShrink: 0, lineHeight: 1 }}>→</span>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flexGrow: 1 }}>
+          <span style={{
+            fontSize: "0.8rem", fontWeight: 600, color: "#4c1d95",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {data.label || "handoff"}
+          </span>
+          <span style={{ fontSize: "0.68rem", color: "#7c3aed", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            handoff
+          </span>
         </div>
       </div>
     );
@@ -284,7 +353,7 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn }: {
 
 // ─── Reaflow node wrapper ─────────────────────────────────────────────────────
 const DiagramNode = (nodeProps: any) => {
-  const { selectedId, onSelect, onDrillIn, properties } = nodeProps;
+  const { selectedId, onSelect, onDrillIn, onBack, properties } = nodeProps;
   const data: DiagramNodeData = properties?.data;
   return (
     <Node {...nodeProps} onClick={() => null} label={<></>} style={{ stroke: "none", fill: "none" }}>
@@ -297,6 +366,7 @@ const DiagramNode = (nodeProps: any) => {
               selected={selectedId === properties?.id}
               onSelect={() => onSelect(properties?.id)}
               onDrillIn={onDrillIn}
+              onBack={onBack}
             />
           </foreignObject>
         </g>
@@ -306,26 +376,138 @@ const DiagramNode = (nodeProps: any) => {
 };
 
 // ─── Build diagram nodes/edges ────────────────────────────────────────────────
-const W = 264, H = 80;
+const W = 264, H = 80, H_HANDOFF = 48;
 // Max individual nodes shown per "group" (tools or sub-agents) before collapsing
 const MAX_INLINE = 8;
 
-function buildDiagram(agentRun: AgentRunData, activeTurnNum: number) {
+function buildTurnNodes(
+  turn: AgentTurn,
+  nodes: NodeData<DiagramNodeData>[],
+  edges: EdgeData[],
+  done: Set<string>,
+  prevRef: { id: string },
+) {
+  const push = (id: string, data: DiagramNodeData, h = H) => {
+    nodes.push({ id, width: W, height: h, data });
+    edges.push({ id: `${prevRef.id}→${id}`, from: prevRef.id, to: id });
+    if (data.ts === TaskStatus.COMPLETED) done.add(id);
+    prevRef.id = id;
+  };
+
+  // Group consecutive TOOL_CALL events so large parallel batches collapse into one node
+  type Grp = AgentEvent | { type: "__toolGroup"; events: AgentEvent[] };
+  const groups: Grp[] = [];
+  let toolBatch: AgentEvent[] = [];
+  const flushBatch = () => {
+    if (toolBatch.length === 0) return;
+    groups.push(toolBatch.length === 1 ? toolBatch[0] : { type: "__toolGroup", events: toolBatch });
+    toolBatch = [];
+  };
+  for (const ev of turn.events) {
+    if (ev.type === EventType.TOOL_CALL) { toolBatch.push(ev); }
+    else { flushBatch(); groups.push(ev); }
+  }
+  flushBatch();
+
+  for (const grp of groups) {
+    if ("type" in grp && grp.type === "__toolGroup") {
+      const batch = (grp as any).events as AgentEvent[];
+      if (batch.length === 1) {
+        const ev = batch[0];
+        const out = ev.result ? (() => { try { return JSON.stringify(ev.result).replace(/[{}"]/g, "").slice(0, 55); } catch { return undefined; } })() : undefined;
+        push(ev.id, {
+          kind: "tool", label: ev.toolName ?? "tool",
+          sublabel: out, meta: ev.durationMs ? formatDuration(ev.durationMs) : undefined,
+          ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
+          event: ev,
+        });
+      } else {
+        const completed = batch.filter(e => e.success === true).length;
+        const failed    = batch.filter(e => e.success === false).length;
+        const running   = batch.filter(e => e.success === undefined).length;
+        const ts = failed > 0 ? TaskStatus.FAILED : running > 0 ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED;
+        push(`toolgroup-${turn.turnNumber}`, {
+          kind: "group",
+          label: batch[0].toolName ?? "tool calls",
+          groupType: "tools", groupEvents: batch,
+          groupCompleted: completed, groupFailed: failed, groupRunning: running,
+          ts,
+        });
+      }
+    } else {
+      const ev = grp as AgentEvent;
+      switch (ev.type) {
+        case EventType.THINKING: {
+          const tok = ev.tokens;
+          push(ev.id, {
+            kind: "llm", label: "LLM",
+            sublabel: ev.toolName,
+            meta: tok ? `${formatTokens(tok.promptTokens)}↑  ${formatTokens(tok.completionTokens)}↓` : undefined,
+            ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
+            event: ev,
+          }); break;
+        }
+        case EventType.HANDOFF: {
+          const target = ev.targetAgent ?? ev.summary.replace(/^→\s*/, "") ?? "";
+          push(ev.id, {
+            kind: "handoff", label: target,
+            ts: TaskStatus.COMPLETED, event: ev,
+          }, H_HANDOFF); break;
+        }
+        case EventType.DONE: {
+          const txt = typeof ev.detail === "string" ? ev.detail : undefined;
+          push(ev.id, {
+            kind: "output", label: "output",
+            sublabel: txt?.slice(0, 70) + (txt && txt.length > 70 ? "…" : ""),
+            ts: TaskStatus.COMPLETED, event: ev,
+          }); break;
+        }
+        case EventType.ERROR:
+          push(ev.id, {
+            kind: "error", label: "error", sublabel: ev.summary,
+            ts: TaskStatus.FAILED, event: ev,
+          }); break;
+        default: break;
+      }
+    }
+  }
+
+  // Sub-agents: single node if one, stacked group node if many
+  if (turn.subAgents.length === 1) {
+    const sub = turn.subAgents[0];
+    push(`sub-${sub.id}`, {
+      kind: "subagent", label: sub.agentName,
+      meta: sub.model,
+      sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
+      ts: toTS(sub.status), subAgentRun: sub,
+    });
+  } else if (turn.subAgents.length > 1) {
+    const completed = turn.subAgents.filter(s => s.status === AgentStatus.COMPLETED).length;
+    const failed    = turn.subAgents.filter(s => s.status === AgentStatus.FAILED).length;
+    const running   = turn.subAgents.length - completed - failed;
+    const ts = failed > 0 ? TaskStatus.FAILED : running > 0 ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED;
+    push(`subgroup-${turn.turnNumber}`, {
+      kind: "group",
+      label: turn.subAgents[0].agentName,
+      groupType: "agents", groupAgents: turn.subAgents,
+      groupCompleted: completed, groupFailed: failed, groupRunning: running,
+      ts,
+    });
+  }
+}
+
+function buildDiagram(agentRun: AgentRunData, _activeTurnNum: number, hasBack: boolean) {
   const nodes: NodeData<DiagramNodeData>[] = [];
   const edges: EdgeData[] = [];
   const done = new Set<string>();
-  let prev = "start";
+  const prevRef = { id: "start" };
 
-  const push = (id: string, data: DiagramNodeData, h = H) => {
-    nodes.push({ id, width: W, height: h, data });
-    edges.push({ id: `${prev}→${id}`, from: prev, to: id });
-    if (data.ts === TaskStatus.COMPLETED) done.add(id);
-    prev = id;
-  };
-
-  const allTurns = agentRun.turns;
-  const turn = allTurns.find(t => t.turnNumber === activeTurnNum) ?? allTurns[0];
-  const nextTurn = allTurns.find(t => t.turnNumber > (turn?.turnNumber ?? 0));
+  // "Back to parent" node — first in the chain
+  if (hasBack) {
+    nodes.push({ id: "back", width: 56, height: 56, data: { kind: "back", label: "", ts: TaskStatus.COMPLETED } });
+    edges.push({ id: "back→start", from: "back", to: "start" });
+    done.add("back");
+  }
 
   nodes.push({ id: "start", width: W, height: H, data: {
     kind: "start", label: agentRun.agentName,
@@ -334,116 +516,23 @@ function buildDiagram(agentRun: AgentRunData, activeTurnNum: number) {
   }});
   if (agentRun.status === AgentStatus.COMPLETED) done.add("start");
 
-  if (turn) {
-    // Group consecutive TOOL_CALL events so large parallel batches collapse into one node
-    type Grp = AgentEvent | { type: "__toolGroup"; events: AgentEvent[] };
-    const groups: Grp[] = [];
-    let toolBatch: AgentEvent[] = [];
-    const flushBatch = () => {
-      if (toolBatch.length === 0) return;
-      groups.push(toolBatch.length === 1 ? toolBatch[0] : { type: "__toolGroup", events: toolBatch });
-      toolBatch = [];
-    };
-    for (const ev of turn.events) {
-      if (ev.type === EventType.TOOL_CALL) { toolBatch.push(ev); }
-      else { flushBatch(); groups.push(ev); }
-    }
-    flushBatch();
+  const allTurns = agentRun.turns;
+  for (let i = 0; i < allTurns.length; i++) {
+    const turn = allTurns[i];
 
-    for (const grp of groups) {
-      if ("type" in grp && grp.type === "__toolGroup") {
-        const batch = (grp as any).events as AgentEvent[];
-        if (batch.length === 1) {
-          // Single tool call — individual node
-          const ev = batch[0];
-          const out = ev.result ? JSON.stringify(ev.result).replace(/[{}"]/g, "").slice(0, 55) : undefined;
-          push(ev.id, {
-            kind: "tool", label: ev.toolName ?? "tool",
-            sublabel: out, meta: ev.durationMs ? formatDuration(ev.durationMs) : undefined,
-            ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
-            event: ev,
-          });
-        } else {
-          // Multiple parallel tool calls → stacked group node
-          const completed = batch.filter(e => e.success === true).length;
-          const failed    = batch.filter(e => e.success === false).length;
-          const running   = batch.filter(e => e.success === undefined).length;
-          const ts = failed > 0 ? TaskStatus.FAILED : running > 0 ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED;
-          push(`toolgroup-${turn.turnNumber}`, {
-            kind: "group",
-            label: batch[0].toolName ?? "tool calls",
-            groupType: "tools", groupEvents: batch,
-            groupCompleted: completed, groupFailed: failed, groupRunning: running,
-            ts,
-          });
-        }
-      } else {
-        const ev = grp as AgentEvent;
-        switch (ev.type) {
-          case EventType.THINKING: {
-            const tok = ev.tokens;
-            push(ev.id, {
-              kind: "llm", label: "LLM",
-              sublabel: ev.toolName,
-              meta: tok ? `${formatTokens(tok.promptTokens)}↑  ${formatTokens(tok.completionTokens)}↓` : undefined,
-              ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
-              event: ev,
-            }); break;
-          }
-          case EventType.HANDOFF:
-            push(ev.id, {
-              kind: "handoff", label: ev.targetAgent ?? ev.summary.replace(/^→\s*/, ""),
-              ts: TaskStatus.COMPLETED, event: ev,
-            }); break;
-          case EventType.DONE: {
-            const txt = typeof ev.detail === "string" ? ev.detail : undefined;
-            push(ev.id, {
-              kind: "output", label: "output",
-              sublabel: txt?.slice(0, 70) + (txt && txt.length > 70 ? "…" : ""),
-              ts: TaskStatus.COMPLETED, event: ev,
-            }); break;
-          }
-          case EventType.ERROR:
-            push(ev.id, {
-              kind: "error", label: "error", sublabel: ev.summary,
-              ts: TaskStatus.FAILED, event: ev,
-            }); break;
-          default: break;
-        }
-      }
+    // Insert orange "Turn N" separator before every turn after the first
+    if (i > 0) {
+      const ntId = `turn-sep-${turn.turnNumber}`;
+      nodes.push({ id: ntId, width: 56, height: 56, data: {
+        kind: "next", label: String(turn.turnNumber),
+        nextTurn: turn.turnNumber, ts: toTS(turn.status),
+      }});
+      edges.push({ id: `${prevRef.id}→${ntId}`, from: prevRef.id, to: ntId });
+      if (turn.status === AgentStatus.COMPLETED) done.add(ntId);
+      prevRef.id = ntId;
     }
 
-    // Sub-agents: single node if one, stacked group node if many
-    if (turn.subAgents.length === 1) {
-      const sub = turn.subAgents[0];
-      push(`sub-${sub.id}`, {
-        kind: "subagent", label: sub.agentName,
-        meta: sub.model,
-        sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
-        ts: toTS(sub.status), subAgentRun: sub,
-      });
-    } else if (turn.subAgents.length > 1) {
-      const completed = turn.subAgents.filter(s => s.status === AgentStatus.COMPLETED).length;
-      const failed    = turn.subAgents.filter(s => s.status === AgentStatus.FAILED).length;
-      const running   = turn.subAgents.length - completed - failed;
-      const ts = failed > 0 ? TaskStatus.FAILED : running > 0 ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED;
-      push(`subgroup-${turn.turnNumber}`, {
-        kind: "group",
-        label: turn.subAgents[0].agentName,
-        groupType: "agents", groupAgents: turn.subAgents,
-        groupCompleted: completed, groupFailed: failed, groupRunning: running,
-        ts,
-      });
-    }
-  }
-
-  if (nextTurn) {
-    const ntId = `next-${nextTurn.turnNumber}`;
-    nodes.push({ id: ntId, width: 56, height: 56, data: {
-      kind: "next", label: String(nextTurn.turnNumber),
-      nextTurn: nextTurn.turnNumber, ts: toTS(nextTurn.status),
-    }});
-    edges.push({ id: `${prev}→${ntId}`, from: prev, to: ntId });
+    buildTurnNodes(turn, nodes, edges, done, prevRef);
   }
 
   return { nodes, edges, done };
@@ -506,14 +595,16 @@ interface AgentExecutionDiagramProps {
   selectedId: string | null;
   onNodeSelect: (id: string | null, node: DetailNodeData | null) => void;
   onDrillIn?: (sub: AgentRunData) => void;
+  onBack?: () => void;
 }
 
-export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, selectedId, onNodeSelect, onDrillIn }: AgentExecutionDiagramProps) {
+export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, selectedId, onNodeSelect, onDrillIn, onBack }: AgentExecutionDiagramProps) {
+  const hasBack = !!onBack;
   // Memoize so ELK only re-runs when turn or agent actually changes (not on pan/zoom state updates)
   const { nodes, edges, done } = useMemo(
-    () => buildDiagram(agentRun, activeTurn),
+    () => buildDiagram(agentRun, activeTurn, hasBack),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [agentRun.id, activeTurn],
+    [agentRun.id, activeTurn, hasBack],
   );
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -620,6 +711,7 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
   // ── Node click handler ────────────────────────────────────────────────────────
   const handle = useCallback((id: string) => {
     const nd = nodes.find(n => n.id === id)?.data;
+    if (nd?.kind === "back") { onBack?.(); return; }
     if (nd?.kind === "next" && nd.nextTurn) { onSelectTurn(nd.nextTurn); return; }
     if (id === selectedId) { onNodeSelect(null, null); return; }
     if (!nd) { onNodeSelect(null, null); return; }
@@ -673,7 +765,7 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
           backgroundColor: "#fff",
           backgroundImage: "url('/diagramDotBg.svg')",
         }}>
-          <Box sx={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 3 }}>
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
             {/* Skeleton nodes */}
             {[0, 1, 2].map((i) => (
               <Box key={i} sx={{
@@ -727,13 +819,13 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
           maxWidth={5000}
           maxHeight={4000}
           onLayoutChange={handleLayoutChange}
-          direction="RIGHT"
+          direction="DOWN"
           layoutOptions={{
             "org.eclipse.elk.spacing.nodeNode": "18",
             "elk.layered.spacing.nodeNodeBetweenLayers": "24",
-            "org.eclipse.elk.padding": "[top=40,left=60,bottom=40,right=60]",
+            "org.eclipse.elk.padding": "[top=60,left=60,bottom=60,right=60]",
           }}
-          node={<DiagramNode selectedId={selectedId} onSelect={handle} onDrillIn={onDrillIn} />}
+          node={<DiagramNode selectedId={selectedId} onSelect={handle} onDrillIn={onDrillIn} onBack={onBack} />}
           edge={(ed: EdgeData) => (
             <Edge {...ed} style={{
               stroke: done.has(ed.from ?? "") ? EDGE_COMPLETED : EDGE_DEFAULT,

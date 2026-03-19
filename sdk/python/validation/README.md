@@ -1,249 +1,232 @@
-# E2E Validation: Multi-Run Example Runner
+# Validation: Multi-Run Example Runner
 
-Runs SDK examples against configured models via TOML config. One run = one model, concurrent execution, cross-run LLM judge.
+Run SDK examples against multiple models, compare outputs with an LLM judge.
+
+---
+
+## 30-Second Quick Start
+
+```bash
+# 1. Install
+cd sdk/python && uv sync --extra validation
+
+# 2. Copy config
+cp validation/runs.toml.example validation/runs.toml
+
+# 3. Run smoke test (7 examples, ~2 min)
+uv run python3 -m validation.scripts.run_examples \
+  --config validation/runs.toml \
+  --run openai-smoke-test
+```
+
+That's it. Results in `validation/output/run_*/`.
+
+---
 
 ## Prerequisites
 
 - Python 3.11+
-- Agentspan server running
-- For judging: `OPENAI_API_KEY` env var
+- Agentspan server running at `http://localhost:8080`
+- `OPENAI_API_KEY` set (required for OpenAI/LangGraph/LangChain examples and judge)
+- `ANTHROPIC_API_KEY` for Anthropic runs
+- `GOOGLE_API_KEY` for ADK runs
 
-## Install
+---
+
+## Common Recipes
+
+### Smoke tests — fastest sanity check
 
 ```bash
-uv sync --extra validation
+# OpenAI (7 examples)
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run openai-smoke-test
+
+# Anthropic Claude
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run anthropic-smoke-test
+
+# Claude Sonnet 4.6
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run claude-sonnet-4-6-smoke-test
+
+# All three + judge comparison
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run openai-smoke-test,anthropic-smoke-test,claude-sonnet-4-6-smoke-test --judge
 ```
 
-## Quick Start
+### Full OpenAI example suite (10 examples)
 
 ```bash
-# Copy and edit the example config
-cp validation/runs.toml.example validation/runs.toml
+# Single model
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml --run openai
 
-# Run all configured runs
-python3 -m validation.scripts.run_examples --config validation/runs.toml
-
-# Preview without executing
-python3 -m validation.scripts.run_examples --config validation/runs.toml --dry-run
-
-# Run specific runs
-python3 -m validation.scripts.run_examples --config validation/runs.toml --run openai
-
-# Run + judge in one command
-python3 -m validation.scripts.run_examples --config validation/runs.toml --judge
-
-# Cross-run judge on existing results
-python3 -m validation.scripts.judge_results --run-dir validation/output/run_*/
+# Model comparison with judge
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run openai,anthropic,claude-sonnet-4-6,gpt-5-4 --judge
 ```
 
-## TOML Config
+### LangGraph / LangChain
 
-See `validation/runs.toml.example` for full reference. Key sections:
+```bash
+# Quick smoke test (6 examples) — agentspan + native, judged
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run lc-smoke-test,lc-smoke-test-native --judge
 
-```toml
-[defaults]       # merged into every run
-timeout = 300
-parallel = true
-max_workers = 8
+# Full LangGraph (40 examples)
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run langgraph,langgraph-native --judge
 
-[judge]          # judge settings
-baseline_run = "openai"
-model = "gpt-4o-mini"
-
-[runs.openai]
-model = "openai/gpt-4o"
-group = "SMOKE_TEST"
-
-[runs.anthropic]
-model = "anthropic/claude-sonnet-4-20250514"
-group = "SMOKE_TEST"
+# Full LangChain (25 examples)
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run langchain,langchain-native --judge
 ```
+
+### ADK (Google Gemini)
+
+```bash
+# Hello world debug
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run adk-hello-native,adk-hello-agentspan --judge
+
+# Full ADK suite (32 examples)
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run adk,adk-agentspan --judge
+```
+
+### Preview without running
+
+```bash
+uv run python3 -m validation.scripts.run_examples --config validation/runs.toml \
+  --run openai-smoke-test --dry-run
+```
+
+### Judge existing results
+
+```bash
+uv run python3 -m validation.scripts.judge_results --run-dir validation/output/run_20250101_120000_abc123/
+```
+
+---
+
+## All Run Names
+
+| Run | Group | Model | Mode |
+|-----|-------|-------|------|
+| `openai` | OPENAI_EXAMPLES (10) | gpt-4o | Agentspan |
+| `agentspan` | OPENAI_EXAMPLES (10) | gpt-4o | Agentspan |
+| `anthropic` | OPENAI_EXAMPLES (10) | claude-sonnet-4-20250514 | Agentspan |
+| `claude-sonnet-4-6` | OPENAI_EXAMPLES (10) | claude-sonnet-4-6 | Agentspan |
+| `gpt-5-4` | OPENAI_EXAMPLES (10) | gpt-5.4 | Agentspan |
+| `openai-smoke-test` | SMOKE_TEST (7) | gpt-4o | Agentspan |
+| `anthropic-smoke-test` | SMOKE_TEST (7) | claude-sonnet-4-20250514 | Agentspan |
+| `claude-sonnet-4-6-smoke-test` | SMOKE_TEST (7) | claude-sonnet-4-6 | Agentspan |
+| `adk-hello-native` | ADK_HELLO (1) | gemini-2.5-flash | Native |
+| `adk-hello-agentspan` | ADK_HELLO (1) | gemini-2.5-flash | Agentspan |
+| `adk` | ADK_EXAMPLES (32) | gemini-2.5-flash | Native |
+| `adk-agentspan` | ADK_EXAMPLES (32) | gemini-2.5-flash | Agentspan |
+| `langgraph` | LANGGRAPH_EXAMPLES (40) | gpt-4o-mini | Agentspan |
+| `langgraph-native` | LANGGRAPH_EXAMPLES (40) | gpt-4o-mini | Native |
+| `langchain` | LANGCHAIN_EXAMPLES (25) | gpt-4o-mini | Agentspan |
+| `langchain-native` | LANGCHAIN_EXAMPLES (25) | gpt-4o-mini | Native |
+| `lc-smoke-test` | LC_SMOKE_TEST (6) | gpt-4o-mini | Agentspan |
+| `lc-smoke-test-native` | LC_SMOKE_TEST (6) | gpt-4o-mini | Native |
+| `lc-claude-sonnet-4-6` | LC_SMOKE_TEST (6) | claude-sonnet-4-6 | Agentspan |
+| `lc-claude-sonnet-4-6-native` | LC_SMOKE_TEST (6) | claude-sonnet-4-6 | Native |
+
+**Agentspan** = runs through Conductor orchestration. **Native** = runs directly via SDK, bypasses Conductor. Pair them with `--judge` to compare.
+
+---
 
 ## Example Groups
 
-Defined in `validation/groups.py`. Set `group = "NAME"` in TOML run config:
+| Group | Count | Contents |
+|-------|-------|----------|
+| `SMOKE_TEST` | 7 | Basic + structured output + handoffs (OpenAI + ADK) |
+| `OPENAI_EXAMPLES` | 10 | Full OpenAI Agents SDK suite |
+| `ADK_HELLO` | 1 | Single hello-world for ADK debugging |
+| `ADK_EXAMPLES` | 32 | Full Google ADK suite |
+| `LC_SMOKE_TEST` | 6 | 3 LangGraph + 3 LangChain basics |
+| `LANGGRAPH_EXAMPLES` | 40 | Full LangGraph suite |
+| `LANGCHAIN_EXAMPLES` | 25 | Full LangChain suite |
+| `PASSING_EXAMPLES` | 37 | Stable ADK-style examples |
+| `SLOW_EXAMPLES` | 4 | >2 min each (08, 13, 23, 31) |
+| `HITL_EXAMPLES` | 4 | Require stdin input (02, 09, 09b, 09c) |
+| `KNOWN_FAILURES` | 6 | Server/config issues — skip these |
 
-| Group | Examples | Notes |
-|-------|----------|-------|
-| **SMOKE_TEST** | 8 examples | Quick sanity check (OpenAI + ADK) |
-| **PASSING_EXAMPLES** | 40 examples | Fast, reliable |
-| **SLOW_EXAMPLES** | 08, 13, 23, 31 | >2 min each |
-| **HITL_EXAMPLES** | 02, 09, 09b, 09c | Stdin piped via HITL_STDIN |
-| **KNOWN_FAILURES** | 14, 21, 22, 33_ext, 34, 39c | Server/config issues |
-| **OPENAI_EXAMPLES** | 10 examples | Requires `openai-agents` package |
-| **ADK_EXAMPLES** | 32 examples | Requires `google-adk` package |
-| **LANGGRAPH_EXAMPLES** | 40 examples | Requires `langgraph` + `langchain-openai` |
-| **LANGCHAIN_EXAMPLES** | 25 examples | Requires `langchain` + `langchain-openai` |
-| **LC_SMOKE_TEST** | 6 examples | Quick sanity check (LangGraph + LangChain) |
+---
 
-## LangGraph and LangChain Validation
+## Output
 
-LangGraph and LangChain examples can be validated in two modes:
+Each run creates `validation/output/run_{timestamp}_{id}/`:
 
-- **Agentspan mode** (default): the agent is translated server-side into a Conductor workflow. The LLM runs as an `AI_MODEL` task and each tool runs as a `SIMPLE` worker task.
-- **Native mode** (`native = true`): the agent runs directly via LangGraph/LangChain SDK, bypassing Conductor. Used as the judge baseline to compare output quality.
-
-### Prerequisites
-
-```bash
-uv sync --extra validation
-# Requires OPENAI_API_KEY for the examples themselves
-# Requires OPENAI_API_KEY for the judge (gpt-4o-mini by default)
+```
+run_20250101_120000_abc123/
+├── openai/
+│   ├── results.csv
+│   └── outputs/
+├── anthropic/
+│   └── ...
+└── judge/
+    ├── report.html   ← open this — interactive heatmap + side-by-side diffs
+    ├── report.md
+    └── results.csv
 ```
 
-### Quick smoke test (6 examples, ~2 min)
+Open `judge/report.html` in a browser for the full interactive dashboard.
 
-```bash
-# Run both modes and judge them against each other
-uv run python3 -m validation.scripts.run_examples \
-  --config validation/runs.toml \
-  --run lc-smoke-test,lc-smoke-test-native \
-  --judge
+---
+
+## TOML Config Reference
+
+`validation/runs.toml` (gitignored). Copy from `validation/runs.toml.example`.
+
+```toml
+[defaults]
+timeout = 300       # per-example timeout (seconds)
+parallel = true
+max_workers = 8
+server_url = "http://localhost:8080/api"
+
+[judge]
+baseline_run = "openai"   # run used as comparison baseline
+model = "gpt-4o-mini"
+
+[runs.my-run]
+group = "SMOKE_TEST"
+model = "openai/gpt-4o"
+# native = true           # bypass Conductor, run via SDK directly
 ```
 
-### Full LangGraph suite (40 examples)
+---
 
-```bash
-# Agentspan vs native, with judge
-uv run python3 -m validation.scripts.run_examples \
-  --config validation/runs.toml \
-  --run langgraph,langgraph-native \
-  --judge
+## Environment Variables
 
-# Agentspan only (no judge)
-uv run python3 -m validation.scripts.run_examples \
-  --config validation/runs.toml \
-  --run langgraph
-```
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OPENAI_API_KEY` | — | OpenAI/LangGraph/LangChain examples + judge |
+| `ANTHROPIC_API_KEY` | — | Anthropic model examples |
+| `GOOGLE_API_KEY` | — | ADK/Gemini examples |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:8080/api` | Conductor server |
+| `AGENTSPAN_AUTH_KEY` | — | Auth (if required) |
+| `AGENTSPAN_AUTH_SECRET` | — | Auth secret (if required) |
+| `JUDGE_LLM_MODEL` | `gpt-4o-mini` | Override judge model |
+| `JUDGE_MAX_OUTPUT_CHARS` | `3000` | Truncate outputs before judging |
+| `JUDGE_MAX_TOKENS` | `300` | Max tokens per judge response |
+| `JUDGE_MAX_CALLS` | `0` (unlimited) | Budget cap on judge API calls |
+| `JUDGE_RATE_LIMIT` | `0.5` | Seconds between judge calls |
 
-### Full LangChain suite (25 examples)
-
-```bash
-# Agentspan vs native, with judge
-uv run python3 -m validation.scripts.run_examples \
-  --config validation/runs.toml \
-  --run langchain,langchain-native \
-  --judge
-```
-
-### All LangGraph + LangChain at once
-
-```bash
-uv run python3 -m validation.scripts.run_examples \
-  --config validation/runs.toml \
-  --run langgraph,langgraph-native,langchain,langchain-native \
-  --judge
-```
-
-### Preview without executing
-
-```bash
-uv run python3 -m validation.scripts.run_examples \
-  --config validation/runs.toml \
-  --run lc-smoke-test,lc-smoke-test-native \
-  --dry-run
-```
-
-### Available run names
-
-| Run name | Group | Mode |
-|----------|-------|------|
-| `lc-smoke-test` | LC_SMOKE_TEST | Agentspan (Conductor) |
-| `lc-smoke-test-native` | LC_SMOKE_TEST | Native (direct SDK) |
-| `langgraph` | LANGGRAPH_EXAMPLES | Agentspan (Conductor) |
-| `langgraph-native` | LANGGRAPH_EXAMPLES | Native (direct SDK) |
-| `langchain` | LANGCHAIN_EXAMPLES | Agentspan (Conductor) |
-| `langchain-native` | LANGCHAIN_EXAMPLES | Native (direct SDK) |
-
-### How native mode works
-
-The native runner monkey-patches `AgentRuntime` to bypass Conductor:
-
-- **LangGraph** (`CompiledStateGraph`): calls `.invoke({"messages": [...]})` directly. For graphs with a `MemorySaver` checkpointer, passes `config={"configurable": {"thread_id": session_id}}`. For graphs without a checkpointer, maintains full message history in-memory.
-- **LangChain** (`AgentExecutor`): calls `.invoke({"input": prompt, "chat_history": history})` directly. Maintains turn history in-memory for multi-turn sessions.
-
-Token usage is extracted from `response_metadata.token_usage` on `AIMessage` objects.
-
-### Parallel runner (without judge)
-
-For a faster pass/fail check across all 65 examples, use the dedicated parallel runner:
-
-```bash
-uv run python examples/run_lc.py                     # all 65 examples, 6 workers
-uv run python examples/run_lc.py --only langgraph    # LangGraph only
-uv run python examples/run_lc.py --only langchain    # LangChain only
-uv run python examples/run_lc.py --filter 01,07,22  # specific example numbers
-uv run python examples/run_lc.py --workers 8 --timeout 180
-```
-
-The parallel runner auto-approves HITL tasks (polls Conductor for IN_PROGRESS HUMAN tasks and calls `POST /api/agent/{id}/respond {"approved": true}`).
+---
 
 ## CLI Reference
 
-### run_examples.py
-
 ```
-python3 -m validation.scripts.run_examples [options]
+run_examples.py  --config PATH
+                 [--run NAMES]          comma-separated run names
+                 [--judge]              run cross-run judge after execution
+                 [--dry-run]            preview without executing
+                 [--output-dir DIR]     default: validation/output/
+                 [--resume [RUN_DIR]]   skip already-completed examples
+                 [--retry-failed DIR]   re-run only failed examples
+                 [--list-groups]        list available groups and exit
 
-Required:
-  --config PATH         Path to TOML multi-run config
-
-Options:
-  --run NAMES           Comma-separated run names to execute
-  --judge               Run cross-run judge after execution
-  --output-dir DIR      Output directory (default: validation/output/)
-  --dry-run             Show plan without executing
-  --resume [RUN_DIR]    Resume, skipping completed examples
-  --retry-failed [DIR]  Re-run only failed examples
-  --list-groups         List available groups and exit
+judge_results.py --run-dir PATH         multi-run parent directory
+                 [--judge-model MODEL]  override judge model
 ```
-
-### judge_results.py
-
-```
-python3 -m validation.scripts.judge_results [options]
-
-Required:
-  --run-dir PATH        Multi-run parent directory
-
-Options:
-  --judge-model MODEL   Override judge model (default: from config)
-```
-
-## View Results
-
-Each run creates `validation/output/run_{timestamp}_{id}/` containing:
-- Per-run sub-directories with `results.csv` + `outputs/`
-- `judge/report.html` — interactive dashboard with score heatmap, side-by-side outputs
-- `judge/results.csv` — per-run scores + baseline comparison
-- `judge/report.md` — markdown summary
-- `meta.json` — timing and run metadata
-
-## Environment
-
-| Variable | Used by | Default | Purpose |
-|----------|---------|---------|---------|
-| `OPENAI_API_KEY` | examples + judge | — | LangGraph/LangChain examples (ChatOpenAI) and judge API calls |
-| `ANTHROPIC_API_KEY` | examples | — | Examples using ChatAnthropic |
-| `GOOGLE_API_KEY` | examples | — | ADK examples |
-| `AGENTSPAN_SERVER_URL` | runner | `http://localhost:8080/api` | Conductor server |
-| `AGENTSPAN_AUTH_KEY` | runner | — | Conductor auth key (if required) |
-| `AGENTSPAN_AUTH_SECRET` | runner | — | Conductor auth secret (if required) |
-| `JUDGE_LLM_MODEL` | judge | `gpt-4o-mini` | Judge model |
-| `JUDGE_MAX_OUTPUT_CHARS` | judge | 3000 | Truncate before judging |
-| `JUDGE_MAX_TOKENS` | judge | 300 | Max tokens for judge response |
-| `JUDGE_MAX_CALLS` | judge | 0 (unlimited) | Budget cap |
-| `JUDGE_RATE_LIMIT` | judge | 0.5 | Seconds between calls |
-
-
-## Wishlist
-
-- Validates end to end state of workflow creation by LLM Model is correct
-
-### Judge Quality TODOs
-
-- Multi-judge consensus (2-3 calls, median score)
-- Judge model comparison (gpt-4o vs gpt-4o-mini consistency)
-- Custom rubrics per example
-- Retry on transient API failures (429/500 + backoff)
-- Parallel judging (ThreadPoolExecutor + semaphore rate limiter)

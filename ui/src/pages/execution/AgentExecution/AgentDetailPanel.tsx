@@ -170,9 +170,19 @@ const StatusBadgeInline = StatusChip;
 
 // ─── Agent definition section ─────────────────────────────────────────────────
 
+function getToolName(t: unknown): string {
+  if (typeof t === "string") return t;
+  if (t && typeof t === "object") {
+    const o = t as Record<string, unknown>;
+    const n = o.name ?? o._worker_ref ?? (o.function as any)?.name;
+    if (typeof n === "string" && n) return n;
+  }
+  return "[tool]";
+}
+
 function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
   const instructions = (agentDef.instructions ?? agentDef.description) as string | undefined;
-  const tools = agentDef.tools as Array<{ name: string } | string> | undefined;
+  const tools = agentDef.tools as Array<unknown> | undefined;
   const defModel = agentDef.model as string | undefined;
 
   if (!instructions && !tools?.length && !defModel) return null;
@@ -198,7 +208,7 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
                   backgroundColor: "#f0f4ff", border: "1px solid #d1d9f5",
                   fontSize: "0.72rem", color: "#4969e4",
                 }}>
-                  {typeof t === "string" ? t : (t as any).name ?? JSON.stringify(t)}
+                  {getToolName(t)}
                 </Box>
               ))}
               {tools.length > 12 && (
@@ -410,20 +420,25 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
               )}
             </SummaryTable>
             {selEvent.toolArgs != null && (
-              <SummaryTable>
-              <SummaryRow label="Input" value={
-                <Box sx={{ height: 180, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
+              <Box sx={{ mx: 2, mb: 1.5, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
+                <Box sx={{ px: 2, py: 0.75, borderBottom: "1px solid #e5e7eb", backgroundColor: "#f9fafb" }}>
+                  <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "#6b7280" }}>Input</Typography>
+                </Box>
+                <Box sx={{ height: 160 }}>
                   <JsonView src={selEvent.toolArgs} />
                 </Box>
-              } />
-              {selEvent.result != null && (
-                <SummaryRow label="Output" value={
-                  <Box sx={{ height: 180, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
-                    <JsonView src={selEvent.result} />
-                  </Box>
-                } />
-              )}
-            </SummaryTable>
+                {selEvent.result != null && (
+                  <>
+                    <Box sx={{ px: 2, py: 0.75, borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb", backgroundColor: "#f9fafb" }}>
+                      <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "#6b7280" }}>Output</Typography>
+                    </Box>
+                    <Box sx={{ height: 160 }}>
+                      <JsonView src={selEvent.result} />
+                    </Box>
+                  </>
+                )}
+              </Box>
+            )}
           </Box>
         )}
       </Box>
@@ -494,20 +509,24 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
   if (node.kind === "tool") {
     const meta = ev?.taskMeta;
     const fmt = (ts?: number) =>
-      ts ? new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 }) : undefined;
+      ts ? new Date(ts).toLocaleString(undefined, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).replace(",", "") : undefined;
     return (
       <Box>
         <SummaryTable>
-          <SummaryRow label="Tool" value={ev?.toolName ?? node.label} />
           {meta?.taskType && <SummaryRow label="Task type" value={meta.taskType} />}
-          {meta?.referenceTaskName && <SummaryRow label="Reference name" value={meta.referenceTaskName} />}
           <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
-          {ev?.durationMs ? <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} /> : null}
-          {fmt(meta?.scheduledTime) && <SummaryRow label="Scheduled" value={fmt(meta?.scheduledTime)!} />}
+          <SummaryRow label="Task name" value={ev?.toolName ?? node.label} />
+          {meta?.referenceTaskName && <SummaryRow label="Task reference" value={meta.referenceTaskName} />}
+          {meta?.taskId && <SummaryRow label="Task execution id" value={meta.taskId} />}
+          {meta?.retryCount != null && <SummaryRow label="Retry count" value={String(meta.retryCount)} />}
+          {fmt(meta?.scheduledTime) && <SummaryRow label="Scheduled time" value={fmt(meta?.scheduledTime)!} />}
           {fmt(meta?.startTime) && <SummaryRow label="Start time" value={fmt(meta?.startTime)!} />}
           {fmt(meta?.endTime) && <SummaryRow label="End time" value={fmt(meta?.endTime)!} />}
+          {ev?.durationMs ? <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} /> : null}
           {meta?.workerId && <SummaryRow label="Worker" value={meta.workerId} />}
-          {meta?.retryCount != null && meta.retryCount > 0 && <SummaryRow label="Retries" value={String(meta.retryCount)} />}
+          {meta?.pollCount != null && <SummaryRow label="Poll count" value={String(meta.pollCount)} />}
+          {meta?.seq != null && <SummaryRow label="Sequence" value={String(meta.seq)} />}
+          {meta?.queueWaitTime != null && <SummaryRow label="Queue wait time" value={String(meta.queueWaitTime)} />}
           {meta?.reasonForIncompletion && (
             <SummaryRow label="Failure reason" value={<span style={{ color: "#DC2626" }}>{meta.reasonForIncompletion}</span>} />
           )}
@@ -601,13 +620,14 @@ function resolveOutput(node: DetailNodeData): unknown {
 function resolveJsonData(node: DetailNodeData): unknown {
   if (node.kind === "start" && node.subAgentRun) {
     const r = node.subAgentRun;
-    return { agentName: r.agentName, model: r.model, status: r.status, tokens: r.totalTokens, durationMs: r.totalDurationMs, finishReason: r.finishReason };
+    return { agentName: r.agentName, model: r.model, status: r.status, tokens: r.totalTokens, durationMs: r.totalDurationMs, finishReason: r.finishReason, input: r.input, output: r.output };
   }
   if (node.kind === "subagent" && node.subAgentRun) {
     const r = node.subAgentRun;
-    return { agentName: r.agentName, model: r.model, status: r.status, tokens: r.totalTokens, durationMs: r.totalDurationMs };
+    return { agentName: r.agentName, model: r.model, status: r.status, tokens: r.totalTokens, durationMs: r.totalDurationMs, finishReason: r.finishReason, input: r.input, output: r.output };
   }
-  return node.event?.detail ?? null;
+  // Return the full raw event object — no key extraction (Output tab does that)
+  return node.event ?? null;
 }
 
 // ─── Main panel ───────────────────────────────────────────────────────────────
@@ -735,9 +755,9 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
       {/* ── Content ───────────────────────────────────────────────────── */}
       <Box sx={{
         flex: 1, minHeight: 0,
-        display: tab === JSON_TAB ? "flex" : "block",
+        display: tab === SUMMARY_TAB ? "block" : "flex",
         flexDirection: "column",
-        overflowY: tab === JSON_TAB ? "hidden" : "auto",
+        overflowY: tab === SUMMARY_TAB ? "auto" : "hidden",
         scrollbarWidth: "none",
         "&::-webkit-scrollbar": { display: "none" },
       }}>
@@ -745,19 +765,44 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
           <SummaryContent node={node} onDrillIn={onDrillIn} />
         )}
         {tab === INPUT_TAB && (
-          <Box sx={{ p: 2 }}>
-            <ContentView value={inputValue} label="input" />
-          </Box>
+          <>
+            <Box sx={{ px: 2.5, py: 1.5, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.875rem" }}>Task input</Typography>
+            </Box>
+            <Box sx={{ flex: 1, minHeight: 0 }}>
+              {inputValue == null
+                ? <Typography variant="body2" color="text.disabled" sx={{ p: 2 }}>No input</Typography>
+                : typeof inputValue === "string"
+                  ? <Box component="pre" sx={{ m: 0, p: 2, fontFamily: "monospace", fontSize: "0.8rem", whiteSpace: "pre-wrap", wordBreak: "break-word", overflowY: "auto", height: "100%" }}>{inputValue}</Box>
+                  : <JsonView src={inputValue} />
+              }
+            </Box>
+          </>
         )}
         {tab === OUTPUT_TAB && (
-          <Box sx={{ p: 2 }}>
-            <ContentView value={outputValue} label="output" />
-          </Box>
+          <>
+            <Box sx={{ px: 2.5, py: 1.5, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.875rem" }}>Task output</Typography>
+            </Box>
+            <Box sx={{ flex: 1, minHeight: 0 }}>
+              {outputValue == null
+                ? <Typography variant="body2" color="text.disabled" sx={{ p: 2 }}>No output</Typography>
+                : typeof outputValue === "string"
+                  ? <Box component="pre" sx={{ m: 0, p: 2, fontFamily: "monospace", fontSize: "0.8rem", whiteSpace: "pre-wrap", wordBreak: "break-word", overflowY: "auto", height: "100%" }}>{outputValue}</Box>
+                  : <JsonView src={outputValue} />
+              }
+            </Box>
+          </>
         )}
         {tab === JSON_TAB && (
-          <Box sx={{ flex: 1, minHeight: 0 }}>
-            <JsonView src={jsonData} />
-          </Box>
+          <>
+            <Box sx={{ px: 2.5, py: 1.5, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.875rem" }}>Task Execution JSON</Typography>
+            </Box>
+            <Box sx={{ flex: 1, minHeight: 0 }}>
+              <JsonView src={jsonData} />
+            </Box>
+          </>
         )}
       </Box>
     </Paper>
