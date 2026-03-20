@@ -23,6 +23,7 @@ import uuid
 from typing import Any, Dict, Iterator, List, Optional
 
 from agentspan.agents.agent import Agent
+from agentspan.agents.exceptions import _raise_api_error
 from agentspan.agents.result import (
     AgentEvent,
     AgentHandle,
@@ -33,10 +34,8 @@ from agentspan.agents.result import (
     DeploymentInfo,
     EventType,
     FinishReason,
-    Status,
     TokenUsage,
 )
-from agentspan.agents.exceptions import _raise_api_error
 from agentspan.agents.runtime.http_client import AgentHttpClient, SSEUnavailableError
 
 logger = logging.getLogger("agentspan.agents.runtime")
@@ -232,9 +231,9 @@ class AgentRuntime:
         api_secret: Optional[str] = None,
         config: Optional[Any] = None,
     ) -> None:
-        from agentspan.agents.runtime.config import AgentConfig
-
         from dataclasses import replace
+
+        from agentspan.agents.runtime.config import AgentConfig
 
         base = config if config is not None else AgentConfig.from_env()
         overrides: dict = {}
@@ -617,9 +616,10 @@ class AgentRuntime:
             # Pre-register framework agent workers (e.g. Google ADK, OpenAI) so
             # all workers land in _decorated_functions before the first
             # TaskHandler is created — avoids incremental fork() on macOS.
+            from conductor.client.worker.worker_task import worker_task
+
             from agentspan.agents.frameworks.serializer import serialize_agent
             from agentspan.agents.runtime._dispatch import make_tool_worker
-            from conductor.client.worker.worker_task import worker_task
 
             _, workers = serialize_agent(agent)
             for w in workers:
@@ -778,8 +778,8 @@ class AgentRuntime:
         guardrails, stop_when, termination, check_transfer, router,
         handoff, and manual selection workers.
         """
-        from agentspan.agents.runtime.tool_registry import ToolRegistry
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
+        from agentspan.agents.runtime.tool_registry import ToolRegistry
 
         # 1. Tools (and tool-level guardrails)
         if agent.tools:
@@ -822,8 +822,8 @@ class AgentRuntime:
 
         # 3b. Callbacks (legacy + CallbackHandler chaining)
         from agentspan.agents.callback import (
-            POSITION_TO_METHOD,
             _LEGACY_ATTR_TO_POSITION,
+            POSITION_TO_METHOD,
             _chain_callbacks_for_position,
         )
 
@@ -1507,7 +1507,6 @@ class AgentRuntime:
         Fail-safe: if the integration API is unavailable (e.g. OSS Conductor),
         logs a warning once and becomes a no-op for subsequent calls.
         """
-        import os
 
         if model_string in self._ensured_models:
             return
@@ -1622,7 +1621,7 @@ class AgentRuntime:
         (SimpleTask) do not need workers.
         """
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
-        from agentspan.agents.tool import ToolDef, get_tool_def
+        from agentspan.agents.tool import get_tool_def
 
         # Only custom function guardrails need workers.
         # RegexGuardrails compile to InlineTasks, LLMGuardrails to LlmChatComplete,
@@ -2448,8 +2447,9 @@ class AgentRuntime:
         if not workers:
             return
 
-        from agentspan.agents.runtime._dispatch import make_tool_worker
         from conductor.client.worker.worker_task import worker_task
+
+        from agentspan.agents.runtime._dispatch import make_tool_worker
 
         for w in workers:
             wrapper = make_tool_worker(w.func, w.name)

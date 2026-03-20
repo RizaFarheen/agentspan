@@ -11,7 +11,6 @@ from agentspan.agents.ext import GPTAssistantAgent, UserProxyAgent
 
 
 class TestUserProxyAgent:
-
     def test_basic_creation(self):
         agent = UserProxyAgent()
         assert agent.name == "user"
@@ -34,7 +33,6 @@ class TestUserProxyAgent:
 
 
 class TestGPTAssistantAgent:
-
     def test_creation_with_assistant_id(self):
         agent = GPTAssistantAgent(name="coder", assistant_id="asst_abc123")
         assert agent.assistant_id == "asst_abc123"
@@ -69,10 +67,15 @@ class TestGPTAssistantAgent:
             mock_openai = MagicMock()
             with patch.dict("sys.modules", {"openai": mock_openai}):
                 import os
+
                 old_key = os.environ.pop("OPENAI_API_KEY", None)
                 try:
                     agent._api_key = None
-                    result = agent._run_assistant.__wrapped__(agent, "hello") if hasattr(agent._run_assistant, '__wrapped__') else None
+                    result = (
+                        agent._run_assistant.__wrapped__(agent, "hello")
+                        if hasattr(agent._run_assistant, "__wrapped__")
+                        else None
+                    )
                 finally:
                     if old_key:
                         os.environ["OPENAI_API_KEY"] = old_key

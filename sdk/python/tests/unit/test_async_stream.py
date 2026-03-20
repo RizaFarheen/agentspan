@@ -42,7 +42,9 @@ async def test_aiter():
     """Async iteration yields all events."""
     events = [
         AgentEvent(type=EventType.THINKING, content="thinking...", workflow_id="wf-test"),
-        AgentEvent(type=EventType.TOOL_CALL, tool_name="calc", args={"x": 1}, workflow_id="wf-test"),
+        AgentEvent(
+            type=EventType.TOOL_CALL, tool_name="calc", args={"x": 1}, workflow_id="wf-test"
+        ),
         AgentEvent(type=EventType.TOOL_RESULT, tool_name="calc", result=42, workflow_id="wf-test"),
         AgentEvent(type=EventType.DONE, output="answer is 42", workflow_id="wf-test"),
     ]

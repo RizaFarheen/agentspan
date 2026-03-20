@@ -11,23 +11,24 @@ agents SDK.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 # Known Conductor LLM provider names.
-KNOWN_PROVIDERS = frozenset({
-    "openai",
-    "azure_openai",
-    "anthropic",
-    "google_gemini",
-    "google_vertex_ai",
-    "aws_bedrock",
-    "cohere",
-    "mistral",
-    "groq",
-    "perplexity",
-    "hugging_face",
-    "deepseek",
-})
+KNOWN_PROVIDERS = frozenset(
+    {
+        "openai",
+        "azure_openai",
+        "anthropic",
+        "google_gemini",
+        "google_vertex_ai",
+        "aws_bedrock",
+        "cohere",
+        "mistral",
+        "groq",
+        "perplexity",
+        "hugging_face",
+        "deepseek",
+    }
+)
 
 
 @dataclass(frozen=True)

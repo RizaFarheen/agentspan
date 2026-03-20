@@ -3,10 +3,11 @@
 
 # sdk/python/tests/unit/test_claude_worker.py
 """Tests for make_claude_worker — the Tier 1/2 passthrough worker factory."""
+
 from unittest.mock import MagicMock, patch
-import pytest
 
 from agentspan.agents.frameworks.claude import ClaudeCodeAgent, make_claude_worker
+from agentspan.agents.runtime.runtime import AgentRuntime
 
 
 def _make_task(prompt="hello", cwd=".", workflow_id="wf-123"):
@@ -37,9 +38,11 @@ class TestMakeClaudeWorker:
             result.result = "done"
             yield result
 
-        with patch("agentspan.agents.frameworks.claude.query", fake_query), \
-             patch("agentspan.agents.frameworks.claude._restore_session", return_value=None), \
-             patch("agentspan.agents.frameworks.claude._checkpoint_session"):
+        with (
+            patch("agentspan.agents.frameworks.claude.query", fake_query),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+        ):
             task = _make_task(prompt="fix the bug", cwd="/workspace")
             worker(task)
 
@@ -56,9 +59,11 @@ class TestMakeClaudeWorker:
             result.result = "task result"
             yield result
 
-        with patch("agentspan.agents.frameworks.claude.query", fake_query), \
-             patch("agentspan.agents.frameworks.claude._restore_session", return_value=None), \
-             patch("agentspan.agents.frameworks.claude._checkpoint_session"):
+        with (
+            patch("agentspan.agents.frameworks.claude.query", fake_query),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+        ):
             task = _make_task()
             task_result = worker(task)
 
@@ -73,8 +78,10 @@ class TestMakeClaudeWorker:
             raise RuntimeError("SDK crashed")
             yield  # make it a generator
 
-        with patch("agentspan.agents.frameworks.claude.query", fake_query), \
-             patch("agentspan.agents.frameworks.claude._restore_session", return_value=None):
+        with (
+            patch("agentspan.agents.frameworks.claude.query", fake_query),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+        ):
             task = _make_task()
             task_result = worker(task)
 
@@ -102,14 +109,15 @@ class TestMakeClaudeWorker:
         def fake_push(workflow_id, event_type, payload, server_url, headers):
             captured_events.append((event_type, payload))
 
-        with patch("agentspan.agents.frameworks.claude.query", fake_query), \
-             patch("agentspan.agents.frameworks.claude._restore_session", return_value=None), \
-             patch("agentspan.agents.frameworks.claude._checkpoint_session"), \
-             patch("agentspan.agents.frameworks.claude._push_event_nonblocking", fake_push):
+        with (
+            patch("agentspan.agents.frameworks.claude.query", fake_query),
+            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
+            patch("agentspan.agents.frameworks.claude._push_event_nonblocking", fake_push),
+        ):
             worker(_make_task())
 
-        assert any(e[0] == "tool_call" and e[1]["toolName"] == "Bash"
-                   for e in captured_events)
+        assert any(e[0] == "tool_call" and e[1]["toolName"] == "Bash" for e in captured_events)
 
     def test_session_id_pre_populated_from_restore(self):
         """session_id_ref is pre-populated from restored session so first PostToolUse
@@ -122,8 +130,11 @@ class TestMakeClaudeWorker:
         async def fake_query(prompt, options):
             # Simulate PostToolUse without prior init message (resume scenario)
             hook = options.hooks["PostToolUse"][0].hooks[0]
-            input_data = {"tool_name": "Read", "tool_input": {"file_path": "a.py"},
-                          "tool_response": "content"}
+            input_data = {
+                "tool_name": "Read",
+                "tool_input": {"file_path": "a.py"},
+                "tool_response": "content",
+            }
             await hook(input_data, "tu-002", {})
 
             result = MagicMock()
@@ -134,21 +145,20 @@ class TestMakeClaudeWorker:
         def fake_checkpoint(wf_id, session_id, cwd, server_url, headers):
             checkpointed_with.append(session_id)
 
-        with patch("agentspan.agents.frameworks.claude.query", fake_query), \
-             patch("agentspan.agents.frameworks.claude._restore_session",
-                   return_value="restored-session-id"), \
-             patch("agentspan.agents.frameworks.claude._checkpoint_session",
-                   fake_checkpoint), \
-             patch("agentspan.agents.frameworks.claude._push_event_nonblocking"):
+        with (
+            patch("agentspan.agents.frameworks.claude.query", fake_query),
+            patch(
+                "agentspan.agents.frameworks.claude._restore_session",
+                return_value="restored-session-id",
+            ),
+            patch("agentspan.agents.frameworks.claude._checkpoint_session", fake_checkpoint),
+            patch("agentspan.agents.frameworks.claude._push_event_nonblocking"),
+        ):
             worker(_make_task())
 
         # Must checkpoint with the restored session ID, not None
         assert all(s == "restored-session-id" for s in checkpointed_with)
         assert len(checkpointed_with) >= 1
-
-
-from unittest.mock import MagicMock
-from agentspan.agents.runtime.runtime import AgentRuntime
 
 
 class TestRuntimePassthroughDispatch:

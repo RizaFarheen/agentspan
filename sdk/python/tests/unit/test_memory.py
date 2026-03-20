@@ -3,8 +3,6 @@
 
 """Unit tests for ConversationMemory."""
 
-import pytest
-
 from agentspan.agents.memory import ConversationMemory
 
 
@@ -182,6 +180,7 @@ class TestConversationMemoryTrimOrdering:
     def test_max_tokens_field_removed(self):
         """max_tokens field was removed from ConversationMemory."""
         import dataclasses
+
         field_names = [f.name for f in dataclasses.fields(ConversationMemory)]
         assert "max_tokens" not in field_names
 

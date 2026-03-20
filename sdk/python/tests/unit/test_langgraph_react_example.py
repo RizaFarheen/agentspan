@@ -6,16 +6,18 @@ Verifies that a graph built with create_react_agent can be:
 2. Serialized to (raw_config, [WorkerInfo])
 3. Invoked via the pre-wrapped worker function with correct output extraction
 """
-import pytest
+
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture
 def react_graph():
     """Build a real create_react_agent graph with a mocked LLM."""
     pytest.importorskip("langgraph")
-    from langgraph.prebuilt import create_react_agent
     from langchain_core.messages import AIMessage
+    from langgraph.prebuilt import create_react_agent
 
     # Mock LLM that always returns a plain text response (no tool calls)
     llm = MagicMock()
@@ -37,15 +39,18 @@ def react_graph():
 class TestLangGraphReActDetection:
     def test_detect_framework_returns_langgraph(self, react_graph):
         from agentspan.agents.frameworks.serializer import detect_framework
+
         assert detect_framework(react_graph) == "langgraph"
 
     def test_serialize_returns_single_worker(self, react_graph):
         from agentspan.agents.frameworks.langgraph import serialize_langgraph
+
         raw_config, workers = serialize_langgraph(react_graph)
         assert len(workers) == 1
 
     def test_worker_invocation_extracts_ai_message_output(self, react_graph):
-        from langchain_core.messages import HumanMessage, AIMessage
+        from langchain_core.messages import AIMessage, HumanMessage
+
         from agentspan.agents.frameworks.langgraph import make_langgraph_worker
 
         # Patch the graph's stream to return controlled output
@@ -53,10 +58,15 @@ class TestLangGraphReActDetection:
 
         stream_chunks = [
             ("updates", {"agent": {"messages": [final_ai_msg]}}),
-            ("values", {"messages": [
-                HumanMessage(content="What is the capital of France?"),
-                final_ai_msg,
-            ]}),
+            (
+                "values",
+                {
+                    "messages": [
+                        HumanMessage(content="What is the capital of France?"),
+                        final_ai_msg,
+                    ]
+                },
+            ),
         ]
 
         task = MagicMock()
@@ -76,7 +86,8 @@ class TestLangGraphReActDetection:
 
     def test_worker_uses_messages_input_format(self, react_graph):
         """create_react_agent graphs use messages-based state."""
-        from langchain_core.messages import HumanMessage, AIMessage
+        from langchain_core.messages import AIMessage, HumanMessage
+
         from agentspan.agents.frameworks.langgraph import make_langgraph_worker
 
         final_msg = AIMessage(content="Done.", tool_calls=[])

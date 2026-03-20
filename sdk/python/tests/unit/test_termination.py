@@ -8,7 +8,6 @@ import pytest
 from agentspan.agents.termination import (
     MaxMessageTermination,
     StopMessageTermination,
-    TerminationCondition,
     TerminationResult,
     TextMentionTermination,
     TokenUsageTermination,
@@ -354,7 +353,9 @@ class TestMixedComposition:
 
     def test_or_of_ands(self):
         # (text AND max_msg) OR stop_msg
-        cond = (TextMentionTermination("DONE") & MaxMessageTermination(3)) | StopMessageTermination("QUIT")
+        cond = (TextMentionTermination("DONE") & MaxMessageTermination(3)) | StopMessageTermination(
+            "QUIT"
+        )
 
         # Only stop_msg triggers
         ctx = {"result": "QUIT", "messages": [], "iteration": 1}
@@ -370,7 +371,9 @@ class TestMixedComposition:
 
     def test_and_of_ors(self):
         # (text OR stop_msg) AND max_msg
-        cond = (TextMentionTermination("DONE") | StopMessageTermination("QUIT")) & MaxMessageTermination(3)
+        cond = (
+            TextMentionTermination("DONE") | StopMessageTermination("QUIT")
+        ) & MaxMessageTermination(3)
 
         # text triggers but max_msg doesn't
         ctx = {"result": "DONE", "messages": [{"role": "user"}], "iteration": 1}

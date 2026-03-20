@@ -46,27 +46,33 @@ class ConversationMemory:
         self.messages.append({"role": "system", "message": content})
         self._trim()
 
-    def add_tool_call(self, tool_name: str, arguments: Dict[str, Any],
-                      task_reference_name: Optional[str] = None) -> None:
+    def add_tool_call(
+        self, tool_name: str, arguments: Dict[str, Any], task_reference_name: Optional[str] = None
+    ) -> None:
         """Record a tool call in the conversation."""
         ref = task_reference_name or f"{tool_name}_ref"
-        self.messages.append({
-            "role": "tool_call",
-            "message": "",
-            "tool_calls": [{"name": tool_name, "taskReferenceName": ref, "input": arguments}],
-        })
+        self.messages.append(
+            {
+                "role": "tool_call",
+                "message": "",
+                "tool_calls": [{"name": tool_name, "taskReferenceName": ref, "input": arguments}],
+            }
+        )
         self._trim()
 
-    def add_tool_result(self, tool_name: str, result: Any,
-                        task_reference_name: Optional[str] = None) -> None:
+    def add_tool_result(
+        self, tool_name: str, result: Any, task_reference_name: Optional[str] = None
+    ) -> None:
         """Record a tool result in the conversation."""
         ref = task_reference_name or f"{tool_name}_ref"
-        self.messages.append({
-            "role": "tool",
-            "message": str(result),
-            "toolCallId": ref,
-            "taskReferenceName": ref,
-        })
+        self.messages.append(
+            {
+                "role": "tool",
+                "message": str(result),
+                "toolCallId": ref,
+                "taskReferenceName": ref,
+            }
+        )
         self._trim()
 
     def to_chat_messages(self) -> List[Dict[str, Any]]:
@@ -88,7 +94,7 @@ class ConversationMemory:
             if system_count >= self.max_messages:
                 # More system messages than budget — keep only the latest
                 system_msgs = [m for m in self.messages if m.get("role") == "system"]
-                self.messages = system_msgs[-self.max_messages:]
+                self.messages = system_msgs[-self.max_messages :]
                 return
 
             # Number of non-system messages we can keep

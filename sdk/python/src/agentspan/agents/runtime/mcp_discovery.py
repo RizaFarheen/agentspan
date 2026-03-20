@@ -75,7 +75,9 @@ def discover_mcp_tools(
         if not run.is_successful:
             reason = getattr(run, "reason_for_incompletion", None) or "unknown"
             logger.warning(
-                "MCP discovery workflow failed for %s: %s", server_url, reason,
+                "MCP discovery workflow failed for %s: %s",
+                server_url,
+                reason,
             )
             _discovery_cache[server_url] = []
             return []

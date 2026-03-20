@@ -3,11 +3,8 @@
 
 """Tests for agentspan.agents.testing.mock."""
 
-import pytest
-
 from agentspan.agents.result import EventType
 from agentspan.agents.testing.mock import MockEvent, mock_run
-
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
@@ -95,9 +92,7 @@ class TestMockEvent:
 class TestMockRun:
     def test_simple_done(self):
         agent = _FakeAgent()
-        result = mock_run(
-            agent, "Hello", events=[MockEvent.done("Hi there!")]
-        )
+        result = mock_run(agent, "Hello", events=[MockEvent.done("Hi there!")])
         assert result.output == "Hi there!"
         assert result.status == "COMPLETED"
         assert result.workflow_id == "mock"
@@ -171,9 +166,7 @@ class TestMockRun:
 
     def test_messages_include_prompt_and_output(self):
         agent = _FakeAgent()
-        result = mock_run(
-            agent, "Hi", events=[MockEvent.done("Hello!")]
-        )
+        result = mock_run(agent, "Hi", events=[MockEvent.done("Hello!")])
         assert result.messages[0] == {"role": "user", "content": "Hi"}
         assert result.messages[1] == {"role": "assistant", "content": "Hello!"}
 
@@ -205,9 +198,7 @@ class TestMockRun:
                 MockEvent.done("42"),
             ],
         )
-        handoffs = [
-            ev for ev in result.events if ev.type == EventType.HANDOFF
-        ]
+        handoffs = [ev for ev in result.events if ev.type == EventType.HANDOFF]
         assert len(handoffs) == 1
         assert handoffs[0].target == "math_expert"
 

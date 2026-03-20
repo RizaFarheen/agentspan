@@ -11,10 +11,8 @@ import pytest
 
 from agentspan.agents._internal.provider_registry import (
     PROVIDER_REGISTRY,
-    ProviderSpec,
     get_provider_spec,
 )
-
 
 # ── Provider Registry ───────────────────────────────────────────────────
 
@@ -67,9 +65,10 @@ class TestEnsureModel:
 
     def _make_runtime(self, auto_register=True):
         """Create an AgentRuntime with mocked Conductor clients."""
-        with patch("conductor.client.orkes_clients.OrkesClients") as MockClients, \
-             patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-
+        with (
+            patch("conductor.client.orkes_clients.OrkesClients") as MockClients,
+            patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True),
+        ):
             mock_clients = MagicMock()
             MockClients.return_value = mock_clients
 
@@ -186,10 +185,13 @@ class TestEnsureModel:
         runtime, mock_client = self._make_runtime()
         mock_client.save_integration.side_effect = Exception("404 Not Found")
 
-        with patch.dict("os.environ", {
-            "OPENAI_API_KEY": "sk-test",
-            "ANTHROPIC_API_KEY": "sk-ant-test",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "OPENAI_API_KEY": "sk-test",
+                "ANTHROPIC_API_KEY": "sk-ant-test",
+            },
+        ):
             runtime._ensure_model("openai/gpt-4o")
             runtime._ensure_model("anthropic/claude-sonnet-4-20250514")
 
@@ -232,9 +234,10 @@ class TestEnsureModelsForAgent:
 
     def _make_runtime(self):
         """Create an AgentRuntime with mocked clients."""
-        with patch("conductor.client.orkes_clients.OrkesClients") as MockClients, \
-             patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-
+        with (
+            patch("conductor.client.orkes_clients.OrkesClients") as MockClients,
+            patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True),
+        ):
             mock_clients = MagicMock()
             MockClients.return_value = mock_clients
             mock_integration_client = MagicMock()
@@ -277,10 +280,13 @@ class TestEnsureModelsForAgent:
             strategy="handoff",
         )
 
-        with patch.dict("os.environ", {
-            "OPENAI_API_KEY": "sk-test",
-            "ANTHROPIC_API_KEY": "sk-ant-test",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "OPENAI_API_KEY": "sk-test",
+                "ANTHROPIC_API_KEY": "sk-ant-test",
+            },
+        ):
             runtime._ensure_models_for_agent(parent)
 
         assert "openai/gpt-4o" in runtime._ensured_models
@@ -311,9 +317,10 @@ class TestAutoRegisterInPrepare:
     """Test that _prepare() calls auto-registration when enabled."""
 
     def test_prepare_calls_ensure_when_enabled(self):
-        with patch("conductor.client.orkes_clients.OrkesClients") as MockClients, \
-             patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-
+        with (
+            patch("conductor.client.orkes_clients.OrkesClients") as MockClients,
+            patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True),
+        ):
             mock_clients = MagicMock()
             MockClients.return_value = mock_clients
 
@@ -335,9 +342,10 @@ class TestAutoRegisterInPrepare:
             runtime._ensure_models_for_agent.assert_called_once_with(agent)
 
     def test_prepare_skips_ensure_when_disabled(self):
-        with patch("conductor.client.orkes_clients.OrkesClients") as MockClients, \
-             patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-
+        with (
+            patch("conductor.client.orkes_clients.OrkesClients") as MockClients,
+            patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True),
+        ):
             mock_clients = MagicMock()
             MockClients.return_value = mock_clients
 

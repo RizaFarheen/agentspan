@@ -7,12 +7,11 @@ JupyterCodeExecutor, ServerlessCodeExecutor.
 
 import json
 import subprocess
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from agentspan.agents.code_executor import (
-    CodeExecutor,
     DockerCodeExecutor,
     ExecutionResult,
     JupyterCodeExecutor,
@@ -20,12 +19,10 @@ from agentspan.agents.code_executor import (
     ServerlessCodeExecutor,
 )
 
-
 # ── ExecutionResult ─────────────────────────────────────────────────────
 
 
 class TestExecutionResult:
-
     def test_success_property(self):
         r = ExecutionResult(output="hello", exit_code=0)
         assert r.success is True
@@ -43,7 +40,6 @@ class TestExecutionResult:
 
 
 class TestLocalCodeExecutor:
-
     @patch("agentspan.agents.code_executor.subprocess.run")
     @patch("agentspan.agents.code_executor.os.unlink")
     def test_execute_python_success(self, mock_unlink, mock_run):
@@ -126,7 +122,6 @@ class TestLocalCodeExecutor:
 
 
 class TestLocalFileExtension:
-
     def test_python(self):
         assert LocalCodeExecutor(language="python")._file_extension() == ".py"
 
@@ -153,7 +148,6 @@ class TestLocalFileExtension:
 
 
 class TestDockerCodeExecutor:
-
     @patch("agentspan.agents.code_executor.subprocess.run")
     def test_execute_success(self, mock_run):
         mock_run.return_value = MagicMock(stdout="42\n", stderr="", returncode=0)
@@ -236,7 +230,6 @@ class TestDockerCodeExecutor:
 
 
 class TestJupyterCodeExecutor:
-
     def test_execute_import_error(self):
         executor = JupyterCodeExecutor()
         with patch.object(executor, "_ensure_kernel", side_effect=ImportError("no jupyter")):
@@ -369,7 +362,6 @@ class TestJupyterCodeExecutor:
 
 
 class TestServerlessCodeExecutor:
-
     @patch("urllib.request.urlopen")
     def test_send_request_success(self, mock_urlopen):
         response_data = json.dumps({"output": "hello", "error": "", "exit_code": 0}).encode()
@@ -438,6 +430,7 @@ class TestServerlessCodeExecutor:
     @patch("urllib.request.urlopen")
     def test_send_request_url_error(self, mock_urlopen):
         import urllib.error
+
         mock_urlopen.side_effect = urllib.error.URLError("connection refused")
 
         executor = ServerlessCodeExecutor(endpoint="https://api.example.com/exec")
@@ -470,7 +463,6 @@ class TestServerlessCodeExecutor:
 
 
 class TestCodeExecutorBase:
-
     def test_as_tool_returns_decorated(self):
         executor = LocalCodeExecutor(language="python", timeout=10)
         tool_fn = executor.as_tool()
@@ -559,7 +551,9 @@ class TestJupyterCodeExecutor:
             executor._kernel_client = None
 
             # Manually set up the kernel (simulating _ensure_kernel)
-            with patch("agentspan.agents.code_executor.JupyterCodeExecutor._ensure_kernel") as mock_ensure:
+            with patch(
+                "agentspan.agents.code_executor.JupyterCodeExecutor._ensure_kernel"
+            ) as mock_ensure:
                 # Instead of calling _ensure_kernel, just set internal state
                 executor._kernel_manager = mock_km
                 executor._kernel_client = mock_client
@@ -582,7 +576,9 @@ class TestJupyterCodeExecutor:
         executor = JupyterCodeExecutor()
         executor._kernel_client = None
 
-        with patch("builtins.__import__", side_effect=ImportError("No module named 'jupyter_client'")):
+        with patch(
+            "builtins.__import__", side_effect=ImportError("No module named 'jupyter_client'")
+        ):
             with pytest.raises(ImportError, match="jupyter_client"):
                 executor._ensure_kernel()
 

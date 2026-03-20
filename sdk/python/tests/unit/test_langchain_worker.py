@@ -1,5 +1,6 @@
 # sdk/python/tests/unit/test_langchain_worker.py
 """Unit tests for the LangChain passthrough worker."""
+
 from unittest.mock import MagicMock, patch
 
 
@@ -12,6 +13,7 @@ def _make_executor(output="answer"):
 
 def _make_task(prompt="Hello", session_id="", workflow_id="wf-456"):
     from conductor.client.http.models.task import Task
+
     task = MagicMock(spec=Task)
     task.input_data = {"prompt": prompt, "session_id": session_id}
     task.workflow_instance_id = workflow_id
@@ -21,6 +23,7 @@ def _make_task(prompt="Hello", session_id="", workflow_id="wf-456"):
 class TestSerializeLangchain:
     def test_returns_single_worker_info(self):
         from agentspan.agents.frameworks.langchain import serialize_langchain
+
         executor = _make_executor()
         executor.name = "my_executor"
 
@@ -31,6 +34,7 @@ class TestSerializeLangchain:
 
     def test_raw_config_has_name_and_worker_name(self):
         from agentspan.agents.frameworks.langchain import serialize_langchain
+
         executor = _make_executor()
         executor.name = "my_executor"
 
@@ -73,6 +77,7 @@ class TestMakeLangchainWorker:
         config = call_args[1]["config"]
         assert len(config["callbacks"]) == 1
         from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
+
         assert isinstance(config["callbacks"][0], AgentspanCallbackHandler)
 
     def test_worker_returns_failed_on_exception(self):
@@ -92,15 +97,18 @@ class TestMakeLangchainWorker:
         assert "tool error" in result.reason_for_incompletion
 
     def test_worker_pushes_tool_call_event_via_callback(self):
-        from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
         from uuid import uuid4
+
+        from agentspan.agents.frameworks.langchain import AgentspanCallbackHandler
 
         pushed_events = []
 
         def fake_push(wf_id, event, *args):
             pushed_events.append(event)
 
-        with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking", side_effect=fake_push):
+        with patch(
+            "agentspan.agents.frameworks.langchain._push_event_nonblocking", side_effect=fake_push
+        ):
             run_id = uuid4()
             handler = AgentspanCallbackHandler("wf-push-test", "http://localhost:8080", "k", "s")
             handler.on_tool_start({"name": "search"}, "python", run_id=run_id)

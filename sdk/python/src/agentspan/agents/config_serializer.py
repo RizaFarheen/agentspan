@@ -11,9 +11,8 @@ on the SDK side and sent as task-name references.
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
     from agentspan.agents.agent import Agent
@@ -85,7 +84,7 @@ class AgentConfigSerializer:
             config["guardrails"] = [self._serialize_guardrail(g) for g in agent.guardrails]
 
         # Memory
-        if hasattr(agent, 'memory') and agent.memory:
+        if hasattr(agent, "memory") and agent.memory:
             config["memory"] = self._serialize_memory(agent.memory)
 
         # Max tokens
@@ -122,13 +121,13 @@ class AgentConfigSerializer:
             config["metadata"] = agent.metadata
 
         # Planner
-        if getattr(agent, 'planner', False):
+        if getattr(agent, "planner", False):
             config["planner"] = True
 
         # Callbacks — emit for any position that has handlers or legacy callables
         from agentspan.agents.callback import (
-            POSITION_TO_METHOD,
             _LEGACY_ATTR_TO_POSITION,
+            POSITION_TO_METHOD,
             _chain_callbacks_for_position,
         )
 
@@ -147,26 +146,26 @@ class AgentConfigSerializer:
             config["callbacks"] = callbacks
 
         # Include contents
-        if getattr(agent, 'include_contents', None) is not None:
+        if getattr(agent, "include_contents", None) is not None:
             config["includeContents"] = agent.include_contents
 
         # Thinking config
-        if getattr(agent, 'thinking_budget_tokens', None) is not None:
+        if getattr(agent, "thinking_budget_tokens", None) is not None:
             config["thinkingConfig"] = {
                 "enabled": True,
                 "budgetTokens": agent.thinking_budget_tokens,
             }
 
         # Required tools
-        if getattr(agent, 'required_tools', None):
+        if getattr(agent, "required_tools", None):
             config["requiredTools"] = agent.required_tools
 
         # Gate condition (for sequential pipelines)
-        if getattr(agent, 'gate', None) is not None:
+        if getattr(agent, "gate", None) is not None:
             config["gate"] = self._serialize_gate(agent)
 
         # Code execution
-        if hasattr(agent, 'code_execution_config') and agent.code_execution_config:
+        if hasattr(agent, "code_execution_config") and agent.code_execution_config:
             cfg = agent.code_execution_config
             config["codeExecution"] = {
                 "enabled": cfg.enabled,
@@ -176,7 +175,7 @@ class AgentConfigSerializer:
             }
 
         # CLI command execution
-        if hasattr(agent, 'cli_config') and agent.cli_config:
+        if hasattr(agent, "cli_config") and agent.cli_config:
             cfg = agent.cli_config
             config["cliConfig"] = {
                 "enabled": cfg.enabled,
@@ -335,7 +334,7 @@ class AgentConfigSerializer:
         from agentspan.agents.agent import Agent as AgentClass
 
         router = agent.router
-        if isinstance(router, AgentClass) or (hasattr(router, 'model') and router.model):
+        if isinstance(router, AgentClass) or (hasattr(router, "model") and router.model):
             return self._serialize_agent(router)
         elif callable(router):
             task_name = f"{agent.name}_router_fn"
@@ -347,6 +346,7 @@ class AgentConfigSerializer:
         """Serialize a Pydantic model class to an OutputTypeConfig dict."""
         try:
             from agentspan.agents._internal.schema_utils import schema_from_pydantic
+
             schema = schema_from_pydantic(output_type)
             return {
                 "schema": schema,
@@ -377,8 +377,8 @@ class AgentConfigSerializer:
     def _serialize_memory(self, memory: Any) -> dict:
         """Serialize memory to a MemoryConfig dict."""
         result: Dict[str, Any] = {}
-        if hasattr(memory, 'messages') and memory.messages:
+        if hasattr(memory, "messages") and memory.messages:
             result["messages"] = memory.messages
-        if hasattr(memory, 'max_messages') and memory.max_messages:
+        if hasattr(memory, "max_messages") and memory.max_messages:
             result["maxMessages"] = memory.max_messages
         return result

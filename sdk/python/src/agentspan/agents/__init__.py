@@ -26,24 +26,59 @@ Quick start::
 # Core primitive
 from agentspan.agents.agent import Agent, AgentDef, PromptTemplate, Strategy, agent, scatter_gather
 
-# Tool decorator and constructors
-from agentspan.agents.tool import (
-    ToolContext,
-    ToolDef,
-    agent_tool,
-    audio_tool,
-    http_tool,
-    image_tool,
-    index_tool,
-    mcp_tool,
-    pdf_tool,
-    search_tool,
-    tool,
-    video_tool,
+# Callback handlers
+from agentspan.agents.callback import CallbackHandler
+from agentspan.agents.cli_config import CliConfig
+
+# Code execution
+from agentspan.agents.code_execution_config import CodeExecutionConfig
+from agentspan.agents.code_executor import (
+    CodeExecutor,
+    DockerCodeExecutor,
+    ExecutionResult,
+    JupyterCodeExecutor,
+    LocalCodeExecutor,
+    ServerlessCodeExecutor,
 )
 
-# MCP discovery utilities
-from agentspan.agents.runtime.mcp_discovery import clear_discovery_cache
+# Exceptions
+from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError, AgentspanError
+
+# Extended agent types
+from agentspan.agents.ext import GPTAssistantAgent, UserProxyAgent
+
+# Guardrails
+from agentspan.agents.guardrail import (
+    Guardrail,
+    GuardrailDef,
+    GuardrailResult,
+    LLMGuardrail,
+    OnFail,
+    Position,
+    RegexGuardrail,
+    guardrail,
+)
+
+# Handoff conditions (for swarm strategy)
+from agentspan.agents.handoff import HandoffCondition, OnCondition, OnTextMention, OnToolResult
+
+# Memory
+from agentspan.agents.memory import ConversationMemory
+
+# Result types
+from agentspan.agents.result import (
+    AgentEvent,
+    AgentHandle,
+    AgentResult,
+    AgentStatus,
+    AgentStream,
+    AsyncAgentStream,
+    DeploymentInfo,
+    EventType,
+    FinishReason,
+    Status,
+    TokenUsage,
+)
 
 # Execution API
 from agentspan.agents.run import (
@@ -63,37 +98,14 @@ from agentspan.agents.run import (
 
 # Runtime (for context manager and advanced usage)
 from agentspan.agents.runtime.config import AgentConfig
-from agentspan.agents.runtime.runtime import AgentRuntime
-
-# Result types
-from agentspan.agents.result import (
-    AgentEvent,
-    AgentHandle,
-    AgentResult,
-    AgentStatus,
-    AgentStream,
-    AsyncAgentStream,
-    DeploymentInfo,
-    EventType,
-    FinishReason,
-    Status,
-    TokenUsage,
-)
 
 # Agent discovery
 from agentspan.agents.runtime.discovery import discover_agents
 
-# Guardrails
-from agentspan.agents.guardrail import (
-    Guardrail,
-    GuardrailDef,
-    GuardrailResult,
-    LLMGuardrail,
-    OnFail,
-    Position,
-    RegexGuardrail,
-    guardrail,
-)
+# MCP discovery utilities
+from agentspan.agents.runtime.mcp_discovery import clear_discovery_cache
+from agentspan.agents.runtime.runtime import AgentRuntime
+from agentspan.agents.semantic_memory import MemoryEntry, MemoryStore, SemanticMemory
 
 # Termination conditions
 from agentspan.agents.termination import (
@@ -105,33 +117,21 @@ from agentspan.agents.termination import (
     TokenUsageTermination,
 )
 
-# Memory
-from agentspan.agents.memory import ConversationMemory
-from agentspan.agents.semantic_memory import MemoryEntry, MemoryStore, SemanticMemory
-
-# Code execution
-from agentspan.agents.code_execution_config import CodeExecutionConfig
-from agentspan.agents.cli_config import CliConfig
-from agentspan.agents.code_executor import (
-    CodeExecutor,
-    DockerCodeExecutor,
-    ExecutionResult,
-    JupyterCodeExecutor,
-    LocalCodeExecutor,
-    ServerlessCodeExecutor,
+# Tool decorator and constructors
+from agentspan.agents.tool import (
+    ToolContext,
+    ToolDef,
+    agent_tool,
+    audio_tool,
+    http_tool,
+    image_tool,
+    index_tool,
+    mcp_tool,
+    pdf_tool,
+    search_tool,
+    tool,
+    video_tool,
 )
-
-# Callback handlers
-from agentspan.agents.callback import CallbackHandler
-
-# Handoff conditions (for swarm strategy)
-from agentspan.agents.handoff import HandoffCondition, OnCondition, OnTextMention, OnToolResult
-
-# Extended agent types
-from agentspan.agents.ext import GPTAssistantAgent, UserProxyAgent
-
-# Exceptions
-from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError, AgentspanError
 
 # Tracing (optional — only activates if opentelemetry is installed)
 from agentspan.agents.tracing import is_tracing_enabled

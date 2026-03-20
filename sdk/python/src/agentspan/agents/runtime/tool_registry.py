@@ -9,12 +9,12 @@ import logging
 from typing import Any, List
 
 from agentspan.agents.runtime._dispatch import (
-    make_tool_worker,
-    _tool_registry,
-    _tool_approval_flags,
-    _tool_type_registry,
-    _tool_task_names,
     _mcp_servers,
+    _tool_approval_flags,
+    _tool_registry,
+    _tool_task_names,
+    _tool_type_registry,
+    make_tool_worker,
 )
 
 logger = logging.getLogger("agentspan.agents.runtime.tool_registry")
@@ -36,9 +36,10 @@ class ToolRegistry:
         ``_tool_type_registry`` for HTTP/MCP tools and ``_tool_approval_flags``
         for tools that require human approval.
         """
-        from agentspan.agents.tool import get_tool_defs
-        from agentspan.agents.runtime.runtime import _default_task_def
         from conductor.client.worker.worker_task import worker_task
+
+        from agentspan.agents.runtime.runtime import _default_task_def
+        from agentspan.agents.tool import get_tool_defs
 
         tool_defs = get_tool_defs(tools)
         task_name = f"{agent_name}_dispatch"
@@ -75,5 +76,7 @@ class ToolRegistry:
                 logger.debug("Registered tool worker '%s'", td.name)
 
         logger.debug(
-            "Registered %d worker tools for agent '%s'", len(tool_funcs), agent_name,
+            "Registered %d worker tools for agent '%s'",
+            len(tool_funcs),
+            agent_name,
         )

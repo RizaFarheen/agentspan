@@ -2,8 +2,8 @@
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Tests for AgentConfigSerializer."""
-import pytest
-from unittest.mock import MagicMock, patch
+
+from unittest.mock import MagicMock
 
 from agentspan.agents.config_serializer import AgentConfigSerializer
 
@@ -17,6 +17,7 @@ class TestAgentConfigSerializer:
     def test_serialize_simple_agent(self):
         """Simple agent with string instructions."""
         from agentspan.agents.agent import Agent
+
         agent = Agent(name="test", model="openai/gpt-4o", instructions="Be helpful.")
 
         config = self.serializer.serialize(agent)
@@ -29,6 +30,7 @@ class TestAgentConfigSerializer:
     def test_serialize_callable_instructions(self):
         """Callable instructions are resolved to strings."""
         from agentspan.agents.agent import Agent
+
         agent = Agent(
             name="test",
             model="openai/gpt-4o",
@@ -41,10 +43,13 @@ class TestAgentConfigSerializer:
     def test_serialize_prompt_template(self):
         """PromptTemplate instructions serialize as structured ref."""
         from agentspan.agents.agent import Agent, PromptTemplate
+
         agent = Agent(
             name="test",
             model="openai/gpt-4o",
-            instructions=PromptTemplate(name="my_template", variables={"role": "assistant"}, version=1),
+            instructions=PromptTemplate(
+                name="my_template", variables={"role": "assistant"}, version=1
+            ),
         )
 
         config = self.serializer.serialize(agent)

@@ -27,7 +27,6 @@ Example::
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -104,9 +103,7 @@ class InMemoryStore(MemoryStore):
 
     def add(self, entry: MemoryEntry) -> str:
         if not entry.id:
-            entry.id = hashlib.sha256(
-                f"{entry.content}{time.time()}".encode()
-            ).hexdigest()[:16]
+            entry.id = hashlib.sha256(f"{entry.content}{time.time()}".encode()).hexdigest()[:16]
         if not entry.created_at:
             entry.created_at = time.time()
         self._memories[entry.id] = entry

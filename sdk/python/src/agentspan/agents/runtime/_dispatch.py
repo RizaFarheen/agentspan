@@ -17,6 +17,7 @@ logger = logging.getLogger("agentspan.agents.dispatch")
 
 class ToolSerializationError(TypeError):
     """Raised when a tool returns a value that cannot be JSON-serialized."""
+
     pass
 
 
@@ -33,12 +34,14 @@ def _validate_serializable(tool_name, result):
             f"Return dict, str, int, float, list, or bool. Error: {exc}"
         ) from None
 
+
 def _coerce_value(value, annotation):
     """Coerce a raw value to match the expected type annotation."""
     if value is None or annotation is inspect.Parameter.empty:
         return value
 
     import typing
+
     origin = getattr(annotation, "__origin__", None)
     args = getattr(annotation, "__args__", ())
 
@@ -81,15 +84,21 @@ def _coerce_value(value, annotation):
     # String → int/float/bool
     if isinstance(value, str):
         if annotation is int:
-            try: return int(value)
-            except (ValueError, TypeError): pass
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                pass
         elif annotation is float:
-            try: return float(value)
-            except (ValueError, TypeError): pass
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                pass
         elif annotation is bool:
             lower = value.lower().strip()
-            if lower in ("true", "1", "yes"): return True
-            if lower in ("false", "0", "no"): return False
+            if lower in ("true", "1", "yes"):
+                return True
+            if lower in ("false", "0", "no"):
+                return False
 
     return value
 
@@ -153,6 +162,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
     # Resolve PEP 563 string annotations (from __future__ import annotations)
     # to real types so downstream code can use isinstance().
     import typing
+
     try:
         tool_func.__annotations__ = typing.get_type_hints(tool_func)
     except Exception:
@@ -173,6 +183,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
         ctx = None
         if _needs_context(tool_func):
             from agentspan.agents.tool import ToolContext
+
             state = dict(agent_state) if agent_state else {}
             ctx = ToolContext(
                 workflow_id=wf_id,
@@ -215,11 +226,12 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
                     if not check_result.passed:
                         if guard.on_fail == "fix" and check_result.fixed_output is not None:
                             result = check_result.fixed_output
-                            result_str = json.dumps(result) if not isinstance(result, str) else result
+                            result_str = (
+                                json.dumps(result) if not isinstance(result, str) else result
+                            )
                         elif guard.on_fail == "raise":
                             raise ValueError(
-                                f"Tool guardrail '{guard.name}' failed: "
-                                f"{check_result.message}"
+                                f"Tool guardrail '{guard.name}' failed: {check_result.message}"
                             )
                         else:
                             result = {
@@ -270,7 +282,9 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
                 else:
                     fn_kwargs[param_name] = None
 
-            result = _execute(fn_kwargs, wf_id=task.workflow_instance_id or "", agent_state=agent_state)
+            result = _execute(
+                fn_kwargs, wf_id=task.workflow_instance_id or "", agent_state=agent_state
+            )
 
             if isinstance(result, dict):
                 task_result.output_data = result
@@ -280,7 +294,9 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
             return task_result
         except Exception as e:
             _tool_error_counts[tool_name] = _tool_error_counts.get(tool_name, 0) + 1
-            logger.error("Tool '%s' failed (count=%d): %s", tool_name, _tool_error_counts[tool_name], e)
+            logger.error(
+                "Tool '%s' failed (count=%d): %s", tool_name, _tool_error_counts[tool_name], e
+            )
             task_result.status = TaskResultStatus.FAILED
             task_result.reason_for_incompletion = str(e)
             return task_result

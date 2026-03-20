@@ -6,25 +6,24 @@ make_tool_worker, and ToolContext injection.
 """
 
 import inspect
-import json
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import pytest
 
 from agentspan.agents.runtime._dispatch import (
-    make_tool_worker,
     _coerce_value,
-    _tool_registry,
-    _tool_type_registry,
-    _tool_task_names,
-    _mcp_servers,
-    _tool_error_counts,
-    _tool_approval_flags,
     _current_context,
+    _mcp_servers,
+    _tool_approval_flags,
+    _tool_error_counts,
+    _tool_registry,
+    _tool_task_names,
+    _tool_type_registry,
+    make_tool_worker,
 )
 
-
 # ── helpers ──────────────────────────────────────────────────────────────
+
 
 def _register_tools(name: str, funcs: dict):
     _tool_registry[name] = funcs
@@ -35,6 +34,7 @@ def _register_tools(name: str, funcs: dict):
 def _make_task(input_data=None, workflow_instance_id="test-wf-001", task_id="test-task-001"):
     """Create a minimal mock Task for testing make_tool_worker."""
     from conductor.client.http.models.task import Task
+
     t = Task()
     t.input_data = input_data or {}
     t.workflow_instance_id = workflow_instance_id
@@ -64,11 +64,13 @@ def _clean_state():
 
 # ── Circuit breaker ──────────────────────────────────────────────────────
 
+
 class TestCircuitBreaker:
     """Test that make_tool_worker tracks error counts for circuit breaking."""
 
     def test_make_tool_worker_increments_error_count(self):
         """make_tool_worker returns FAILED TaskResult and increments error count."""
+
         def bad_tool():
             raise RuntimeError("boom")
 
@@ -86,6 +88,7 @@ class TestCircuitBreaker:
 
     def test_consecutive_failures_increment(self):
         """Error count increments on each consecutive failure."""
+
         def flaky():
             raise ValueError("fail")
 
@@ -97,6 +100,7 @@ class TestCircuitBreaker:
 
 
 # ── ToolContext injection ───────────────────────────────────────────────
+
 
 class TestToolContext:
     """Test ToolContext injection via make_tool_worker."""
@@ -112,10 +116,12 @@ class TestToolContext:
             received_ctx["workflow_id"] = context.workflow_id
             return f"result for {query}"
 
-        _current_context.update({
-            "agent_name": "test_agent",
-            "session_id": "session_123",
-        })
+        _current_context.update(
+            {
+                "agent_name": "test_agent",
+                "session_id": "session_123",
+            }
+        )
 
         wrapper = make_tool_worker(tool_with_context, "ctx_tool")
         task = _make_task(input_data={"query": "test"}, workflow_instance_id="wf-ctx-test")
@@ -190,6 +196,7 @@ class TestToolContext:
 
 # ── make_tool_worker factory ─────────────────────────────────────────
 
+
 class TestMakeToolWorker:
     """Test make_tool_worker() — wraps execution, returns TaskResult."""
 
@@ -213,6 +220,7 @@ class TestMakeToolWorker:
 
     def test_error_returns_failed_result(self):
         """Tool errors should return FAILED TaskResult."""
+
         def bad_tool():
             raise RuntimeError("boom")
 
@@ -244,6 +252,7 @@ class TestMakeToolWorker:
 
 class _MockGuardrail:
     """Minimal guardrail mock for testing make_tool_worker guardrail paths."""
+
     def __init__(self, position, on_fail, passed=True, message="", fixed_output=None):
         self.position = position
         self.on_fail = on_fail
@@ -254,6 +263,7 @@ class _MockGuardrail:
 
     def check(self, content):
         from agentspan.agents.guardrail import GuardrailResult
+
         return GuardrailResult(
             passed=self._passed,
             message=self._message,
@@ -301,8 +311,11 @@ class TestMakeToolWorkerGuardrails:
 
     def test_post_guardrail_fix_replaces_result(self):
         guard = _MockGuardrail(
-            position="output", on_fail="fix", passed=False,
-            message="needs fix", fixed_output="FIXED",
+            position="output",
+            on_fail="fix",
+            passed=False,
+            message="needs fix",
+            fixed_output="FIXED",
         )
 
         def my_tool() -> str:
@@ -314,7 +327,9 @@ class TestMakeToolWorkerGuardrails:
         assert result.output_data == {"result": "FIXED"}
 
     def test_post_guardrail_raise(self):
-        guard = _MockGuardrail(position="output", on_fail="raise", passed=False, message="bad output")
+        guard = _MockGuardrail(
+            position="output", on_fail="raise", passed=False, message="bad output"
+        )
 
         def my_tool() -> str:
             return "original"
@@ -325,7 +340,9 @@ class TestMakeToolWorkerGuardrails:
         assert "failed" in result.reason_for_incompletion.lower()
 
     def test_post_guardrail_sanitize(self):
-        guard = _MockGuardrail(position="output", on_fail="retry", passed=False, message="unsafe output")
+        guard = _MockGuardrail(
+            position="output", on_fail="retry", passed=False, message="unsafe output"
+        )
 
         def my_tool() -> str:
             return "original"
@@ -353,6 +370,7 @@ class TestNeedsContext:
 
     def test_exception_returns_false(self):
         from agentspan.agents.runtime._dispatch import _needs_context
+
         # Pass something that's not a function
         assert _needs_context(42) is False
 
@@ -361,7 +379,6 @@ class TestToolSerializationValidation:
     """Test BUG-P2-08: non-serializable return values raise ToolSerializationError."""
 
     def test_set_return_raises(self):
-        from agentspan.agents.runtime._dispatch import ToolSerializationError
 
         def bad_tool():
             return {1, 2, 3}  # set is not JSON-serializable
@@ -401,7 +418,10 @@ class TestToolSerializationValidation:
         assert result.status.name == "FAILED"
 
     def test_validate_serializable_function(self):
-        from agentspan.agents.runtime._dispatch import _validate_serializable, ToolSerializationError
+        from agentspan.agents.runtime._dispatch import (
+            ToolSerializationError,
+            _validate_serializable,
+        )
 
         # These should not raise
         _validate_serializable("t", None)
@@ -473,8 +493,8 @@ class TestTypeCoercion:
 
     def test_wrong_json_type_passes_through(self):
         """JSON array when dict expected should pass through unchanged."""
-        result = _coerce_value('[1, 2, 3]', dict)
-        assert result == '[1, 2, 3]'
+        result = _coerce_value("[1, 2, 3]", dict)
+        assert result == "[1, 2, 3]"
 
     def test_empty_annotation_no_coercion(self):
         result = _coerce_value("42", inspect.Parameter.empty)

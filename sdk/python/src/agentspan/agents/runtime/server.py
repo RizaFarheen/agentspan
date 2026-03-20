@@ -114,10 +114,7 @@ def ensure_server_running(server_url: str, *, max_wait: float = 60.0) -> None:
             error_msg = (result.stderr or result.stdout or "").strip()
             _log(f"Failed to start Agentspan server: {error_msg}")
             if "java" in error_msg.lower() or "jdk" in error_msg.lower():
-                _log(
-                    "The Agentspan server requires Java 21+. "
-                    "Install: https://adoptium.net/"
-                )
+                _log("The Agentspan server requires Java 21+. Install: https://adoptium.net/")
             _log("Run 'agentspan doctor' for full diagnostics.")
             return
     except OSError as exc:

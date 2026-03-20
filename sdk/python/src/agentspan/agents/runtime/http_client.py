@@ -142,14 +142,14 @@ class AgentHttpClient:
 
                 client = await self._get_client()
                 async with client.stream(
-                    "GET", url, headers=req_headers,
+                    "GET",
+                    url,
+                    headers=req_headers,
                     timeout=httpx.Timeout(30.0, connect=5.0),
                 ) as resp:
                     if resp.status_code != 200:
                         if first_connect:
-                            raise SSEUnavailableError(
-                                f"Server returned {resp.status_code}"
-                            )
+                            raise SSEUnavailableError(f"Server returned {resp.status_code}")
                         logger.warning(
                             "SSE reconnect failed (status=%s), stopping stream",
                             resp.status_code,
@@ -163,8 +163,7 @@ class AgentHttpClient:
                         if sse_event.get("_heartbeat"):
                             if (
                                 not got_real_event
-                                and time.monotonic() - connect_time
-                                > _SSE_NO_EVENT_TIMEOUT
+                                and time.monotonic() - connect_time > _SSE_NO_EVENT_TIMEOUT
                             ):
                                 raise SSEUnavailableError(
                                     "SSE connected but no events received "
@@ -186,10 +185,9 @@ class AgentHttpClient:
             except Exception as e:
                 if first_connect:
                     raise SSEUnavailableError(str(e))
-                logger.warning(
-                    "SSE connection lost (%s), reconnecting in 1s...", e
-                )
+                logger.warning("SSE connection lost (%s), reconnecting in 1s...", e)
                 import asyncio
+
                 await asyncio.sleep(1)
 
     @staticmethod

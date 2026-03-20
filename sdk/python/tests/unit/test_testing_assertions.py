@@ -26,7 +26,6 @@ from agentspan.agents.testing.assertions import (
     assert_tools_used_exactly,
 )
 
-
 # ── Fixtures ───────────────────────────────────────────────────────────
 
 
@@ -83,9 +82,7 @@ class TestAssertToolCalledWith:
         assert_tool_called_with(result, "get_weather", args={"city": "NYC"})
 
     def test_fails_with_wrong_args(self):
-        result = _make_result(
-            tool_calls=[{"name": "get_weather", "args": {"city": "London"}}]
-        )
+        result = _make_result(tool_calls=[{"name": "get_weather", "args": {"city": "London"}}])
         with pytest.raises(AssertionError, match="never with matching args"):
             assert_tool_called_with(result, "get_weather", args={"city": "NYC"})
 
@@ -111,18 +108,14 @@ class TestAssertToolCallOrder:
         assert_tool_call_order(result, ["search", "format"])
 
     def test_fails_with_wrong_order(self):
-        result = _make_result(
-            tool_calls=[{"name": "format"}, {"name": "search"}]
-        )
+        result = _make_result(tool_calls=[{"name": "format"}, {"name": "search"}])
         with pytest.raises(AssertionError, match="subsequence"):
             assert_tool_call_order(result, ["search", "format"])
 
 
 class TestAssertToolsUsedExactly:
     def test_passes_with_exact_set(self):
-        result = _make_result(
-            tool_calls=[{"name": "a"}, {"name": "b"}, {"name": "a"}]
-        )
+        result = _make_result(tool_calls=[{"name": "a"}, {"name": "b"}, {"name": "a"}])
         assert_tools_used_exactly(result, ["a", "b"])
 
     def test_fails_with_missing(self):
@@ -131,9 +124,7 @@ class TestAssertToolsUsedExactly:
             assert_tools_used_exactly(result, ["a", "b"])
 
     def test_fails_with_extra(self):
-        result = _make_result(
-            tool_calls=[{"name": "a"}, {"name": "b"}, {"name": "c"}]
-        )
+        result = _make_result(tool_calls=[{"name": "a"}, {"name": "b"}, {"name": "c"}])
         with pytest.raises(AssertionError, match="unexpected"):
             assert_tools_used_exactly(result, ["a", "b"])
 
@@ -199,15 +190,11 @@ class TestAssertStatus:
 
 class TestAssertNoErrors:
     def test_passes_without_errors(self):
-        result = _make_result(
-            events=[AgentEvent(type=EventType.DONE, output="ok")]
-        )
+        result = _make_result(events=[AgentEvent(type=EventType.DONE, output="ok")])
         assert_no_errors(result)
 
     def test_fails_with_errors(self):
-        result = _make_result(
-            events=[AgentEvent(type=EventType.ERROR, content="boom")]
-        )
+        result = _make_result(events=[AgentEvent(type=EventType.ERROR, content="boom")])
         with pytest.raises(AssertionError, match="boom"):
             assert_no_errors(result)
 
@@ -217,9 +204,7 @@ class TestAssertNoErrors:
 
 class TestAssertEventsContain:
     def test_passes_when_event_present(self):
-        result = _make_result(
-            events=[AgentEvent(type=EventType.TOOL_CALL, tool_name="x")]
-        )
+        result = _make_result(events=[AgentEvent(type=EventType.TOOL_CALL, tool_name="x")])
         assert_events_contain(result, EventType.TOOL_CALL)
 
     def test_fails_when_event_absent(self):
@@ -232,22 +217,16 @@ class TestAssertEventsContain:
         assert_events_contain(result, EventType.ERROR, expected=False)
 
     def test_expected_false_fails_when_present(self):
-        result = _make_result(
-            events=[AgentEvent(type=EventType.ERROR, content="bad")]
-        )
+        result = _make_result(events=[AgentEvent(type=EventType.ERROR, content="bad")])
         with pytest.raises(AssertionError, match="NO event"):
             assert_events_contain(result, EventType.ERROR, expected=False)
 
     def test_with_attrs(self):
-        result = _make_result(
-            events=[AgentEvent(type=EventType.HANDOFF, target="math")]
-        )
+        result = _make_result(events=[AgentEvent(type=EventType.HANDOFF, target="math")])
         assert_events_contain(result, EventType.HANDOFF, target="math")
 
     def test_with_attrs_mismatch(self):
-        result = _make_result(
-            events=[AgentEvent(type=EventType.HANDOFF, target="math")]
-        )
+        result = _make_result(events=[AgentEvent(type=EventType.HANDOFF, target="math")])
         with pytest.raises(AssertionError):
             assert_events_contain(result, EventType.HANDOFF, target="code")
 
@@ -295,9 +274,7 @@ class TestAssertEventSequence:
 
 class TestAssertHandoffTo:
     def test_passes_with_matching_handoff(self):
-        result = _make_result(
-            events=[AgentEvent(type=EventType.HANDOFF, target="math_expert")]
-        )
+        result = _make_result(events=[AgentEvent(type=EventType.HANDOFF, target="math_expert")])
         assert_handoff_to(result, "math_expert")
 
     def test_fails_without_handoff(self):
@@ -308,9 +285,7 @@ class TestAssertHandoffTo:
 
 class TestAssertAgentRan:
     def test_passes(self):
-        result = _make_result(
-            events=[AgentEvent(type=EventType.HANDOFF, target="summarizer")]
-        )
+        result = _make_result(events=[AgentEvent(type=EventType.HANDOFF, target="summarizer")])
         assert_agent_ran(result, "summarizer")
 
 
@@ -320,9 +295,7 @@ class TestAssertAgentRan:
 class TestAssertGuardrailPassed:
     def test_passes(self):
         result = _make_result(
-            events=[
-                AgentEvent(type=EventType.GUARDRAIL_PASS, guardrail_name="safety")
-            ]
+            events=[AgentEvent(type=EventType.GUARDRAIL_PASS, guardrail_name="safety")]
         )
         assert_guardrail_passed(result, "safety")
 
@@ -335,9 +308,7 @@ class TestAssertGuardrailPassed:
 class TestAssertGuardrailFailed:
     def test_passes(self):
         result = _make_result(
-            events=[
-                AgentEvent(type=EventType.GUARDRAIL_FAIL, guardrail_name="pii")
-            ]
+            events=[AgentEvent(type=EventType.GUARDRAIL_FAIL, guardrail_name="pii")]
         )
         assert_guardrail_failed(result, "pii")
 

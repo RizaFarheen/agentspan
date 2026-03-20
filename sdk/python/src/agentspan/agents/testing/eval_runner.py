@@ -53,7 +53,6 @@ from agentspan.agents.testing.assertions import (
 )
 from agentspan.agents.testing.strategy_validators import validate_strategy
 
-
 # ── Eval case definition ───────────────────────────────────────────────
 
 
@@ -105,9 +104,7 @@ class EvalCase:
     validate_orchestration: bool = True
 
     # Custom assertions
-    custom_assertions: List[Callable[[AgentResult], None]] = field(
-        default_factory=list
-    )
+    custom_assertions: List[Callable[[AgentResult], None]] = field(default_factory=list)
 
     # Metadata
     tags: List[str] = field(default_factory=list)
@@ -164,7 +161,7 @@ class EvalSuiteResult:
         """Print a formatted summary of all eval results."""
         width = 60
         print(f"\n{'=' * width}")
-        print(f" Agent Correctness Eval Results")
+        print(" Agent Correctness Eval Results")
         print(f"{'=' * width}")
 
         for case in self.cases:
@@ -178,10 +175,7 @@ class EvalSuiteResult:
                     print(f"         x Error: {case.error}")
 
         print(f"\n{'─' * width}")
-        print(
-            f"  {self.pass_count}/{self.total} passed, "
-            f"{self.fail_count} failed"
-        )
+        print(f"  {self.pass_count}/{self.total} passed, {self.fail_count} failed")
         print(f"{'=' * width}\n")
 
     def failed_cases(self) -> List[EvalCaseResult]:
@@ -245,74 +239,88 @@ class CorrectnessEval:
             )
 
         # Run all checks
-        checks.append(self._check(
-            "status", lambda: assert_status(agent_result, case.expect_status)
-        ))
+        checks.append(
+            self._check("status", lambda: assert_status(agent_result, case.expect_status))
+        )
 
         if case.expect_no_errors:
-            checks.append(self._check(
-                "no_errors", lambda: assert_no_errors(agent_result)
-            ))
+            checks.append(self._check("no_errors", lambda: assert_no_errors(agent_result)))
 
         if case.expect_tools:
             for tool_name in case.expect_tools:
-                checks.append(self._check(
-                    f"tool_used:{tool_name}",
-                    lambda tn=tool_name: assert_tool_used(agent_result, tn),
-                ))
+                checks.append(
+                    self._check(
+                        f"tool_used:{tool_name}",
+                        lambda tn=tool_name: assert_tool_used(agent_result, tn),
+                    )
+                )
 
         if case.expect_tools_not_used:
             for tool_name in case.expect_tools_not_used:
-                checks.append(self._check(
-                    f"tool_not_used:{tool_name}",
-                    lambda tn=tool_name: assert_tool_not_used(agent_result, tn),
-                ))
+                checks.append(
+                    self._check(
+                        f"tool_not_used:{tool_name}",
+                        lambda tn=tool_name: assert_tool_not_used(agent_result, tn),
+                    )
+                )
 
         if case.expect_tool_args:
             for tool_name, args in case.expect_tool_args.items():
-                checks.append(self._check(
-                    f"tool_args:{tool_name}",
-                    lambda tn=tool_name, a=args: assert_tool_called_with(
-                        agent_result, tn, args=a
-                    ),
-                ))
+                checks.append(
+                    self._check(
+                        f"tool_args:{tool_name}",
+                        lambda tn=tool_name, a=args: assert_tool_called_with(
+                            agent_result, tn, args=a
+                        ),
+                    )
+                )
 
         if case.expect_handoff_to:
-            checks.append(self._check(
-                f"handoff_to:{case.expect_handoff_to}",
-                lambda: assert_handoff_to(agent_result, case.expect_handoff_to),
-            ))
+            checks.append(
+                self._check(
+                    f"handoff_to:{case.expect_handoff_to}",
+                    lambda: assert_handoff_to(agent_result, case.expect_handoff_to),
+                )
+            )
 
         if case.expect_no_handoff_to:
             for agent_name in case.expect_no_handoff_to:
-                checks.append(self._check(
-                    f"no_handoff_to:{agent_name}",
-                    lambda an=agent_name: _assert_no_handoff(agent_result, an),
-                ))
+                checks.append(
+                    self._check(
+                        f"no_handoff_to:{agent_name}",
+                        lambda an=agent_name: _assert_no_handoff(agent_result, an),
+                    )
+                )
 
         if case.expect_output_contains:
             for text in case.expect_output_contains:
-                checks.append(self._check(
-                    f"output_contains:'{text}'",
-                    lambda t=text: assert_output_contains(agent_result, t, case_sensitive=False),
-                ))
+                checks.append(
+                    self._check(
+                        f"output_contains:'{text}'",
+                        lambda t=text: assert_output_contains(
+                            agent_result, t, case_sensitive=False
+                        ),
+                    )
+                )
 
         if case.expect_output_matches:
-            checks.append(self._check(
-                f"output_matches:'{case.expect_output_matches}'",
-                lambda: assert_output_matches(agent_result, case.expect_output_matches),
-            ))
+            checks.append(
+                self._check(
+                    f"output_matches:'{case.expect_output_matches}'",
+                    lambda: assert_output_matches(agent_result, case.expect_output_matches),
+                )
+            )
 
         if case.validate_orchestration:
-            checks.append(self._check(
-                "strategy_validation",
-                lambda: validate_strategy(case.agent, agent_result),
-            ))
+            checks.append(
+                self._check(
+                    "strategy_validation",
+                    lambda: validate_strategy(case.agent, agent_result),
+                )
+            )
 
         for i, custom_fn in enumerate(case.custom_assertions):
-            checks.append(self._check(
-                f"custom_{i}", lambda fn=custom_fn: fn(agent_result)
-            ))
+            checks.append(self._check(f"custom_{i}", lambda fn=custom_fn: fn(agent_result)))
 
         passed = all(c.passed for c in checks)
         return EvalCaseResult(
@@ -330,9 +338,7 @@ class CorrectnessEval:
             fn()
             return EvalCheckResult(check=name, passed=True)
         except (AssertionError, Exception) as exc:
-            return EvalCheckResult(
-                check=name, passed=False, message=str(exc)
-            )
+            return EvalCheckResult(check=name, passed=False, message=str(exc))
 
 
 def _assert_no_handoff(result: AgentResult, agent_name: str) -> None:

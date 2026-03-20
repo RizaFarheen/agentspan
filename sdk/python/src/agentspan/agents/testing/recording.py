@@ -20,9 +20,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, Union
 
-from agentspan.agents.result import AgentEvent, AgentResult, EventType, TokenUsage
+from agentspan.agents.result import AgentEvent, AgentResult, TokenUsage
 
 
 def _event_to_dict(event: AgentEvent) -> Dict[str, Any]:

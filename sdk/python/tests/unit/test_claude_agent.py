@@ -1,7 +1,7 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 import dataclasses
-import pytest
+
 from agentspan.agents.frameworks.claude import ClaudeCodeAgent, serialize_claude
 
 
@@ -102,4 +102,5 @@ class TestClaudeDetection:
 class TestClaudeImport:
     def test_exported_from_frameworks_init(self):
         from agentspan.agents.frameworks import ClaudeCodeAgent as Imported
+
         assert Imported is ClaudeCodeAgent

@@ -3,7 +3,7 @@
 
 """Runtime package — execution lifecycle management."""
 
-from agentspan.agents.runtime.runtime import AgentRuntime
 from agentspan.agents.runtime.config import AgentConfig
+from agentspan.agents.runtime.runtime import AgentRuntime
 
 __all__ = ["AgentRuntime", "AgentConfig"]

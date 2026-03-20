@@ -21,9 +21,7 @@ class AgentAPIError(AgentspanError):
         self.status_code = status_code
         self.message = message
         self.url = url
-        super().__init__(
-            f"HTTP {status_code}: {message}" + (f" ({url})" if url else "")
-        )
+        super().__init__(f"HTTP {status_code}: {message}" + (f" ({url})" if url else ""))
 
 
 class AgentNotFoundError(AgentAPIError):

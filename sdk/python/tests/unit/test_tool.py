@@ -13,6 +13,7 @@ from agentspan.agents.tool import ToolDef, get_tool_def, get_tool_defs, http_too
 def _make_task(input_data=None, workflow_instance_id="test-wf-001", task_id="test-task-001"):
     """Create a minimal mock Task for testing make_tool_worker."""
     from conductor.client.http.models.task import Task
+
     t = Task()
     t.input_data = input_data or {}
     t.workflow_instance_id = workflow_instance_id
@@ -210,13 +211,16 @@ class TestWorkerTaskDetection:
         registry = {}
         wrapper, _original = self._make_worker_task_func(registry)
 
-        with mock.patch(
-            "agentspan.agents.tool._decorated_functions",
-            registry,
-            create=True,
-        ), mock.patch(
-            "conductor.client.automator.task_handler._decorated_functions",
-            registry,
+        with (
+            mock.patch(
+                "agentspan.agents.tool._decorated_functions",
+                registry,
+                create=True,
+            ),
+            mock.patch(
+                "conductor.client.automator.task_handler._decorated_functions",
+                registry,
+            ),
         ):
             td = get_tool_def(wrapper)
 
@@ -231,6 +235,7 @@ class TestWorkerTaskDetection:
 
     def test_worker_task_not_registered_raises(self):
         """A plain callable not in _decorated_functions should still raise."""
+
         def plain_func(x: str) -> str:
             return x
 
@@ -285,12 +290,11 @@ class TestWorkerTaskDetection:
 
     def test_conductor_not_installed_raises(self):
         """If conductor-python is not installed, should fall through to TypeError."""
+
         def some_func(x: str) -> str:
             return x
 
-        with mock.patch(
-            "agentspan.agents.tool._try_worker_task", return_value=None
-        ):
+        with mock.patch("agentspan.agents.tool._try_worker_task", return_value=None):
             with pytest.raises(TypeError):
                 get_tool_def(some_func)
 
@@ -300,6 +304,7 @@ class TestExternalTool:
 
     def test_external_sets_func_none(self):
         """external=True creates a ToolDef with func=None."""
+
         @tool(external=True)
         def process_order(order_id: str, action: str) -> dict:
             """Process a customer order."""
@@ -314,6 +319,7 @@ class TestExternalTool:
 
     def test_external_schema_from_type_hints(self):
         """external=True still generates schema from function signature."""
+
         @tool(external=True)
         def query_db(query: str, limit: int = 10) -> dict:
             """Run a database query."""
@@ -330,6 +336,7 @@ class TestExternalTool:
 
     def test_external_with_custom_name(self):
         """external=True respects the name parameter."""
+
         @tool(name="order_processor_v2", external=True)
         def process_order(order_id: str) -> dict:
             """Process an order."""
@@ -341,6 +348,7 @@ class TestExternalTool:
 
     def test_external_with_approval(self):
         """external=True works with approval_required."""
+
         @tool(external=True, approval_required=True)
         def delete_account(user_id: str) -> dict:
             """Delete a user account."""
@@ -356,7 +364,9 @@ class TestExternalTool:
 
         guard = Guardrail(
             func=lambda c: GuardrailResult(passed=True),
-            position="input", on_fail="raise", name="test_guard",
+            position="input",
+            on_fail="raise",
+            name="test_guard",
         )
 
         @tool(external=True, guardrails=[guard])
@@ -371,6 +381,7 @@ class TestExternalTool:
 
     def test_external_still_callable(self):
         """external=True decorated functions are still callable (stub)."""
+
         @tool(external=True)
         def stub(x: str) -> str:
             """A stub."""
@@ -381,6 +392,7 @@ class TestExternalTool:
 
     def test_non_external_has_func(self):
         """Regular @tool (external=False) still sets func."""
+
         @tool
         def normal(x: str) -> str:
             """Normal tool."""
@@ -391,6 +403,7 @@ class TestExternalTool:
 
     def test_get_tool_def_works_with_external(self):
         """get_tool_def() correctly extracts ToolDef from external tools."""
+
         @tool(external=True)
         def ext(x: str) -> str:
             """External."""
@@ -406,7 +419,6 @@ class TestPEP563Annotations:
 
     def test_make_tool_worker_resolves_string_annotations(self):
         """make_tool_worker resolves PEP 563 string annotations to real types."""
-        import typing
         from agentspan.agents.runtime._dispatch import make_tool_worker
 
         def my_tool(query: str, count: int = 5) -> dict:
@@ -425,8 +437,9 @@ class TestPEP563Annotations:
 
     def test_make_tool_worker_wrapper_still_works(self):
         """The wrapper function returned by make_tool_worker still executes correctly."""
-        from agentspan.agents.runtime._dispatch import make_tool_worker
         from conductor.client.http.models.task import Task
+
+        from agentspan.agents.runtime._dispatch import make_tool_worker
 
         def adder(a: int, b: int) -> int:
             """Add two numbers."""
@@ -476,8 +489,9 @@ class TestToolEdgeCases:
 
     def test_make_tool_worker_get_type_hints_fails(self):
         """make_tool_worker handles type hint resolution failure gracefully."""
-        from agentspan.agents.runtime._dispatch import make_tool_worker
         from conductor.client.http.models.task import Task
+
+        from agentspan.agents.runtime._dispatch import make_tool_worker
 
         def my_tool(x: str) -> str:
             return x
@@ -560,7 +574,9 @@ class TestDispatchFixThenCheck:
             return GuardrailResult(passed=True)
 
         g1 = Guardrail(func=fix_guardrail, on_fail="fix", position="output", name="fixer")
-        g2 = Guardrail(func=validate_guardrail, on_fail="raise", position="output", name="validator")
+        g2 = Guardrail(
+            func=validate_guardrail, on_fail="raise", position="output", name="validator"
+        )
 
         def my_tool() -> str:
             return "this is bad content"
@@ -729,6 +745,7 @@ class TestCircuitBreakerReset:
             _tool_error_counts,
             reset_circuit_breaker,
         )
+
         _tool_error_counts["tool_a"] = 5
         _tool_error_counts["tool_b"] = 3
         reset_circuit_breaker("tool_a")
@@ -743,6 +760,7 @@ class TestCircuitBreakerReset:
             _tool_error_counts,
             reset_all_circuit_breakers,
         )
+
         _tool_error_counts["x"] = 10
         _tool_error_counts["y"] = 20
         reset_all_circuit_breakers()
@@ -751,5 +769,6 @@ class TestCircuitBreakerReset:
     def test_reset_nonexistent_tool_is_noop(self):
         """Resetting a tool that has no error count does nothing."""
         from agentspan.agents.runtime._dispatch import reset_circuit_breaker
+
         # Should not raise
         reset_circuit_breaker("nonexistent_tool_xyz")

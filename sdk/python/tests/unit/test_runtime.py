@@ -9,12 +9,12 @@ using mock workflow objects. Does NOT require a running Conductor server.
 
 import logging
 import uuid
-
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agentspan.agents.agent import Agent
-from agentspan.agents.result import AgentResult, AgentHandle, AgentStatus, EventType
+from agentspan.agents.result import AgentStatus, EventType
 
 
 def _mock_requests_post(response_json=None, status_code=200):
@@ -55,8 +55,8 @@ class TestExtractOutput:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -93,8 +93,8 @@ class TestExtractHandoffResult:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -129,8 +129,8 @@ class TestExtractMessages:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -157,8 +157,8 @@ class TestSingletonRuntime:
     """Test that run.py uses a singleton runtime."""
 
     def test_singleton_returns_same_instance(self):
-        from agentspan.agents.run import _get_default_runtime
         import agentspan.agents.run as run_module
+        from agentspan.agents.run import _get_default_runtime
 
         # Reset singleton
         run_module._default_runtime = None
@@ -223,8 +223,8 @@ class TestAgentRuntimeInit:
         """AgentRuntime(config=AgentConfig(...)) uses the config object."""
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 cfg = AgentConfig(
                     server_url="http://config/api",
@@ -240,8 +240,8 @@ class TestAgentRuntimeInit:
         """Explicit params take precedence over config object values."""
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 cfg = AgentConfig(
                     server_url="http://config/api",
@@ -258,8 +258,8 @@ class TestAgentRuntimeInit:
         """Tuning knobs from config are preserved when using explicit connection params."""
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 cfg = AgentConfig(
                     server_url="http://config/api",
@@ -282,8 +282,9 @@ class TestAgentConfig:
         assert config.worker_poll_interval_ms == 100
 
     def test_env_override(self):
-        from agentspan.agents.runtime.config import AgentConfig
         from unittest.mock import patch
+
+        from agentspan.agents.runtime.config import AgentConfig
 
         with patch.dict(
             "os.environ", {"AGENTSPAN_SERVER_URL": "http://custom:9090/api"}, clear=True
@@ -305,8 +306,8 @@ class TestCorrelationId:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -356,8 +357,8 @@ class TestRuntimeRespond:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -390,8 +391,8 @@ class TestMediaParameter:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -473,8 +474,8 @@ class TestRuntimeLifecycle:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -518,8 +519,8 @@ class TestRuntimeLifecycle:
     def test_context_manager(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 rt = AgentRuntime(config=config)
@@ -542,8 +543,8 @@ class TestHasWorkerTools:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -600,40 +601,35 @@ class TestExtractTokenUsage:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
 
     def test_single_llm_task(self, runtime):
-        task = MagicMock()
-        task.task_type = "LLM_CHAT_COMPLETE"
-        task.output_data = {
-            "tokenUsed": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
-        }
-        wf_run = MockWorkflowRun(tasks=[task])
-
-        usage = runtime._extract_token_usage(wf_run)
+        with patch.object(
+            runtime,
+            "_fetch_agent_workflow",
+            return_value={
+                "tokenUsage": {"promptTokens": 100, "completionTokens": 50, "totalTokens": 150}
+            },
+        ):
+            usage = runtime._extract_token_usage("wf-123")
         assert usage.prompt_tokens == 100
         assert usage.completion_tokens == 50
         assert usage.total_tokens == 150
 
     def test_multiple_llm_tasks(self, runtime):
-        task1 = MagicMock()
-        task1.task_type = "LLM_CHAT_COMPLETE"
-        task1.output_data = {
-            "tokenUsed": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
-        }
-
-        task2 = MagicMock()
-        task2.task_type = "LLM_CHAT_COMPLETE"
-        task2.output_data = {
-            "tokenUsed": {"prompt_tokens": 200, "completion_tokens": 100, "total_tokens": 300}
-        }
-
-        wf_run = MockWorkflowRun(tasks=[task1, task2])
-        usage = runtime._extract_token_usage(wf_run)
+        # Server pre-computes tokenUsage across all tasks; we return aggregated totals.
+        with patch.object(
+            runtime,
+            "_fetch_agent_workflow",
+            return_value={
+                "tokenUsage": {"promptTokens": 300, "completionTokens": 150, "totalTokens": 450}
+            },
+        ):
+            usage = runtime._extract_token_usage("wf-123")
         assert usage.prompt_tokens == 300
         assert usage.completion_tokens == 150
         assert usage.total_tokens == 450
@@ -651,12 +647,12 @@ class TestExtractTokenUsage:
         assert runtime._extract_token_usage(wf_run) is None
 
     def test_computes_total_when_missing(self, runtime):
-        task = MagicMock()
-        task.task_type = "LLM_CHAT_COMPLETE"
-        task.output_data = {"tokenUsed": {"prompt_tokens": 100, "completion_tokens": 50}}
-        wf_run = MockWorkflowRun(tasks=[task])
-
-        usage = runtime._extract_token_usage(wf_run)
+        with patch.object(
+            runtime,
+            "_fetch_agent_workflow",
+            return_value={"tokenUsage": {"promptTokens": 100, "completionTokens": 50}},
+        ):
+            usage = runtime._extract_token_usage("wf-123")
         assert usage.total_tokens == 150
 
 
@@ -670,8 +666,8 @@ class TestExtractToolCalls:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -710,8 +706,8 @@ class TestGetStatus:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -799,8 +795,8 @@ class TestRuntimePlan:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -843,8 +839,8 @@ class TestRuntimeRunGuardrails:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1064,8 +1060,8 @@ class TestRunPopulatesToolCalls:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1085,27 +1081,28 @@ class TestRunPopulatesToolCalls:
             )
         )
 
-        # Mock workflow with tool tasks
+        # Mock workflow with tool tasks (for _extract_tool_calls via _workflow_client)
         tool_task = MagicMock()
         tool_task.task_type = "get_weather"
         tool_task.reference_task_name = "call_abc123__0"
         tool_task.input_data = {"city": "NYC"}
         tool_task.output_data = {"temp": 72}
 
-        llm_task = MagicMock()
-        llm_task.task_type = "LLM_CHAT_COMPLETE"
-        llm_task.reference_task_name = "llm_call"
-        llm_task.input_data = {}
-        llm_task.output_data = {
-            "tokenUsed": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
-        }
-
         wf = MagicMock()
-        wf.tasks = [tool_task, llm_task]
+        wf.tasks = [tool_task]
         wf.variables = {"messages": [{"role": "user", "content": "hi"}]}
         runtime._workflow_client.get_workflow = MagicMock(return_value=wf)
 
-        result = runtime.run(agent, "What's the weather?")
+        # Mock _fetch_agent_workflow for _extract_token_usage (new HTTP-based API)
+        with patch.object(
+            runtime,
+            "_fetch_agent_workflow",
+            return_value={
+                "tokenUsage": {"promptTokens": 100, "completionTokens": 50, "totalTokens": 150},
+                "tasks": [],
+            },
+        ):
+            result = runtime.run(agent, "What's the weather?")
 
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0]["name"] == "get_weather"
@@ -1146,8 +1143,8 @@ class TestHasWorkerTools:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 rt = AgentRuntime(config=AgentConfig(auto_start_workers=False))
                 yield rt
@@ -1231,8 +1228,8 @@ class TestRuntimeStream:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1412,8 +1409,8 @@ class TestExtractStructuredOutput:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1435,8 +1432,8 @@ class TestExtractStructuredOutput:
         assert output.temp == 72
 
     def test_extract_output_with_output_type_from_json_string(self, runtime):
-        from dataclasses import dataclass
         import json
+        from dataclasses import dataclass
 
         @dataclass
         class Weather:
@@ -1483,8 +1480,8 @@ class TestExtractTokenUsageEdgeCases:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1509,8 +1506,8 @@ class TestGetStatusEdgeCases:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1543,8 +1540,8 @@ class TestHasWorkerToolsEdgeCases:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -1578,8 +1575,8 @@ class TestStartViaServer:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
@@ -1649,8 +1646,8 @@ class TestPollStatusUntilComplete:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
@@ -1774,8 +1771,8 @@ class TestResolvePrompt:
                 mock_prompt_client = MagicMock()
                 mock_clients.get_prompt_client.return_value = mock_prompt_client
 
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 rt = AgentRuntime(config=config)
@@ -1854,8 +1851,8 @@ class TestAssociateTemplatesWithModels:
                 mock_prompt_client = MagicMock()
                 mock_clients.get_prompt_client.return_value = mock_prompt_client
 
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 rt = AgentRuntime(config=config)
@@ -1967,8 +1964,8 @@ class TestDeriveFinishReason:
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
                 mock_clients = MagicMock()
                 MockClients.return_value = mock_clients
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -2002,8 +1999,8 @@ class TestNormalizeOutput:
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
                 mock_clients = MagicMock()
                 MockClients.return_value = mock_clients
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -2042,8 +2039,8 @@ class TestExtractSubResults:
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
                 mock_clients = MagicMock()
                 MockClients.return_value = mock_clients
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
@@ -2077,8 +2074,8 @@ class TestInjectSessionMemory:
         assert result.memory.messages[0]["message"] == "Hi"
 
     def test_prepends_to_existing_memory(self):
-        from agentspan.agents.runtime.runtime import AgentRuntime
         from agentspan.agents.memory import ConversationMemory
+        from agentspan.agents.runtime.runtime import AgentRuntime
 
         existing_messages = [{"role": "system", "message": "You are helpful"}]
         agent = Agent(
@@ -2194,8 +2191,8 @@ class TestTimeoutParameter:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
@@ -2262,8 +2259,8 @@ class TestUnrecognizedKwargs:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080")
                 return AgentRuntime(config=config)
@@ -2302,16 +2299,17 @@ class TestExceptionWrapping:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)
 
     def test_get_status_404_raises_agent_not_found(self, runtime):
         """get_status with a 404 response raises AgentNotFoundError."""
-        from agentspan.agents.exceptions import AgentNotFoundError
         import requests
+
+        from agentspan.agents.exceptions import AgentNotFoundError
 
         mock_resp = MagicMock()
         mock_resp.status_code = 404
@@ -2325,8 +2323,9 @@ class TestExceptionWrapping:
 
     def test_get_status_500_raises_agent_api_error(self, runtime):
         """get_status with a 500 response raises AgentAPIError (not AgentNotFoundError)."""
-        from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError
         import requests
+
+        from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError
 
         mock_resp = MagicMock()
         mock_resp.status_code = 500
@@ -2341,8 +2340,9 @@ class TestExceptionWrapping:
 
     def test_respond_error_wrapped(self, runtime):
         """respond() wraps HTTPError in AgentAPIError."""
-        from agentspan.agents.exceptions import AgentAPIError
         import requests
+
+        from agentspan.agents.exceptions import AgentAPIError
 
         mock_resp = MagicMock()
         mock_resp.status_code = 400
@@ -2362,8 +2362,8 @@ class TestSSEFallbackWarnsOnce:
     def runtime(self):
         with patch("conductor.client.orkes_clients.OrkesClients"):
             with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
-                from agentspan.agents.runtime.runtime import AgentRuntime
                 from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
 
                 config = AgentConfig(server_url="http://fake:8080", auto_start_workers=False)
                 return AgentRuntime(config=config)

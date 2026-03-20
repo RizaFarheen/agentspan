@@ -13,15 +13,13 @@ from __future__ import annotations
 import atexit
 import logging
 import threading
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 logger = logging.getLogger("agentspan.agents.worker_manager")
 
 if TYPE_CHECKING:
     from conductor.client.automator.task_handler import TaskHandler
     from conductor.client.configuration.configuration import Configuration
-
-    from agentspan.agents.tool import ToolDef
 
 
 class _SchemaRegistryFilter(logging.Filter):
@@ -78,8 +76,12 @@ class WorkerManager:
 
         with self._lock:
             if self._task_handler is None:
-                logger.info("Starting worker processes (poll_interval=%dms, threads=%d, daemon=%s)",
-                             self._poll_interval_ms, self._thread_count, self._daemon)
+                logger.info(
+                    "Starting worker processes (poll_interval=%dms, threads=%d, daemon=%s)",
+                    self._poll_interval_ms,
+                    self._thread_count,
+                    self._daemon,
+                )
                 self._task_handler = TaskHandler(
                     workers=[],
                     configuration=self._configuration,
@@ -206,9 +208,7 @@ class WorkerManager:
         if self._task_handler is None:
             return False
         try:
-            return any(
-                p.is_alive() for p in self._task_handler.task_runner_processes
-            )
+            return any(p.is_alive() for p in self._task_handler.task_runner_processes)
         except Exception:
             return False
 

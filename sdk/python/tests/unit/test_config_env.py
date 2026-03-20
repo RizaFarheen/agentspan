@@ -11,8 +11,6 @@ from __future__ import annotations
 import os
 from unittest import mock
 
-import pytest
-
 from agentspan.agents.runtime.config import AgentConfig, _env, _env_bool, _env_int
 
 

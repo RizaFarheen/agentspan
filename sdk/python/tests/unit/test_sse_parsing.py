@@ -9,11 +9,7 @@ into AgentEvent objects.  Zero external dependencies.
 
 import json
 
-import pytest
-
-from agentspan.agents.result import AgentEvent, EventType
 from agentspan.agents.runtime.runtime import AgentRuntime
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -52,13 +48,14 @@ def _java_event(event_type, workflow_id="wf-1", **fields):
 
 
 class TestParseSSE:
-
     def test_parse_single_event(self):
-        lines = _make_sse_lines({
-            "event": "thinking",
-            "id": "1",
-            "data": {"type": "thinking", "workflowId": "wf-1", "content": "llm"},
-        })
+        lines = _make_sse_lines(
+            {
+                "event": "thinking",
+                "id": "1",
+                "data": {"type": "thinking", "workflowId": "wf-1", "content": "llm"},
+            }
+        )
         events = list(AgentRuntime._parse_sse(iter(lines)))
         assert len(events) == 1
         assert events[0]["event"] == "thinking"
@@ -85,10 +82,18 @@ class TestParseSSE:
 
     def test_parse_heartbeat_mixed_with_events(self):
         lines = [
-            ":heartbeat", "",
-            "event:thinking", "id:1", "data:{}", "",
-            ":heartbeat", "",
-            "event:done", "id:2", 'data:{"output":"ok"}', "",
+            ":heartbeat",
+            "",
+            "event:thinking",
+            "id:1",
+            "data:{}",
+            "",
+            ":heartbeat",
+            "",
+            "event:done",
+            "id:2",
+            'data:{"output":"ok"}',
+            "",
         ]
         events = list(AgentRuntime._parse_sse(iter(lines)))
         assert len(events) == 4
@@ -157,7 +162,6 @@ class TestParseSSE:
 
 
 class TestSSEToAgentEvent:
-
     def test_thinking_event(self):
         sse = {"event": "thinking", "data": _java_event("thinking", content="agent_llm")}
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
@@ -166,18 +170,20 @@ class TestSSEToAgentEvent:
         assert ev.workflow_id == "wf-1"
 
     def test_tool_call_event(self):
-        sse = {"event": "tool_call", "data": _java_event(
-            "tool_call", toolName="search", args={"q": "hello"}
-        )}
+        sse = {
+            "event": "tool_call",
+            "data": _java_event("tool_call", toolName="search", args={"q": "hello"}),
+        }
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.type == "tool_call"
         assert ev.tool_name == "search"
         assert ev.args == {"q": "hello"}
 
     def test_tool_result_event(self):
-        sse = {"event": "tool_result", "data": _java_event(
-            "tool_result", toolName="search", result="found it"
-        )}
+        sse = {
+            "event": "tool_result",
+            "data": _java_event("tool_result", toolName="search", result="found it"),
+        }
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.type == "tool_result"
         assert ev.tool_name == "search"
@@ -190,41 +196,47 @@ class TestSSEToAgentEvent:
         assert ev.target == "support"
 
     def test_waiting_event(self):
-        sse = {"event": "waiting", "data": _java_event(
-            "waiting", pendingTool={"tool_name": "approve", "taskRefName": "hitl"}
-        )}
+        sse = {
+            "event": "waiting",
+            "data": _java_event(
+                "waiting", pendingTool={"tool_name": "approve", "taskRefName": "hitl"}
+            ),
+        }
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.type == "waiting"
 
     def test_guardrail_pass_event(self):
-        sse = {"event": "guardrail_pass", "data": _java_event(
-            "guardrail_pass", guardrailName="safety_check"
-        )}
+        sse = {
+            "event": "guardrail_pass",
+            "data": _java_event("guardrail_pass", guardrailName="safety_check"),
+        }
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.type == "guardrail_pass"
         assert ev.guardrail_name == "safety_check"
 
     def test_guardrail_fail_event(self):
-        sse = {"event": "guardrail_fail", "data": _java_event(
-            "guardrail_fail", guardrailName="pii_filter", content="SSN detected"
-        )}
+        sse = {
+            "event": "guardrail_fail",
+            "data": _java_event(
+                "guardrail_fail", guardrailName="pii_filter", content="SSN detected"
+            ),
+        }
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.type == "guardrail_fail"
         assert ev.guardrail_name == "pii_filter"
         assert ev.content == "SSN detected"
 
     def test_error_event(self):
-        sse = {"event": "error", "data": _java_event(
-            "error", content="Task failed", toolName="task_ref"
-        )}
+        sse = {
+            "event": "error",
+            "data": _java_event("error", content="Task failed", toolName="task_ref"),
+        }
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.type == "error"
         assert ev.content == "Task failed"
 
     def test_done_event(self):
-        sse = {"event": "done", "data": _java_event(
-            "done", output={"result": "Final answer"}
-        )}
+        sse = {"event": "done", "data": _java_event("done", output={"result": "Final answer"})}
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.type == "done"
         assert ev.output == {"result": "Final answer"}
@@ -262,12 +274,15 @@ class TestSSEToAgentEvent:
 
     def test_camel_to_snake_field_mapping(self):
         """Verify Java camelCase fields map to Python snake_case."""
-        sse = {"event": "tool_call", "data": {
-            "type": "tool_call",
-            "workflowId": "wf-123",
-            "toolName": "my_tool",
-            "guardrailName": "my_guard",
-        }}
+        sse = {
+            "event": "tool_call",
+            "data": {
+                "type": "tool_call",
+                "workflowId": "wf-123",
+                "toolName": "my_tool",
+                "guardrailName": "my_guard",
+            },
+        }
         ev = AgentRuntime._sse_to_agent_event(sse, "wf-1")
         assert ev.tool_name == "my_tool"
         assert ev.workflow_id == "wf-123"
@@ -283,42 +298,57 @@ class TestParseAndConvert:
     def test_all_event_types_round_trip(self):
         """Wire format for all 10 event types parses and converts correctly."""
         wire_events = [
-            {"event": "thinking", "id": "1",
-             "data": _java_event("thinking", content="agent_llm")},
-            {"event": "tool_call", "id": "2",
-             "data": _java_event("tool_call", toolName="search", args={"q": "test"})},
-            {"event": "tool_result", "id": "3",
-             "data": _java_event("tool_result", toolName="search", result="data")},
-            {"event": "handoff", "id": "4",
-             "data": _java_event("handoff", target="support")},
-            {"event": "waiting", "id": "5",
-             "data": _java_event("waiting", pendingTool={"tool_name": "approve"})},
-            {"event": "guardrail_pass", "id": "6",
-             "data": _java_event("guardrail_pass", guardrailName="safety")},
-            {"event": "guardrail_fail", "id": "7",
-             "data": _java_event("guardrail_fail", guardrailName="pii", content="blocked")},
-            {"event": "message", "id": "8",
-             "data": _java_event("message", content="hello")},
-            {"event": "error", "id": "9",
-             "data": _java_event("error", content="oops")},
-            {"event": "done", "id": "10",
-             "data": _java_event("done", output={"result": "Final"})},
+            {"event": "thinking", "id": "1", "data": _java_event("thinking", content="agent_llm")},
+            {
+                "event": "tool_call",
+                "id": "2",
+                "data": _java_event("tool_call", toolName="search", args={"q": "test"}),
+            },
+            {
+                "event": "tool_result",
+                "id": "3",
+                "data": _java_event("tool_result", toolName="search", result="data"),
+            },
+            {"event": "handoff", "id": "4", "data": _java_event("handoff", target="support")},
+            {
+                "event": "waiting",
+                "id": "5",
+                "data": _java_event("waiting", pendingTool={"tool_name": "approve"}),
+            },
+            {
+                "event": "guardrail_pass",
+                "id": "6",
+                "data": _java_event("guardrail_pass", guardrailName="safety"),
+            },
+            {
+                "event": "guardrail_fail",
+                "id": "7",
+                "data": _java_event("guardrail_fail", guardrailName="pii", content="blocked"),
+            },
+            {"event": "message", "id": "8", "data": _java_event("message", content="hello")},
+            {"event": "error", "id": "9", "data": _java_event("error", content="oops")},
+            {"event": "done", "id": "10", "data": _java_event("done", output={"result": "Final"})},
         ]
 
         lines = _make_sse_lines(*wire_events)
         parsed = list(AgentRuntime._parse_sse(iter(lines)))
         assert len(parsed) == 10
 
-        agent_events = [
-            AgentRuntime._sse_to_agent_event(p, "wf-1")
-            for p in parsed
-        ]
+        agent_events = [AgentRuntime._sse_to_agent_event(p, "wf-1") for p in parsed]
         assert all(e is not None for e in agent_events)
 
         types = [e.type for e in agent_events]
         assert types == [
-            "thinking", "tool_call", "tool_result", "handoff", "waiting",
-            "guardrail_pass", "guardrail_fail", "message", "error", "done",
+            "thinking",
+            "tool_call",
+            "tool_result",
+            "handoff",
+            "waiting",
+            "guardrail_pass",
+            "guardrail_fail",
+            "message",
+            "error",
+            "done",
         ]
 
         # Spot-check field mappings

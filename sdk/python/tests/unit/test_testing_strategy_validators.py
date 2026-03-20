@@ -19,15 +19,15 @@ from agentspan.agents.testing.strategy_validators import (
     validate_swarm,
 )
 
-
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
 class FakeAgent:
     """Minimal Agent-like object for validator testing."""
 
-    def __init__(self, name="test", agents=None, strategy="handoff",
-                 max_turns=25, allowed_transitions=None):
+    def __init__(
+        self, name="test", agents=None, strategy="handoff", max_turns=25, allowed_transitions=None
+    ):
         self.name = name
         self.agents = agents or []
         self.strategy = strategy
@@ -37,6 +37,7 @@ class FakeAgent:
 
 class FakeSubAgent:
     """Minimal sub-agent with a name."""
+
     def __init__(self, name):
         self.name = name
 
@@ -441,12 +442,15 @@ class TestMockRunWithValidation:
         analyst1 = Agent(name="market", model="openai/gpt-4o", instructions="Market")
         analyst2 = Agent(name="risk", model="openai/gpt-4o", instructions="Risk")
         team = Agent(
-            name="team", model="openai/gpt-4o",
-            agents=[analyst1, analyst2], strategy=Strategy.PARALLEL,
+            name="team",
+            model="openai/gpt-4o",
+            agents=[analyst1, analyst2],
+            strategy=Strategy.PARALLEL,
         )
 
         result = mock_run(
-            team, "Evaluate",
+            team,
+            "Evaluate",
             events=[
                 MockEvent.handoff("market"),
                 MockEvent.handoff("risk"),
@@ -461,13 +465,16 @@ class TestMockRunWithValidation:
         analyst1 = Agent(name="market", model="openai/gpt-4o", instructions="Market")
         analyst2 = Agent(name="risk", model="openai/gpt-4o", instructions="Risk")
         team = Agent(
-            name="team", model="openai/gpt-4o",
-            agents=[analyst1, analyst2], strategy=Strategy.PARALLEL,
+            name="team",
+            model="openai/gpt-4o",
+            agents=[analyst1, analyst2],
+            strategy=Strategy.PARALLEL,
         )
 
         # Only market ran, risk was skipped
         result = mock_run(
-            team, "Evaluate",
+            team,
+            "Evaluate",
             events=[
                 MockEvent.handoff("market"),
                 MockEvent.done("Only market analyzed"),
@@ -482,13 +489,17 @@ class TestMockRunWithValidation:
         opt = Agent(name="optimist", model="openai/gpt-4o", instructions="Positive")
         skp = Agent(name="skeptic", model="openai/gpt-4o", instructions="Negative")
         debate = Agent(
-            name="debate", model="openai/gpt-4o",
-            agents=[opt, skp], strategy=Strategy.ROUND_ROBIN, max_turns=4,
+            name="debate",
+            model="openai/gpt-4o",
+            agents=[opt, skp],
+            strategy=Strategy.ROUND_ROBIN,
+            max_turns=4,
         )
 
         # skeptic goes first instead of optimist — wrong rotation
         result = mock_run(
-            debate, "Debate AI",
+            debate,
+            "Debate AI",
             events=[
                 MockEvent.handoff("skeptic"),
                 MockEvent.handoff("optimist"),
@@ -505,14 +516,17 @@ class TestMockRunWithValidation:
         reviewer = Agent(name="reviewer", model="openai/gpt-4o", instructions="Review")
         router_agent = Agent(name="router", model="openai/gpt-4o", instructions="Route")
         team = Agent(
-            name="team", model="openai/gpt-4o",
-            agents=[coder, reviewer], strategy=Strategy.ROUTER,
+            name="team",
+            model="openai/gpt-4o",
+            agents=[coder, reviewer],
+            strategy=Strategy.ROUTER,
             router=router_agent,
         )
 
         # Router sent to BOTH agents — violation
         result = mock_run(
-            team, "Do stuff",
+            team,
+            "Do stuff",
             events=[
                 MockEvent.handoff("coder"),
                 MockEvent.handoff("reviewer"),
