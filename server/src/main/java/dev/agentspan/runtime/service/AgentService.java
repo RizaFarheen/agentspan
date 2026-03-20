@@ -165,6 +165,12 @@ public class AgentService {
         input.put("prompt", request.getPrompt());
         input.put("media", request.getMedia() != null ? request.getMedia() : List.of());
         input.put("session_id", request.getSessionId() != null ? request.getSessionId() : "");
+        // Extract cwd from rawConfig for frameworks that pass it (e.g., Claude)
+        String cwd = ".";
+        if (request.getRawConfig() != null && request.getRawConfig().get("cwd") instanceof String rawCwd) {
+            cwd = rawCwd;
+        }
+        input.put("cwd", cwd);
         startReq.setInput(input);
 
         // Idempotency: use the key as correlationId and check for existing executions
