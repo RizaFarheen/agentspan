@@ -63,8 +63,11 @@ class TestAgentCreation:
         sub1 = Agent(name="a", model="openai/gpt-4o")
         sub2 = Agent(name="b", model="openai/gpt-4o")
         agent = Agent(
-            name="debate", model="openai/gpt-4o",
-            agents=[sub1, sub2], strategy="round_robin", max_turns=4,
+            name="debate",
+            model="openai/gpt-4o",
+            agents=[sub1, sub2],
+            strategy="round_robin",
+            max_turns=4,
         )
         assert agent.strategy == "round_robin"
         assert agent.max_turns == 4
@@ -95,8 +98,11 @@ class TestAgentCreation:
         sub1 = Agent(name="a", model="openai/gpt-4o")
         sub2 = Agent(name="b", model="openai/gpt-4o")
         agent = Agent(
-            name="random_pick", model="openai/gpt-4o",
-            agents=[sub1, sub2], strategy="random", max_turns=4,
+            name="random_pick",
+            model="openai/gpt-4o",
+            agents=[sub1, sub2],
+            strategy="random",
+            max_turns=4,
         )
         assert agent.strategy == "random"
         assert agent.max_turns == 4
@@ -113,8 +119,10 @@ class TestAgentCreation:
         sub2 = Agent(name="b", model="openai/gpt-4o")
         transitions = {"a": ["b"], "b": ["a"]}
         agent = Agent(
-            name="test", model="openai/gpt-4o",
-            agents=[sub1, sub2], strategy="round_robin",
+            name="test",
+            model="openai/gpt-4o",
+            agents=[sub1, sub2],
+            strategy="round_robin",
             allowed_transitions=transitions,
         )
         assert agent.allowed_transitions == transitions
@@ -350,7 +358,7 @@ class TestScatterGather:
         assert coord.tools[0].name == "researcher"
 
     def test_instructions_include_decomposition_prefix(self):
-        from agentspan.agents.agent import scatter_gather, _SCATTER_GATHER_PREFIX
+        from agentspan.agents.agent import _SCATTER_GATHER_PREFIX, scatter_gather
 
         worker = Agent(name="worker", model="openai/gpt-4o")
         coord = scatter_gather("coord", worker, instructions="Be concise.")

@@ -5,7 +5,7 @@
 
 import pytest
 
-from agentspan.agents.agent import Agent, AgentDef, PromptTemplate, _resolve_agent, agent
+from agentspan.agents.agent import Agent, AgentDef, _resolve_agent, agent
 
 
 class TestAgentDecorator:

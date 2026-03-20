@@ -42,6 +42,7 @@ _DEFAULT_NAME = "langgraph_agent"
 
 # ── Public serializer ──────────────────────────────────────────────────────────
 
+
 def serialize_langgraph(graph: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     """Serialize a CompiledStateGraph into (raw_config, [WorkerInfo]).
 
@@ -71,6 +72,7 @@ def serialize_langgraph(graph: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
 
 # ── Full-extraction path ───────────────────────────────────────────────────────
 
+
 def _serialize_full(
     graph: Any,
     meta: Dict[str, Any],
@@ -99,35 +101,43 @@ def _serialize_full(
             sub_raw, sub_workers = _serialize_full(sub_graph, sub_graph._agentspan_meta)
             agent_tool_name = getattr(sub_graph, "name", None) or getattr(t, "name", "sub_agent")
             agent_tool_desc = getattr(t, "description", "") or f"Call agent: {agent_tool_name}"
-            tool_refs.append({
-                "_type": "AgentTool",
-                "name": agent_tool_name,
-                "description": agent_tool_desc,
-                "agent": sub_raw,
-            })
+            tool_refs.append(
+                {
+                    "_type": "AgentTool",
+                    "name": agent_tool_name,
+                    "description": agent_tool_desc,
+                    "agent": sub_raw,
+                }
+            )
             workers.extend(sub_workers)
             continue
 
         # Regular tool
         tool_name, description, schema, func = _extract_tool_parts(t)
-        tool_refs.append({
-            "_worker_ref": tool_name,
-            "description": description,
-            "parameters": schema,
-        })
-        workers.append(WorkerInfo(
-            name=tool_name,
-            description=description,
-            input_schema=schema,
-            func=func,
-        ))
+        tool_refs.append(
+            {
+                "_worker_ref": tool_name,
+                "description": description,
+                "parameters": schema,
+            }
+        )
+        workers.append(
+            WorkerInfo(
+                name=tool_name,
+                description=description,
+                input_schema=schema,
+                func=func,
+            )
+        )
 
     if tool_refs:
         raw_config["tools"] = tool_refs
 
     logger.debug(
         "Full extraction for '%s': model=%s tools=%s",
-        name, raw_config.get("model"), [w.name for w in workers],
+        name,
+        raw_config.get("model"),
+        [w.name for w in workers],
     )
     return raw_config, workers
 
@@ -143,11 +153,7 @@ def _get_model_string(llm: Any) -> str:
     # Unwrap RunnableBinding layers before inspecting class/attributes
     base = _unwrap_binding(llm)
     cls = type(base).__name__
-    model = (
-        getattr(base, "model_name", None)
-        or getattr(base, "model", None)
-        or "gpt-4o-mini"
-    )
+    model = getattr(base, "model_name", None) or getattr(base, "model", None) or "gpt-4o-mini"
     if "OpenAI" in cls:
         return f"openai/{model}"
     if "Anthropic" in cls:
@@ -185,6 +191,7 @@ def _extract_tool_parts(tool: Any) -> Tuple[str, str, Dict[str, Any], Any]:
         else:
             # Fallback: derive from function signature
             import inspect
+
             sig = inspect.signature(func)
             props: Dict[str, Any] = {}
             required = []
@@ -202,6 +209,7 @@ def _extract_tool_parts(tool: Any) -> Tuple[str, str, Dict[str, Any], Any]:
 
 
 # ── create_react_agent extraction ─────────────────────────────────────────────
+
 
 def _try_extract_react_agent(
     graph: Any,
@@ -253,24 +261,30 @@ def _try_extract_react_agent(
         workers: List[WorkerInfo] = []
         for t in lc_tools:
             tool_name, description, schema, func = _extract_tool_parts(t)
-            tool_refs.append({
-                "_worker_ref": tool_name,
-                "description": description,
-                "parameters": schema,
-            })
-            workers.append(WorkerInfo(
-                name=tool_name,
-                description=description,
-                input_schema=schema,
-                func=func,
-            ))
+            tool_refs.append(
+                {
+                    "_worker_ref": tool_name,
+                    "description": description,
+                    "parameters": schema,
+                }
+            )
+            workers.append(
+                WorkerInfo(
+                    name=tool_name,
+                    description=description,
+                    input_schema=schema,
+                    func=func,
+                )
+            )
 
         if tool_refs:
             raw_config["tools"] = tool_refs
 
         logger.debug(
             "Extracted create_react_agent '%s': model=%s tools=%s",
-            name, raw_config.get("model"), [w.name for w in workers],
+            name,
+            raw_config.get("model"),
+            [w.name for w in workers],
         )
         return raw_config, workers
 
@@ -366,6 +380,7 @@ def _find_llm_in_closure(func: Any) -> Optional[Any]:
     We use ``_find_chat_model_in_runnable`` to recurse into sequences/bindings.
     """
     import inspect
+
     try:
         vars_ = inspect.getclosurevars(func)
         candidates = list(vars_.nonlocals.values()) + list(vars_.globals.values())
@@ -440,6 +455,7 @@ def _find_system_message_in_closures(
     if _depth > max_depth:
         return None
     import inspect
+
     try:
         vars_ = inspect.getclosurevars(func)
         all_vars = {**vars_.nonlocals, **vars_.globals}
@@ -450,10 +466,12 @@ def _find_system_message_in_closures(
                 if isinstance(content, str) and content.strip():
                     return content.strip()
             # Known instruction variable names holding a plain string
-            if (
-                name in ("state_modifier", "messages_modifier", "system_message", "prompt")
-                and isinstance(var, str)
-            ):
+            if name in (
+                "state_modifier",
+                "messages_modifier",
+                "system_message",
+                "prompt",
+            ) and isinstance(var, str):
                 return var
         # Recurse into nonlocal callables (state_modifier lambda may hold the SystemMessage)
         for name, var in vars_.nonlocals.items():
@@ -467,6 +485,7 @@ def _find_system_message_in_closures(
 
 
 # ── Passthrough path ───────────────────────────────────────────────────────────
+
 
 def _serialize_passthrough(graph: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
     """Fallback: wrap the entire graph as a single opaque SIMPLE worker."""

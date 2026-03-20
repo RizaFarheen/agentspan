@@ -12,9 +12,7 @@ import pytest
 
 from agentspan.agents.runtime.http_client import (
     AgentHttpClient,
-    SSEUnavailableError,
 )
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -75,13 +73,16 @@ async def test_get_status():
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET"
         assert "/wf-123/status" in str(request.url)
-        return httpx.Response(200, json={
-            "status": "COMPLETED",
-            "isComplete": True,
-            "isRunning": False,
-            "isWaiting": False,
-            "output": "done",
-        })
+        return httpx.Response(
+            200,
+            json={
+                "status": "COMPLETED",
+                "isComplete": True,
+                "isRunning": False,
+                "isWaiting": False,
+                "output": "done",
+            },
+        )
 
     client = _make_client(handler)
     result = await client.get_status("wf-123")

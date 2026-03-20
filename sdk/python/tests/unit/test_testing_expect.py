@@ -17,8 +17,11 @@ class _FakeAgent:
 
 def _make_result(**kwargs):
     defaults = dict(
-        output="Hello", workflow_id="test", status="COMPLETED",
-        tool_calls=[], events=[],
+        output="Hello",
+        workflow_id="test",
+        status="COMPLETED",
+        tool_calls=[],
+        events=[],
     )
     defaults.update(kwargs)
     return AgentResult(**defaults)
@@ -48,13 +51,15 @@ class TestExpectFluent:
                 AgentEvent(type=EventType.DONE, output="Weather is 72F sunny"),
             ],
         )
-        (expect(result)
+        (
+            expect(result)
             .completed()
             .used_tool("get_weather", args={"city": "NYC"})
             .output_contains("72F")
             .output_matches(r"\d+F")
             .event_sequence([EventType.TOOL_CALL, EventType.DONE])
-            .no_errors())
+            .no_errors()
+        )
 
     def test_did_not_use_tool(self):
         result = _make_result(tool_calls=[{"name": "get_weather"}])
@@ -66,9 +71,7 @@ class TestExpectFluent:
             expect(result).did_not_use_tool("send_email")
 
     def test_handoff_to(self):
-        result = _make_result(
-            events=[AgentEvent(type=EventType.HANDOFF, target="coder")]
-        )
+        result = _make_result(events=[AgentEvent(type=EventType.HANDOFF, target="coder")])
         expect(result).handoff_to("coder")
 
     def test_guardrails(self):
@@ -78,9 +81,7 @@ class TestExpectFluent:
                 AgentEvent(type=EventType.GUARDRAIL_FAIL, guardrail_name="pii"),
             ]
         )
-        (expect(result)
-            .guardrail_passed("safety")
-            .guardrail_failed("pii"))
+        (expect(result).guardrail_passed("safety").guardrail_failed("pii"))
 
     def test_max_turns(self):
         result = _make_result(
@@ -108,15 +109,11 @@ class TestExpectFluent:
         expect(result).output_type(dict)
 
     def test_tools_used_exactly(self):
-        result = _make_result(
-            tool_calls=[{"name": "a"}, {"name": "b"}]
-        )
+        result = _make_result(tool_calls=[{"name": "a"}, {"name": "b"}])
         expect(result).tools_used_exactly(["a", "b"])
 
     def test_tool_call_order(self):
-        result = _make_result(
-            tool_calls=[{"name": "a"}, {"name": "b"}, {"name": "c"}]
-        )
+        result = _make_result(tool_calls=[{"name": "a"}, {"name": "b"}, {"name": "c"}])
         expect(result).tool_call_order(["a", "c"])
 
 
@@ -136,17 +133,21 @@ class TestExpectWithMockRun:
             ],
             auto_execute_tools=False,
         )
-        (expect(result)
+        (
+            expect(result)
             .completed()
             .used_tool("get_weather", args={"city": "NYC"})
             .output_contains("72F")
-            .event_sequence([
-                EventType.THINKING,
-                EventType.TOOL_CALL,
-                EventType.TOOL_RESULT,
-                EventType.DONE,
-            ])
-            .no_errors())
+            .event_sequence(
+                [
+                    EventType.THINKING,
+                    EventType.TOOL_CALL,
+                    EventType.TOOL_RESULT,
+                    EventType.DONE,
+                ]
+            )
+            .no_errors()
+        )
 
     def test_multi_agent_flow(self):
         agent = _FakeAgent()
@@ -161,11 +162,13 @@ class TestExpectWithMockRun:
                 MockEvent.done("Python est un langage populaire."),
             ],
         )
-        (expect(result)
+        (
+            expect(result)
             .completed()
             .handoff_to("summarizer")
             .handoff_to("translator")
-            .output_contains("Python"))
+            .output_contains("Python")
+        )
 
     def test_error_flow(self):
         agent = _FakeAgent()
@@ -174,6 +177,4 @@ class TestExpectWithMockRun:
             "Bad request",
             events=[MockEvent.error("Rate limit exceeded")],
         )
-        (expect(result)
-            .failed()
-            .output_contains("Rate limit"))
+        (expect(result).failed().output_contains("Rate limit"))

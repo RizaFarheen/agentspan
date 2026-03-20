@@ -72,10 +72,7 @@ def assert_output_satisfies(
             },
             {
                 "role": "user",
-                "content": (
-                    f"Criterion: {criterion}\n\n"
-                    f"Agent output:\n{output}"
-                ),
+                "content": (f"Criterion: {criterion}\n\nAgent output:\n{output}"),
             },
         ],
         temperature=0,
@@ -89,9 +86,7 @@ def assert_output_satisfies(
         score = float(verdict.get("score", 0))
         reason = verdict.get("reason", "")
     except (json.JSONDecodeError, ValueError, TypeError):
-        raise AssertionError(
-            f"LLM judge returned unparseable response: {raw}"
-        )
+        raise AssertionError(f"LLM judge returned unparseable response: {raw}")
 
     if score < threshold:
         preview = output[:200] + ("..." if len(output) > 200 else "")

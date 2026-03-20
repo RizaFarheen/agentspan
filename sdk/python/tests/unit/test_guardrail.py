@@ -8,7 +8,6 @@ import pytest
 
 from agentspan.agents.guardrail import (
     Guardrail,
-    GuardrailDef,
     GuardrailResult,
     LLMGuardrail,
     OnFail,
@@ -333,6 +332,7 @@ class TestLLMGuardrailEvaluate:
 
         with patch.dict("sys.modules", {"litellm": MagicMock()}):
             import sys
+
             sys.modules["litellm"].completion.return_value = mock_response
             result = guard.check("Hello world")
 
@@ -345,10 +345,13 @@ class TestLLMGuardrailEvaluate:
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"passed": false, "reason": "Contains violence"}'
+        mock_response.choices[
+            0
+        ].message.content = '{"passed": false, "reason": "Contains violence"}'
 
         with patch.dict("sys.modules", {"litellm": MagicMock()}):
             import sys
+
             sys.modules["litellm"].completion.return_value = mock_response
             result = guard.check("violent content")
 
@@ -381,6 +384,7 @@ class TestLLMGuardrailEvaluate:
 
         with patch.dict("sys.modules", {"litellm": MagicMock()}):
             import sys
+
             sys.modules["litellm"].completion.return_value = mock_response
             result = guard.check("content")
 
@@ -394,6 +398,7 @@ class TestLLMGuardrailEvaluate:
 
         with patch.dict("sys.modules", {"litellm": MagicMock()}):
             import sys
+
             sys.modules["litellm"].completion.side_effect = RuntimeError("API error")
             result = guard.check("content")
 
@@ -508,6 +513,7 @@ class TestGuardrailDecorator:
 
     def test_guardrail_accepts_decorated_function(self):
         """Guardrail constructor extracts func and name from @guardrail."""
+
         @guardrail
         def no_pii(content: str) -> GuardrailResult:
             return GuardrailResult(passed=True)
@@ -519,6 +525,7 @@ class TestGuardrailDecorator:
 
     def test_guardrail_with_custom_name_override(self):
         """Explicit name= in Guardrail overrides @guardrail name."""
+
         @guardrail(name="pii_checker")
         def no_pii(content: str) -> GuardrailResult:
             return GuardrailResult(passed=True)
@@ -637,18 +644,22 @@ class TestPublicImports:
 
     def test_import_guardrail_decorator(self):
         from agentspan.agents import guardrail as g
+
         assert callable(g)
 
     def test_import_on_fail(self):
         from agentspan.agents import OnFail
+
         assert OnFail.RETRY == "retry"
 
     def test_import_position(self):
         from agentspan.agents import Position
+
         assert Position.OUTPUT == "output"
 
     def test_import_guardrail_def(self):
         from agentspan.agents import GuardrailDef
+
         assert GuardrailDef is not None
 
 
@@ -677,7 +688,9 @@ class TestGuardrailMaxRetriesValidation:
     def test_llm_guardrail_zero_retries_raises(self):
         with pytest.raises(ValueError, match="max_retries must be >= 1"):
             LLMGuardrail(
-                model="openai/gpt-4o-mini", policy="Be safe.", max_retries=0,
+                model="openai/gpt-4o-mini",
+                policy="Be safe.",
+                max_retries=0,
             )
 
     def test_external_guardrail_zero_retries_raises(self):
@@ -690,6 +703,7 @@ class TestGuardrailEdgeCases:
 
     def test_empty_string_content(self):
         """All guardrail types should handle empty string content."""
+
         def check(content: str) -> GuardrailResult:
             return GuardrailResult(passed=len(content) > 0, message="Empty content")
 
@@ -708,6 +722,7 @@ class TestGuardrailEdgeCases:
         This is a documentation of current behavior — the caller (compiled
         worker) will error when trying to access .passed on the None result.
         """
+
         def bad_check(content: str):
             return None
 
@@ -717,6 +732,7 @@ class TestGuardrailEdgeCases:
 
     def test_guardrail_function_throwing_exception(self):
         """A guardrail function that throws should propagate."""
+
         def failing_check(content: str) -> GuardrailResult:
             raise RuntimeError("Guardrail internal error")
 
@@ -766,6 +782,7 @@ class TestCombinedGuardrailWorkerLogic:
     def _make_worker(self, specs):
         """Create a combined guardrail worker matching the compiler pattern."""
         import logging
+
         logger = logging.getLogger("test")
 
         def combined_guardrail_worker(content=None, iteration=0):
@@ -775,6 +792,7 @@ class TestCombinedGuardrailWorkerLogic:
                 content_str = content
             else:
                 import json as _json
+
                 try:
                     content_str = _json.dumps(content, default=str)
                 except (TypeError, ValueError):
@@ -814,19 +832,23 @@ class TestCombinedGuardrailWorkerLogic:
                 "guardrail_name": "",
                 "should_continue": False,
             }
+
         return combined_guardrail_worker
 
     def test_exception_with_retry_continues(self):
         """P1-D: Exception in guardrail with on_fail='retry' sets should_continue=True."""
+
         def throwing_guard(content: str) -> GuardrailResult:
             raise RuntimeError("Check failed!")
 
-        specs = [{
-            "func": throwing_guard,
-            "name": "thrower",
-            "on_fail": "retry",
-            "max_retries": 3,
-        }]
+        specs = [
+            {
+                "func": throwing_guard,
+                "name": "thrower",
+                "on_fail": "retry",
+                "max_retries": 3,
+            }
+        ]
         worker = self._make_worker(specs)
         result = worker(content="test", iteration=0)
         assert result["passed"] is False
@@ -835,15 +857,18 @@ class TestCombinedGuardrailWorkerLogic:
 
     def test_exception_with_raise_stops(self):
         """Exception in guardrail with on_fail='raise' sets should_continue=False."""
+
         def throwing_guard(content: str) -> GuardrailResult:
             raise RuntimeError("Check failed!")
 
-        specs = [{
-            "func": throwing_guard,
-            "name": "thrower",
-            "on_fail": "raise",
-            "max_retries": 3,
-        }]
+        specs = [
+            {
+                "func": throwing_guard,
+                "name": "thrower",
+                "on_fail": "raise",
+                "max_retries": 3,
+            }
+        ]
         worker = self._make_worker(specs)
         result = worker(content="test", iteration=0)
         assert result["passed"] is False
@@ -852,15 +877,18 @@ class TestCombinedGuardrailWorkerLogic:
 
     def test_failure_within_retries_continues(self):
         """Guardrail failure with retry (under max_retries) continues the loop."""
+
         def failing_guard(content: str) -> GuardrailResult:
             return GuardrailResult(passed=False, message="Failed")
 
-        specs = [{
-            "func": failing_guard,
-            "name": "failer",
-            "on_fail": "retry",
-            "max_retries": 3,
-        }]
+        specs = [
+            {
+                "func": failing_guard,
+                "name": "failer",
+                "on_fail": "retry",
+                "max_retries": 3,
+            }
+        ]
         worker = self._make_worker(specs)
         result = worker(content="test", iteration=1)
         assert result["should_continue"] is True
@@ -868,15 +896,18 @@ class TestCombinedGuardrailWorkerLogic:
 
     def test_failure_exceeding_retries_escalates(self):
         """Guardrail failure exceeding max_retries escalates to 'raise'."""
+
         def failing_guard(content: str) -> GuardrailResult:
             return GuardrailResult(passed=False, message="Failed")
 
-        specs = [{
-            "func": failing_guard,
-            "name": "failer",
-            "on_fail": "retry",
-            "max_retries": 3,
-        }]
+        specs = [
+            {
+                "func": failing_guard,
+                "name": "failer",
+                "on_fail": "retry",
+                "max_retries": 3,
+            }
+        ]
         worker = self._make_worker(specs)
         result = worker(content="test", iteration=3)
         assert result["should_continue"] is False
@@ -884,15 +915,18 @@ class TestCombinedGuardrailWorkerLogic:
 
     def test_exception_with_retry_escalates_after_max_retries(self):
         """Exception in guardrail with on_fail='retry' escalates to 'raise' after max_retries."""
+
         def throwing_guard(content: str) -> GuardrailResult:
             raise RuntimeError("Always fails!")
 
-        specs = [{
-            "func": throwing_guard,
-            "name": "thrower",
-            "on_fail": "retry",
-            "max_retries": 3,
-        }]
+        specs = [
+            {
+                "func": throwing_guard,
+                "name": "thrower",
+                "on_fail": "retry",
+                "max_retries": 3,
+            }
+        ]
         worker = self._make_worker(specs)
         # At iteration=3 (>= max_retries=3), should escalate retry→raise
         result = worker(content="test", iteration=3)
@@ -903,15 +937,18 @@ class TestCombinedGuardrailWorkerLogic:
 
     def test_exception_with_retry_under_max_retries_continues(self):
         """Exception in guardrail with on_fail='retry' below max_retries continues."""
+
         def throwing_guard(content: str) -> GuardrailResult:
             raise RuntimeError("Intermittent!")
 
-        specs = [{
-            "func": throwing_guard,
-            "name": "thrower",
-            "on_fail": "retry",
-            "max_retries": 5,
-        }]
+        specs = [
+            {
+                "func": throwing_guard,
+                "name": "thrower",
+                "on_fail": "retry",
+                "max_retries": 5,
+            }
+        ]
         worker = self._make_worker(specs)
         # At iteration=2 (< max_retries=5), should continue retrying
         result = worker(content="test", iteration=2)
@@ -921,6 +958,7 @@ class TestCombinedGuardrailWorkerLogic:
 
     def test_multiple_guards_fix_then_fail(self):
         """Guard A fixes (on_fail='fix'), Guard B fails (on_fail='raise')."""
+
         def fixer_guard(content: str) -> GuardrailResult:
             return GuardrailResult(passed=False, message="Needs fix", fixed_output="fixed_content")
 
@@ -955,8 +993,9 @@ class TestLLMGuardrailImportError:
 
     def test_litellm_import_error_returns_failed(self):
         """LLMGuardrail._evaluate returns passed=False when litellm unavailable."""
-        from agentspan.agents.guardrail import LLMGuardrail
         from unittest.mock import patch
+
+        from agentspan.agents.guardrail import LLMGuardrail
 
         guard = LLMGuardrail(
             model="openai/gpt-4o",

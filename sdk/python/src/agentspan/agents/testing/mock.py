@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from agentspan.agents.result import AgentEvent, AgentResult, EventType
 
-
 # ── MockEvent factory ──────────────────────────────────────────────────
 
 
@@ -29,16 +28,12 @@ class MockEvent:
     @staticmethod
     def tool_call(name: str, args: Optional[Dict[str, Any]] = None) -> AgentEvent:
         """Create a TOOL_CALL event."""
-        return AgentEvent(
-            type=EventType.TOOL_CALL, tool_name=name, args=args or {}
-        )
+        return AgentEvent(type=EventType.TOOL_CALL, tool_name=name, args=args or {})
 
     @staticmethod
     def tool_result(name: str, result: Any = None) -> AgentEvent:
         """Create a TOOL_RESULT event."""
-        return AgentEvent(
-            type=EventType.TOOL_RESULT, tool_name=name, result=result
-        )
+        return AgentEvent(type=EventType.TOOL_RESULT, tool_name=name, result=result)
 
     @staticmethod
     def handoff(target: str) -> AgentEvent:

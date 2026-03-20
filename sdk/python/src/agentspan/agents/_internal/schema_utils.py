@@ -10,8 +10,7 @@ for Pydantic ``BaseModel`` classes.
 from __future__ import annotations
 
 import inspect
-from typing import Any, Callable, Dict, Optional, get_type_hints
-
+from typing import Any, Callable, Dict, get_type_hints
 
 # ── Type-hint → JSON Schema mapping ────────────────────────────────────
 
@@ -29,8 +28,16 @@ _PYTHON_TYPE_TO_JSON = {
 def _resolve_string_annotation(annotation: str) -> Any:
     """Attempt to resolve a PEP 563 string annotation to an actual type."""
     import typing
-    ns = {**vars(typing), "dict": dict, "list": list, "set": set,
-          "tuple": tuple, "frozenset": frozenset, "type": type}
+
+    ns = {
+        **vars(typing),
+        "dict": dict,
+        "list": list,
+        "set": set,
+        "tuple": tuple,
+        "frozenset": frozenset,
+        "type": type,
+    }
     try:
         return eval(annotation, ns)  # noqa: S307
     except Exception:
@@ -62,6 +69,7 @@ def _type_to_json_schema(annotation: Any) -> Dict[str, Any]:
 
     # Union types (including Optional)
     import typing
+
     if origin is getattr(typing, "Union", None):
         non_none = [a for a in args if a is not type(None)]
         if len(non_none) == 1:
@@ -86,6 +94,7 @@ def _type_to_json_schema(annotation: Any) -> Dict[str, Any]:
 
 
 # ── Function → JSON Schema ─────────────────────────────────────────────
+
 
 def schema_from_function(func: Callable[..., Any]) -> Dict[str, Any]:
     """Generate input/output JSON Schemas from a Python function's signature.
@@ -133,7 +142,9 @@ def schema_from_function(func: Callable[..., Any]) -> Dict[str, Any]:
 
     # Build output schema
     return_type = hints.get("return", sig.return_annotation)
-    output_schema = _type_to_json_schema(return_type) if return_type is not inspect.Parameter.empty else {}
+    output_schema = (
+        _type_to_json_schema(return_type) if return_type is not inspect.Parameter.empty else {}
+    )
 
     return {"input": input_schema, "output": output_schema}
 

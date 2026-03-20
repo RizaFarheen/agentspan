@@ -22,10 +22,9 @@ right one based on ``agent.strategy``.
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Dict, List, Set
+from typing import Any, List
 
-from agentspan.agents.result import AgentEvent, AgentResult, EventType
-
+from agentspan.agents.result import AgentResult, EventType
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
@@ -37,11 +36,7 @@ def _get_agent_names(agent: Any) -> List[str]:
 
 def _get_handoff_targets(result: AgentResult) -> List[str]:
     """Extract ordered list of handoff targets from events."""
-    return [
-        ev.target
-        for ev in result.events
-        if ev.type == EventType.HANDOFF and ev.target
-    ]
+    return [ev.target for ev in result.events if ev.type == EventType.HANDOFF and ev.target]
 
 
 def _get_strategy(agent: Any) -> str:
@@ -59,9 +54,7 @@ class StrategyViolation(AssertionError):
     def __init__(self, strategy: str, violations: List[str]) -> None:
         self.strategy = strategy
         self.violations = violations
-        msg = f"Strategy '{strategy}' violations:\n" + "\n".join(
-            f"  - {v}" for v in violations
-        )
+        msg = f"Strategy '{strategy}' violations:\n" + "\n".join(f"  - {v}" for v in violations)
         super().__init__(msg)
 
 
@@ -84,8 +77,7 @@ def validate_sequential(agent: Any, result: AgentResult) -> None:
     missing = set(expected) - set(handoffs)
     if missing:
         violations.append(
-            f"Agents skipped (never ran): {sorted(missing)}. "
-            f"Expected all of: {expected}"
+            f"Agents skipped (never ran): {sorted(missing)}. Expected all of: {expected}"
         )
 
     # Rule 2: Order must match definition order
@@ -97,18 +89,13 @@ def validate_sequential(agent: Any, result: AgentResult) -> None:
         if idx < len(expected) and h == expected[idx]:
             idx += 1
     if idx < len(expected) and not missing:
-        violations.append(
-            f"Agents executed out of order. "
-            f"Expected: {expected}, got: {relevant}"
-        )
+        violations.append(f"Agents executed out of order. Expected: {expected}, got: {relevant}")
 
     # Rule 3: No agent should run more than once
     counts = Counter(relevant)
     duplicates = {name: cnt for name, cnt in counts.items() if cnt > 1}
     if duplicates:
-        violations.append(
-            f"Agents executed multiple times (should be once each): {duplicates}"
-        )
+        violations.append(f"Agents executed multiple times (should be once each): {duplicates}")
 
     if violations:
         raise StrategyViolation("sequential", violations)
@@ -189,10 +176,7 @@ def validate_round_robin(agent: Any, result: AgentResult) -> None:
 
     # Rule 4: Turn count
     if len(relevant) > max_turns:
-        violations.append(
-            f"Exceeded max_turns: {len(relevant)} turns taken, "
-            f"limit is {max_turns}."
-        )
+        violations.append(f"Exceeded max_turns: {len(relevant)} turns taken, limit is {max_turns}.")
 
     if violations:
         raise StrategyViolation("round_robin", violations)
@@ -233,8 +217,7 @@ def validate_router(agent: Any, result: AgentResult) -> None:
     invalid = set(relevant) - expected
     if invalid:
         violations.append(
-            f"Router selected unknown agent(s): {sorted(invalid)}. "
-            f"Valid agents: {sorted(expected)}"
+            f"Router selected unknown agent(s): {sorted(invalid)}. Valid agents: {sorted(expected)}"
         )
 
     if violations:
@@ -295,24 +278,18 @@ def validate_swarm(agent: Any, result: AgentResult) -> None:
     # Rule 1: At least one agent must handle
     relevant = [h for h in handoffs if h in expected]
     if not relevant:
-        violations.append(
-            f"No agent handled the request. "
-            f"Available agents: {sorted(expected)}"
-        )
+        violations.append(f"No agent handled the request. Available agents: {sorted(expected)}")
 
     # Rule 2: All transfers must go to valid agents
     invalid = set(handoffs) - expected
     if invalid and not relevant:
         violations.append(
-            f"Transfer to unknown agent(s): {sorted(invalid)}. "
-            f"Valid agents: {sorted(expected)}"
+            f"Transfer to unknown agent(s): {sorted(invalid)}. Valid agents: {sorted(expected)}"
         )
 
     # Rule 3: Detect transfer loops
     if len(relevant) >= 2:
-        transfer_pairs = [
-            (relevant[i], relevant[i + 1]) for i in range(len(relevant) - 1)
-        ]
+        transfer_pairs = [(relevant[i], relevant[i + 1]) for i in range(len(relevant) - 1)]
         pair_counts = Counter(transfer_pairs)
         loops = {pair: cnt for pair, cnt in pair_counts.items() if cnt > 2}
         if loops:
@@ -324,8 +301,7 @@ def validate_swarm(agent: Any, result: AgentResult) -> None:
     # Rule 4: Total handoffs should not exceed max_turns
     if len(relevant) > max_turns:
         violations.append(
-            f"Too many transfers: {len(relevant)}, max_turns={max_turns}. "
-            f"Possible infinite loop."
+            f"Too many transfers: {len(relevant)}, max_turns={max_turns}. Possible infinite loop."
         )
 
     if violations:

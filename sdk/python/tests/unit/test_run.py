@@ -4,7 +4,8 @@
 """Unit tests for the run.py convenience API."""
 
 import sys
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from agentspan.agents.agent import Agent
@@ -35,6 +36,7 @@ class TestRunFunction:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import run
+
         result = run(agent, "Hi", runtime=mock_runtime)
 
         mock_runtime.run.assert_called_once()
@@ -45,6 +47,7 @@ class TestRunFunction:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import run
+
         run(agent, "Hi", media=["img.png"], session_id="s1", runtime=mock_runtime)
 
         call_kwargs = mock_runtime.run.call_args
@@ -61,6 +64,7 @@ class TestStartFunction:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import start
+
         handle = start(agent, "Go", runtime=mock_runtime)
 
         mock_runtime.start.assert_called_once()
@@ -77,6 +81,7 @@ class TestStreamFunction:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import stream
+
         events = list(stream(agent, "Go", runtime=mock_runtime))
 
         mock_runtime.stream.assert_called_once()
@@ -92,6 +97,7 @@ class TestPlanFunction:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import plan
+
         result = plan(agent, runtime=mock_runtime)
 
         mock_runtime.plan.assert_called_once_with(agent)
@@ -112,6 +118,7 @@ class TestShutdown:
 
     def test_shutdown_noop_when_no_runtime(self):
         from agentspan.agents.run import shutdown
+
         # Should not raise
         shutdown()
 
@@ -126,6 +133,7 @@ class TestRunAsyncFunction:
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import run_async
+
         result = await run_async(agent, "Hi", runtime=mock_runtime)
 
         mock_runtime.run_async.assert_called_once()
@@ -187,13 +195,11 @@ class TestDeployFunction:
     """Test the top-level deploy() function."""
 
     def test_deploy_delegates_to_runtime(self):
-        from agentspan.agents.run import deploy
         from agentspan.agents.result import DeploymentInfo
+        from agentspan.agents.run import deploy
 
         mock_runtime = MagicMock()
-        mock_runtime.deploy.return_value = [
-            DeploymentInfo(workflow_name="wf", agent_name="a")
-        ]
+        mock_runtime.deploy.return_value = [DeploymentInfo(workflow_name="wf", agent_name="a")]
         agent = Agent(name="a", model="openai/gpt-4o")
         result = deploy(agent, runtime=mock_runtime)
         mock_runtime.deploy.assert_called_once_with(agent, packages=None)
@@ -227,9 +233,7 @@ class TestServeFunction:
         mock_runtime = MagicMock()
         agent = Agent(name="a", model="openai/gpt-4o")
         serve(agent, runtime=mock_runtime)
-        mock_runtime.serve.assert_called_once_with(
-            agent, packages=None, blocking=True
-        )
+        mock_runtime.serve.assert_called_once_with(agent, packages=None, blocking=True)
 
     def test_serve_multiple_agents(self):
         from agentspan.agents.run import serve
@@ -238,15 +242,11 @@ class TestServeFunction:
         a1 = Agent(name="a1", model="openai/gpt-4o")
         a2 = Agent(name="a2", model="openai/gpt-4o")
         serve(a1, a2, runtime=mock_runtime)
-        mock_runtime.serve.assert_called_once_with(
-            a1, a2, packages=None, blocking=True
-        )
+        mock_runtime.serve.assert_called_once_with(a1, a2, packages=None, blocking=True)
 
     def test_serve_with_packages(self):
         from agentspan.agents.run import serve
 
         mock_runtime = MagicMock()
         serve(packages=["myapp.agents"], blocking=False, runtime=mock_runtime)
-        mock_runtime.serve.assert_called_once_with(
-            packages=["myapp.agents"], blocking=False
-        )
+        mock_runtime.serve.assert_called_once_with(packages=["myapp.agents"], blocking=False)

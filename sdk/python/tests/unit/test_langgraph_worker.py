@@ -1,7 +1,7 @@
 # sdk/python/tests/unit/test_langgraph_worker.py
 """Unit tests for the LangGraph passthrough worker."""
-import pytest
-from unittest.mock import MagicMock, patch, call
+
+from unittest.mock import MagicMock, patch
 
 
 def _make_fake_graph(stream_chunks=None, input_schema=None):
@@ -9,23 +9,20 @@ def _make_fake_graph(stream_chunks=None, input_schema=None):
     graph = MagicMock()
     type(graph).__name__ = "CompiledStateGraph"
     graph.name = "test_graph"
+    # Explicitly null out _agentspan_meta so serialize_langgraph takes the
+    # passthrough path. Without this, MagicMock auto-creates it as a truthy
+    # Mock and _serialize_full is called instead of _serialize_passthrough.
+    graph._agentspan_meta = None
 
     if input_schema is None:
-        input_schema = {
-            "type": "object",
-            "properties": {
-                "messages": {"type": "array"}
-            }
-        }
+        input_schema = {"type": "object", "properties": {"messages": {"type": "array"}}}
     graph.get_input_jsonschema.return_value = input_schema
 
     if stream_chunks is None:
         # Default: one updates chunk (node result), one values chunk (final state)
         stream_chunks = [
             ("updates", {"agent": {"messages": []}}),
-            ("values", {"messages": [
-                {"type": "ai", "content": "Hello!", "tool_calls": []}
-            ]}),
+            ("values", {"messages": [{"type": "ai", "content": "Hello!", "tool_calls": []}]}),
         ]
     graph.stream.return_value = iter(stream_chunks)
     return graph
@@ -33,6 +30,7 @@ def _make_fake_graph(stream_chunks=None, input_schema=None):
 
 def _make_task(prompt="Hello", session_id="", workflow_id="wf-123"):
     from conductor.client.http.models.task import Task
+
     task = MagicMock(spec=Task)
     task.input_data = {"prompt": prompt, "session_id": session_id}
     task.workflow_instance_id = workflow_id
@@ -42,6 +40,7 @@ def _make_task(prompt="Hello", session_id="", workflow_id="wf-123"):
 class TestSerializeLanggraph:
     def test_returns_single_worker_info(self):
         from agentspan.agents.frameworks.langgraph import serialize_langgraph
+
         graph = _make_fake_graph()
 
         raw_config, workers = serialize_langgraph(graph)
@@ -51,6 +50,7 @@ class TestSerializeLanggraph:
 
     def test_raw_config_has_name_and_worker_name(self):
         from agentspan.agents.frameworks.langgraph import serialize_langgraph
+
         graph = _make_fake_graph()
 
         raw_config, _ = serialize_langgraph(graph)
@@ -60,6 +60,7 @@ class TestSerializeLanggraph:
 
     def test_graph_with_no_name_uses_default(self):
         from agentspan.agents.frameworks.langgraph import serialize_langgraph
+
         graph = _make_fake_graph()
         graph.name = None  # graph has no .name attribute
 
@@ -75,10 +76,15 @@ class TestMakeLanggraphWorker:
         # Graph with messages-based state — last AIMessage content is the output
         chunks = [
             ("updates", {"agent": {"messages": []}}),
-            ("values", {"messages": [
-                {"type": "human", "content": "Hello"},
-                {"type": "ai", "content": "World!", "tool_calls": []},
-            ]}),
+            (
+                "values",
+                {
+                    "messages": [
+                        {"type": "human", "content": "Hello"},
+                        {"type": "ai", "content": "World!", "tool_calls": []},
+                    ]
+                },
+            ),
         ]
         graph = _make_fake_graph(stream_chunks=chunks)
         task = _make_task(prompt="Hello")
@@ -129,9 +135,7 @@ class TestMakeLanggraphWorker:
 
         chunks = [
             ("updates", {"agent": {"messages": []}}),
-            ("values", {"messages": [
-                {"type": "ai", "content": "Done", "tool_calls": []}
-            ]}),
+            ("values", {"messages": [{"type": "ai", "content": "Done", "tool_calls": []}]}),
         ]
         graph = _make_fake_graph(stream_chunks=chunks)
         task = _make_task()
@@ -148,14 +152,19 @@ class TestMakeLanggraphWorker:
         assert "thinking" in event_types
 
     def test_worker_detects_messages_input_format(self):
-        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
-        from langchain_core.messages import HumanMessage  # local import: langchain_core installed as dev dep
+        from langchain_core.messages import (
+            HumanMessage,
+        )  # local import: langchain_core installed as dev dep
 
-        graph = _make_fake_graph(input_schema={
-            "type": "object",
-            "properties": {"messages": {"type": "array"}},
-            "required": ["messages"]
-        })
+        from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+
+        graph = _make_fake_graph(
+            input_schema={
+                "type": "object",
+                "properties": {"messages": {"type": "array"}},
+                "required": ["messages"],
+            }
+        )
         task = _make_task(prompt="test input")
 
         with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):

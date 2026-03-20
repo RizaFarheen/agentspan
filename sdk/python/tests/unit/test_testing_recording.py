@@ -4,10 +4,6 @@
 """Tests for agentspan.agents.testing.recording."""
 
 import json
-import tempfile
-from pathlib import Path
-
-import pytest
 
 from agentspan.agents.result import AgentEvent, AgentResult, EventType, TokenUsage
 from agentspan.agents.testing.recording import record, replay
@@ -22,9 +18,7 @@ def _make_result():
             {"role": "user", "content": "Weather?"},
             {"role": "assistant", "content": "The weather is 72F"},
         ],
-        tool_calls=[
-            {"name": "get_weather", "args": {"city": "NYC"}, "result": {"temp": 72}}
-        ],
+        tool_calls=[{"name": "get_weather", "args": {"city": "NYC"}, "result": {"temp": 72}}],
         status="COMPLETED",
         token_usage=TokenUsage(prompt_tokens=100, completion_tokens=50, total_tokens=150),
         metadata={"model": "gpt-4o"},

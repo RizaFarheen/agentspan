@@ -76,6 +76,7 @@ class TestTypeToJsonSchema:
         # A custom class that's not in the mapping
         class CustomType:
             pass
+
         assert _type_to_json_schema(CustomType) == {}
 
 
@@ -127,14 +128,17 @@ class TestSchemaFromFunction:
 
     def test_get_type_hints_exception(self):
         """When get_type_hints fails, falls back gracefully."""
-        import inspect
 
         def func(x: str) -> str:
             return x
 
         # Simulate a function where get_type_hints raises
         from unittest.mock import patch
-        with patch("agentspan.agents._internal.schema_utils.get_type_hints", side_effect=Exception("broken")):
+
+        with patch(
+            "agentspan.agents._internal.schema_utils.get_type_hints",
+            side_effect=Exception("broken"),
+        ):
             result = schema_from_function(func)
             # Should still produce a schema with empty types
             assert "input" in result
@@ -243,6 +247,7 @@ class TestBareCollectionTypes:
 
     def test_function_with_bare_list_param(self):
         """A function with bare `list` param produces schema with 'items'."""
+
         def process_items(items: list) -> str:
             return str(items)
 
@@ -252,6 +257,7 @@ class TestBareCollectionTypes:
 
     def test_function_with_bare_dict_param(self):
         """A function with bare `dict` param produces schema with 'additionalProperties'."""
+
         def process_data(data: dict) -> str:
             return str(data)
 

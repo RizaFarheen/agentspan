@@ -36,6 +36,14 @@ from agentspan.agents.testing.assertions import (
     assert_tools_used_exactly,
 )
 
+# Eval runner
+from agentspan.agents.testing.eval_runner import (
+    CorrectnessEval,
+    EvalCase,
+    EvalCaseResult,
+    EvalSuiteResult,
+)
+
 # Fluent API
 from agentspan.agents.testing.expect import AgentResultExpectation, expect
 
@@ -49,14 +57,6 @@ from agentspan.agents.testing.recording import record, replay
 from agentspan.agents.testing.strategy_validators import (
     StrategyViolation,
     validate_strategy,
-)
-
-# Eval runner
-from agentspan.agents.testing.eval_runner import (
-    CorrectnessEval,
-    EvalCase,
-    EvalCaseResult,
-    EvalSuiteResult,
 )
 
 __all__ = [

@@ -26,7 +26,7 @@ public class AgentCompiler {
 
     private static final Logger log = LoggerFactory.getLogger(AgentCompiler.class);
 
-    private static final List<String> WORKFLOW_INPUTS = List.of("prompt", "session_id", "media");
+    private static final List<String> WORKFLOW_INPUTS = List.of("prompt", "session_id", "media", "cwd");
     private static final Map<String, Object> USER_MESSAGE = Map.of(
         "role", "user",
         "message", "${workflow.input.prompt}",
@@ -1281,7 +1281,8 @@ public class AgentCompiler {
         fwTask.setInputParameters(new LinkedHashMap<>(Map.of(
             "prompt",     "${workflow.input.prompt}",
             "session_id", "${workflow.input.session_id}",
-            "media",      "${workflow.input.media}"
+            "media",      "${workflow.input.media}",
+            "cwd",        "${workflow.input.cwd}"
         )));
 
         WorkflowDef wf = new WorkflowDef();

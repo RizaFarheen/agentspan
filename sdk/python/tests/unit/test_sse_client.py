@@ -13,15 +13,13 @@ import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 from unittest.mock import patch
 
 import pytest
 
-from agentspan.agents.result import AgentEvent, EventType
 from agentspan.agents.runtime.config import AgentConfig
 from agentspan.agents.runtime.runtime import AgentRuntime
-
 
 # ── Mock SSE Server ─────────────────────────────────────────────────
 
@@ -152,29 +150,39 @@ def _make_runtime(server_url: str, auth_key: str = None, auth_secret: str = None
 
 
 class TestStreamSSEAllEvents:
-
     def test_receives_all_event_types(self):
         """All 10 event types flow through HTTP → parse → AgentEvent."""
         scenario = {
             "events": [
-                {"event": "thinking", "id": "1",
-                 "data": _java_event("thinking", content="llm")},
-                {"event": "tool_call", "id": "2",
-                 "data": _java_event("tool_call", toolName="search", args={"q": "test"})},
-                {"event": "tool_result", "id": "3",
-                 "data": _java_event("tool_result", toolName="search", result="found")},
-                {"event": "handoff", "id": "4",
-                 "data": _java_event("handoff", target="support")},
-                {"event": "waiting", "id": "5",
-                 "data": _java_event("waiting", pendingTool={"tool_name": "approve"})},
-                {"event": "guardrail_pass", "id": "6",
-                 "data": _java_event("guardrail_pass", guardrailName="safety")},
-                {"event": "guardrail_fail", "id": "7",
-                 "data": _java_event("guardrail_fail", guardrailName="pii", content="blocked")},
-                {"event": "message", "id": "8",
-                 "data": _java_event("message", content="hello")},
-                {"event": "error", "id": "9",
-                 "data": _java_event("error", content="oops")},
+                {"event": "thinking", "id": "1", "data": _java_event("thinking", content="llm")},
+                {
+                    "event": "tool_call",
+                    "id": "2",
+                    "data": _java_event("tool_call", toolName="search", args={"q": "test"}),
+                },
+                {
+                    "event": "tool_result",
+                    "id": "3",
+                    "data": _java_event("tool_result", toolName="search", result="found"),
+                },
+                {"event": "handoff", "id": "4", "data": _java_event("handoff", target="support")},
+                {
+                    "event": "waiting",
+                    "id": "5",
+                    "data": _java_event("waiting", pendingTool={"tool_name": "approve"}),
+                },
+                {
+                    "event": "guardrail_pass",
+                    "id": "6",
+                    "data": _java_event("guardrail_pass", guardrailName="safety"),
+                },
+                {
+                    "event": "guardrail_fail",
+                    "id": "7",
+                    "data": _java_event("guardrail_fail", guardrailName="pii", content="blocked"),
+                },
+                {"event": "message", "id": "8", "data": _java_event("message", content="hello")},
+                {"event": "error", "id": "9", "data": _java_event("error", content="oops")},
                 # error is terminal — stream will stop here
             ],
         }
@@ -189,8 +197,15 @@ class TestStreamSSEAllEvents:
             assert len(events) == 9
             types = [e.type for e in events]
             assert types == [
-                "thinking", "tool_call", "tool_result", "handoff", "waiting",
-                "guardrail_pass", "guardrail_fail", "message", "error",
+                "thinking",
+                "tool_call",
+                "tool_result",
+                "handoff",
+                "waiting",
+                "guardrail_pass",
+                "guardrail_fail",
+                "message",
+                "error",
             ]
 
             # Verify field mappings
@@ -206,10 +221,16 @@ class TestStreamSSEAllEvents:
     def test_done_event_with_output(self):
         scenario = {
             "events": [
-                {"event": "thinking", "id": "1",
-                 "data": _java_event("thinking", content="processing")},
-                {"event": "done", "id": "2",
-                 "data": _java_event("done", output={"result": "Final answer"})},
+                {
+                    "event": "thinking",
+                    "id": "1",
+                    "data": _java_event("thinking", content="processing"),
+                },
+                {
+                    "event": "done",
+                    "id": "2",
+                    "data": _java_event("done", output={"result": "Final answer"}),
+                },
             ],
         }
 
@@ -226,7 +247,6 @@ class TestStreamSSEAllEvents:
 
 
 class TestStreamSSETermination:
-
     def test_stops_on_done(self):
         scenario = {
             "events": [
@@ -251,8 +271,7 @@ class TestStreamSSETermination:
         scenario = {
             "events": [
                 {"event": "thinking", "id": "1", "data": _java_event("thinking")},
-                {"event": "error", "id": "2",
-                 "data": _java_event("error", content="fail")},
+                {"event": "error", "id": "2", "data": _java_event("error", content="fail")},
                 {"event": "done", "id": "3", "data": _java_event("done")},
             ],
         }
@@ -269,14 +288,12 @@ class TestStreamSSETermination:
 
 
 class TestStreamSSEHeartbeats:
-
     def test_heartbeats_before_real_event_no_fallback(self):
         """Heartbeats followed by real events within timeout don't trigger fallback."""
         scenario = {
             "heartbeats_before": 3,
             "events": [
-                {"event": "done", "id": "1",
-                 "data": _java_event("done", output="ok")},
+                {"event": "done", "id": "1", "data": _java_event("done", output="ok")},
             ],
         }
 
@@ -303,7 +320,8 @@ class TestStreamSSEHeartbeats:
             rt = _make_runtime(url)
             # Patch the timeout to 1 second for fast test
             with patch.object(
-                rt, "_stream_sse",
+                rt,
+                "_stream_sse",
                 wraps=rt._stream_sse,
             ):
                 # We need to patch the constant inside the method.
@@ -329,7 +347,6 @@ class TestStreamSSEHeartbeats:
 
 
 class TestStreamSSEErrors:
-
     def test_non_200_raises_sse_unavailable(self):
         scenario = {"status_code": 404}
 
@@ -351,12 +368,10 @@ class TestStreamSSEErrors:
 
 
 class TestStreamSSEAuth:
-
     def test_auth_headers_sent(self):
         scenario = {
             "events": [
-                {"event": "done", "id": "1",
-                 "data": _java_event("done", output="ok")},
+                {"event": "done", "id": "1", "data": _java_event("done", output="ok")},
             ],
         }
 
@@ -376,8 +391,7 @@ class TestStreamSSEAuth:
     def test_no_auth_headers_when_not_configured(self):
         scenario = {
             "events": [
-                {"event": "done", "id": "1",
-                 "data": _java_event("done", output="ok")},
+                {"event": "done", "id": "1", "data": _java_event("done", output="ok")},
             ],
         }
 
@@ -395,14 +409,19 @@ class TestStreamSSEAuth:
 
 
 class TestStreamSSEWorkflowId:
-
     def test_events_carry_workflow_id(self):
         scenario = {
             "events": [
-                {"event": "thinking", "id": "1",
-                 "data": _java_event("thinking", workflow_id="wf-real", content="hi")},
-                {"event": "done", "id": "2",
-                 "data": _java_event("done", workflow_id="wf-real", output="ok")},
+                {
+                    "event": "thinking",
+                    "id": "1",
+                    "data": _java_event("thinking", workflow_id="wf-real", content="hi"),
+                },
+                {
+                    "event": "done",
+                    "id": "2",
+                    "data": _java_event("done", workflow_id="wf-real", output="ok"),
+                },
             ],
         }
 

@@ -88,7 +88,7 @@ def _ensure_binary() -> str:
     if os_name == "windows":
         url += ".exe"
 
-    print(f"Downloading Agentspan CLI ...", file=sys.stderr, flush=True)
+    print("Downloading Agentspan CLI ...", file=sys.stderr, flush=True)
     _download_with_progress(url, path)
     st = os.stat(path)
     os.chmod(path, st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)

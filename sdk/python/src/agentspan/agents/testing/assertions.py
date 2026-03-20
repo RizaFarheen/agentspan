@@ -11,10 +11,9 @@ whether the result came from :func:`mock_run` or a live ``runtime.run()`` call.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Sequence, Type, Union
+from typing import Any, Dict, Optional, Sequence, Type, Union
 
-from agentspan.agents.result import AgentEvent, AgentResult, EventType
-
+from agentspan.agents.result import AgentResult, EventType
 
 # ── Tool assertions ────────────────────────────────────────────────────
 
@@ -29,8 +28,7 @@ def assert_tool_used(result: AgentResult, name: str) -> None:
     names = [tc.get("name") for tc in result.tool_calls]
     if name not in names:
         raise AssertionError(
-            f"Expected tool '{name}' to be used, but it was not.\n"
-            f"Tools used: {names}"
+            f"Expected tool '{name}' to be used, but it was not.\nTools used: {names}"
         )
 
 
@@ -67,8 +65,7 @@ def assert_tool_called_with(
     if not matching:
         all_names = [tc.get("name") for tc in result.tool_calls]
         raise AssertionError(
-            f"Expected tool '{name}' to be called, but it was not.\n"
-            f"Tools used: {all_names}"
+            f"Expected tool '{name}' to be called, but it was not.\nTools used: {all_names}"
         )
 
     if args is None:
@@ -109,9 +106,7 @@ def assert_tool_call_order(result: AgentResult, names: Sequence[str]) -> None:
         )
 
 
-def assert_tools_used_exactly(
-    result: AgentResult, names: Sequence[str]
-) -> None:
+def assert_tools_used_exactly(result: AgentResult, names: Sequence[str]) -> None:
     """Assert that exactly these tools were used (set equality, ignoring order and count).
 
     Args:
@@ -129,17 +124,14 @@ def assert_tools_used_exactly(
         if extra:
             parts.append(f"unexpected: {extra}")
         raise AssertionError(
-            f"Expected exactly tools {sorted(expected)}, "
-            f"got {sorted(actual)}.\n{'; '.join(parts)}"
+            f"Expected exactly tools {sorted(expected)}, got {sorted(actual)}.\n{'; '.join(parts)}"
         )
 
 
 # ── Output assertions ──────────────────────────────────────────────────
 
 
-def assert_output_contains(
-    result: AgentResult, text: str, *, case_sensitive: bool = True
-) -> None:
+def assert_output_contains(result: AgentResult, text: str, *, case_sensitive: bool = True) -> None:
     """Assert that the agent output contains a substring.
 
     Args:
@@ -153,8 +145,7 @@ def assert_output_contains(
     if needle not in haystack:
         preview = output[:200] + ("..." if len(output) > 200 else "")
         raise AssertionError(
-            f"Expected output to contain '{text}', but it does not.\n"
-            f"Output: {preview}"
+            f"Expected output to contain '{text}', but it does not.\nOutput: {preview}"
         )
 
 
@@ -169,8 +160,7 @@ def assert_output_matches(result: AgentResult, pattern: str) -> None:
     if not re.search(pattern, output):
         preview = output[:200] + ("..." if len(output) > 200 else "")
         raise AssertionError(
-            f"Expected output to match pattern '{pattern}', but it does not.\n"
-            f"Output: {preview}"
+            f"Expected output to match pattern '{pattern}', but it does not.\nOutput: {preview}"
         )
 
 
@@ -199,9 +189,7 @@ def assert_status(result: AgentResult, status: str) -> None:
         status: Expected status (e.g. ``"COMPLETED"``, ``"FAILED"``).
     """
     if result.status != status:
-        raise AssertionError(
-            f"Expected status '{status}', got '{result.status}'."
-        )
+        raise AssertionError(f"Expected status '{status}', got '{result.status}'.")
 
 
 def assert_no_errors(result: AgentResult) -> None:
@@ -210,14 +198,11 @@ def assert_no_errors(result: AgentResult) -> None:
     Args:
         result: The agent execution result.
     """
-    errors = [
-        ev for ev in result.events if ev.type == EventType.ERROR
-    ]
+    errors = [ev for ev in result.events if ev.type == EventType.ERROR]
     if errors:
         messages = [ev.content for ev in errors]
         raise AssertionError(
-            f"Expected no errors, but {len(errors)} error(s) occurred.\n"
-            f"Error messages: {messages}"
+            f"Expected no errors, but {len(errors)} error(s) occurred.\nError messages: {messages}"
         )
 
 
@@ -245,8 +230,7 @@ def assert_events_contain(
     matching = [
         ev
         for ev in result.events
-        if ev.type == event_type_str
-        and all(getattr(ev, k, None) == v for k, v in attrs.items())
+        if ev.type == event_type_str and all(getattr(ev, k, None) == v for k, v in attrs.items())
     ]
 
     if expected and not matching:
@@ -276,9 +260,7 @@ def assert_event_sequence(
         result: The agent execution result.
         types: Expected event types in order.
     """
-    expected = [
-        t.value if isinstance(t, EventType) else t for t in types
-    ]
+    expected = [t.value if isinstance(t, EventType) else t for t in types]
     actual_types = [ev.type for ev in result.events]
 
     idx = 0
@@ -304,16 +286,10 @@ def assert_handoff_to(result: AgentResult, agent_name: str) -> None:
         agent_name: The expected target agent name.
     """
     handoffs = [
-        ev
-        for ev in result.events
-        if ev.type == EventType.HANDOFF and ev.target == agent_name
+        ev for ev in result.events if ev.type == EventType.HANDOFF and ev.target == agent_name
     ]
     if not handoffs:
-        all_handoffs = [
-            ev.target
-            for ev in result.events
-            if ev.type == EventType.HANDOFF
-        ]
+        all_handoffs = [ev.target for ev in result.events if ev.type == EventType.HANDOFF]
         raise AssertionError(
             f"Expected handoff to '{agent_name}', but none found.\n"
             f"Handoffs that occurred: {all_handoffs}"
@@ -395,12 +371,6 @@ def assert_max_turns(result: AgentResult, n: int) -> None:
         result: The agent execution result.
         n: Maximum number of turns allowed.
     """
-    turns = sum(
-        1
-        for ev in result.events
-        if ev.type in (EventType.TOOL_CALL, EventType.DONE)
-    )
+    turns = sum(1 for ev in result.events if ev.type in (EventType.TOOL_CALL, EventType.DONE))
     if turns > n:
-        raise AssertionError(
-            f"Expected at most {n} turn(s), but the agent took {turns}."
-        )
+        raise AssertionError(f"Expected at most {n} turn(s), but the agent took {turns}.")

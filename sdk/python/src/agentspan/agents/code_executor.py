@@ -35,8 +35,8 @@ import os
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("agentspan.agents.code_executor")
 
@@ -116,7 +116,11 @@ class CodeExecutor(ABC):
         @tool(name=tool_name)
         def execute_code(code: str) -> dict:
             if not code:
-                return {"status": "success", "stdout": "No code provided. Nothing to execute.", "stderr": ""}
+                return {
+                    "status": "success",
+                    "stdout": "No code provided. Nothing to execute.",
+                    "stderr": "",
+                }
             result = executor.execute(code)
             if result.success:
                 return {
@@ -142,10 +146,7 @@ class CodeExecutor(ABC):
         return execute_code
 
     def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}(language={self.language!r}, "
-            f"timeout={self.timeout})"
-        )
+        return f"{type(self).__name__}(language={self.language!r}, timeout={self.timeout})"
 
 
 class LocalCodeExecutor(CodeExecutor):
@@ -233,9 +234,12 @@ class LocalCodeExecutor(CodeExecutor):
 
     def _file_extension(self) -> str:
         ext_map = {
-            "python": ".py", "python3": ".py",
-            "bash": ".sh", "sh": ".sh",
-            "node": ".js", "javascript": ".js",
+            "python": ".py",
+            "python3": ".py",
+            "bash": ".sh",
+            "sh": ".sh",
+            "node": ".js",
+            "javascript": ".js",
             "ruby": ".rb",
         }
         return ext_map.get(self.language, ".txt")
@@ -450,10 +454,7 @@ class JupyterCodeExecutor(CodeExecutor):
         self.shutdown()
 
     def __repr__(self) -> str:
-        return (
-            f"JupyterCodeExecutor(kernel={self.kernel_name!r}, "
-            f"timeout={self.timeout})"
-        )
+        return f"JupyterCodeExecutor(kernel={self.kernel_name!r}, timeout={self.timeout})"
 
 
 class ServerlessCodeExecutor(CodeExecutor):
@@ -502,22 +503,22 @@ class ServerlessCodeExecutor(CodeExecutor):
         The default implementation uses ``requests`` or ``urllib``.
         """
         import json
-        import urllib.request
         import urllib.error
+        import urllib.request
 
         headers = {"Content-Type": "application/json", **self.headers}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        payload = json.dumps({
-            "code": code,
-            "language": self.language,
-            "timeout": self.timeout,
-        }).encode("utf-8")
+        payload = json.dumps(
+            {
+                "code": code,
+                "language": self.language,
+                "timeout": self.timeout,
+            }
+        ).encode("utf-8")
 
-        req = urllib.request.Request(
-            self.endpoint, data=payload, headers=headers, method="POST"
-        )
+        req = urllib.request.Request(self.endpoint, data=payload, headers=headers, method="POST")
 
         try:
             with urllib.request.urlopen(req, timeout=self.timeout + 5) as resp:
@@ -533,7 +534,4 @@ class ServerlessCodeExecutor(CodeExecutor):
             return ExecutionResult(error=str(e), exit_code=1)
 
     def __repr__(self) -> str:
-        return (
-            f"ServerlessCodeExecutor(endpoint={self.endpoint!r}, "
-            f"language={self.language!r})"
-        )
+        return f"ServerlessCodeExecutor(endpoint={self.endpoint!r}, language={self.language!r})"

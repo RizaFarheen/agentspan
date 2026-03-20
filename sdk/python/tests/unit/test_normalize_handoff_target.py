@@ -3,8 +3,6 @@
 
 """Tests for _normalize_handoff_target in runtime.py."""
 
-import pytest
-
 from agentspan.agents.runtime.runtime import _normalize_handoff_target
 
 

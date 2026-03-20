@@ -3,16 +3,17 @@
 
 """Unit tests for MCP tool discovery, expansion, and caching."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from agentspan.agents.tool import ToolDef, mcp_tool
+import pytest
+
 from agentspan.agents.runtime.mcp_discovery import (
     _discovery_cache,
     clear_discovery_cache,
     discover_mcp_tools,
     expand_mcp_tool_def,
 )
+from agentspan.agents.tool import mcp_tool
 
 # Patch targets — these are the *source* modules for deferred imports
 _CW_PATH = "conductor.client.workflow.conductor_workflow.ConductorWorkflow"
@@ -47,7 +48,11 @@ class TestDiscoverMcpTools:
         mock_executor = MagicMock()
 
         fake_tools = [
-            {"name": "get_weather", "description": "Get weather", "inputSchema": {"type": "object"}},
+            {
+                "name": "get_weather",
+                "description": "Get weather",
+                "inputSchema": {"type": "object"},
+            },
             {"name": "get_forecast", "description": "Get forecast", "inputSchema": {}},
         ]
         fake_run = MagicMock(is_successful=True, output={"tools": fake_tools})
@@ -108,8 +113,7 @@ class TestDiscoverMcpTools:
         mock_executor = MagicMock()
         fake_run = MagicMock(is_successful=True, output={"tools": []})
 
-        with patch(_CW_PATH, return_value=_mock_wf(fake_run)), \
-             patch(_LIST_PATH) as MockList:
+        with patch(_CW_PATH, return_value=_mock_wf(fake_run)), patch(_LIST_PATH) as MockList:
             discover_mcp_tools(
                 mock_executor,
                 "http://auth.example.com",
@@ -153,8 +157,16 @@ class TestExpandMcpToolDef:
         """Discovered tools are expanded into individual ToolDefs."""
         td = self._make_mcp_td()
         discovered = [
-            {"name": "get_weather", "description": "Get weather", "inputSchema": {"type": "object", "properties": {"city": {"type": "string"}}}},
-            {"name": "get_forecast", "description": "Get forecast", "inputSchema": {"type": "object"}},
+            {
+                "name": "get_weather",
+                "description": "Get weather",
+                "inputSchema": {"type": "object", "properties": {"city": {"type": "string"}}},
+            },
+            {
+                "name": "get_forecast",
+                "description": "Get forecast",
+                "inputSchema": {"type": "object"},
+            },
         ]
 
         result = expand_mcp_tool_def(td, discovered)

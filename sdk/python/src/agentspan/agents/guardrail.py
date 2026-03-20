@@ -23,7 +23,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, List, Optional, Union
 
-
 # ── Enums ─────────────────────────────────────────────────────────────────
 
 
@@ -152,9 +151,7 @@ class Guardrail:
         if position not in ("input", "output"):
             raise ValueError(f"Invalid position {position!r}. Must be 'input' or 'output'")
         if on_fail not in _VALID_ON_FAIL:
-            raise ValueError(
-                f"Invalid on_fail {on_fail!r}. Must be one of {_VALID_ON_FAIL}"
-            )
+            raise ValueError(f"Invalid on_fail {on_fail!r}. Must be one of {_VALID_ON_FAIL}")
         if on_fail == "human" and position == "input":
             raise ValueError(
                 "on_fail='human' is only valid for position='output' "
@@ -166,9 +163,7 @@ class Guardrail:
                 "Pass a callable for a local guardrail, or name for an external one."
             )
         if max_retries < 1:
-            raise ValueError(
-                f"max_retries must be >= 1, got {max_retries}"
-            )
+            raise ValueError(f"max_retries must be >= 1, got {max_retries}")
 
         self.func = func
         self.position = position
@@ -393,6 +388,5 @@ class LLMGuardrail(Guardrail):
 
     def __repr__(self) -> str:
         return (
-            f"LLMGuardrail(name={self.name!r}, model={self._model!r}, "
-            f"position={self.position!r})"
+            f"LLMGuardrail(name={self.name!r}, model={self._model!r}, position={self.position!r})"
         )

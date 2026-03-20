@@ -97,9 +97,7 @@ class AgentResultExpectation:
 
     # ── Output ──────────────────────────────────────────────────────
 
-    def output_contains(
-        self, text: str, *, case_sensitive: bool = True
-    ) -> AgentResultExpectation:
+    def output_contains(self, text: str, *, case_sensitive: bool = True) -> AgentResultExpectation:
         """Assert output contains a substring."""
         assert_output_contains(self._result, text, case_sensitive=case_sensitive)
         return self
@@ -124,14 +122,10 @@ class AgentResultExpectation:
         **attrs: Any,
     ) -> AgentResultExpectation:
         """Assert an event of the given type exists (or does not)."""
-        assert_events_contain(
-            self._result, event_type, expected=expected, **attrs
-        )
+        assert_events_contain(self._result, event_type, expected=expected, **attrs)
         return self
 
-    def event_sequence(
-        self, types: Sequence[Union[str, EventType]]
-    ) -> AgentResultExpectation:
+    def event_sequence(self, types: Sequence[Union[str, EventType]]) -> AgentResultExpectation:
         """Assert events appear in subsequence order."""
         assert_event_sequence(self._result, types)
         return self

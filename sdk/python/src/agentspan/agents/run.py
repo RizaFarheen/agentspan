@@ -27,11 +27,10 @@ from __future__ import annotations
 import atexit
 import logging
 import threading
-from typing import Any, Iterator, List, Optional
+from typing import Any, List, Optional
 
 from agentspan.agents.agent import Agent
 from agentspan.agents.result import (
-    AgentEvent,
     AgentHandle,
     AgentResult,
     AgentStream,
@@ -101,6 +100,7 @@ def _get_default_runtime():
         with _runtime_lock:
             if _default_runtime is None:
                 from agentspan.agents.runtime.runtime import AgentRuntime
+
                 _default_runtime = AgentRuntime(config=_default_config)
                 logger.info("Created default AgentRuntime singleton")
     return _default_runtime
@@ -269,7 +269,15 @@ def run(
         print(result.output)
     """
     rt = runtime or _get_default_runtime()
-    return rt.run(agent, prompt, media=media, session_id=session_id, idempotency_key=idempotency_key, on_event=on_event, **kwargs)
+    return rt.run(
+        agent,
+        prompt,
+        media=media,
+        session_id=session_id,
+        idempotency_key=idempotency_key,
+        on_event=on_event,
+        **kwargs,
+    )
 
 
 def start(
@@ -314,7 +322,9 @@ def start(
             print(status.output)
     """
     rt = runtime or _get_default_runtime()
-    return rt.start(agent, prompt, media=media, session_id=session_id, idempotency_key=idempotency_key, **kwargs)
+    return rt.start(
+        agent, prompt, media=media, session_id=session_id, idempotency_key=idempotency_key, **kwargs
+    )
 
 
 def stream(
@@ -403,7 +413,15 @@ async def run_async(
         result = asyncio.run(run_async(agent, "Hello!"))
     """
     rt = runtime or _get_default_runtime()
-    return await rt.run_async(agent, prompt, media=media, session_id=session_id, idempotency_key=idempotency_key, on_event=on_event, **kwargs)
+    return await rt.run_async(
+        agent,
+        prompt,
+        media=media,
+        session_id=session_id,
+        idempotency_key=idempotency_key,
+        on_event=on_event,
+        **kwargs,
+    )
 
 
 async def start_async(
@@ -441,7 +459,9 @@ async def start_async(
         handle = asyncio.run(start_async(agent, "Analyze reports"))
     """
     rt = runtime or _get_default_runtime()
-    return await rt.start_async(agent, prompt, media=media, session_id=session_id, idempotency_key=idempotency_key, **kwargs)
+    return await rt.start_async(
+        agent, prompt, media=media, session_id=session_id, idempotency_key=idempotency_key, **kwargs
+    )
 
 
 async def stream_async(
@@ -492,4 +512,6 @@ async def stream_async(
         asyncio.run(main())
     """
     rt = runtime or _get_default_runtime()
-    return await rt.stream_async(agent, prompt, handle=handle, media=media, session_id=session_id, **kwargs)
+    return await rt.stream_async(
+        agent, prompt, handle=handle, media=media, session_id=session_id, **kwargs
+    )

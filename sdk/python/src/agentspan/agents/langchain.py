@@ -74,7 +74,7 @@ def create_agent(
 
     # Resolve tools: wrap sub-agent graphs as LangChain-compatible tool objects
     resolved_tools: List[Any] = []
-    for t in (tools or []):
+    for t in tools or []:
         if hasattr(t, "_agentspan_meta"):
             resolved_tools.append(_wrap_sub_agent(t))
         else:

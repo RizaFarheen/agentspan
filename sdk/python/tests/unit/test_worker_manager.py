@@ -52,6 +52,7 @@ class TestWorkerManagerStart:
             workers=[],
             configuration=config,
             scan_for_annotated_workers=True,
+            monitor_processes=False,
         )
         mock_handler.start_processes.assert_called_once()
 
@@ -306,6 +307,7 @@ class TestSchemaRegistryFilter:
 
     def _make_record(self, msg):
         import logging
+
         record = logging.LogRecord(
             name="conductor.client.automator.task_runner",
             level=logging.WARNING,
@@ -343,10 +345,13 @@ class TestSchemaRegistryFilter:
     def test_filter_installed_on_conductor_logger(self):
         """WorkerManager.__init__ installs the filter on the conductor logger."""
         import logging
+
         config = MagicMock()
         wm = WorkerManager(configuration=config)
         conductor_logger = logging.getLogger("conductor.client.automator.task_runner")
-        schema_filters = [f for f in conductor_logger.filters if isinstance(f, _SchemaRegistryFilter)]
+        schema_filters = [
+            f for f in conductor_logger.filters if isinstance(f, _SchemaRegistryFilter)
+        ]
         assert len(schema_filters) >= 1
         # Clean up
         for f in schema_filters:

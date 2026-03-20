@@ -11,8 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Callable, Dict, Iterator, List, Optional
-
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
 # ── Status & FinishReason enums ────────────────────────────────────────
 
@@ -52,14 +51,14 @@ class FinishReason(str, Enum):
     continue to work for backward compatibility.
     """
 
-    STOP = "stop"              # Model finished naturally
-    LENGTH = "LENGTH"          # Hit token limit
+    STOP = "stop"  # Model finished naturally
+    LENGTH = "LENGTH"  # Hit token limit
     TOOL_CALLS = "tool_calls"  # Stopped to execute tools (intermediate)
-    ERROR = "error"            # Execution failed
-    CANCELLED = "cancelled"    # User cancelled / workflow terminated
-    TIMEOUT = "timeout"        # Execution timed out
-    GUARDRAIL = "guardrail"    # Blocked by guardrail
-    REJECTED = "rejected"      # HITL tool was rejected
+    ERROR = "error"  # Execution failed
+    CANCELLED = "cancelled"  # User cancelled / workflow terminated
+    TIMEOUT = "timeout"  # Execution timed out
+    GUARDRAIL = "guardrail"  # Blocked by guardrail
+    REJECTED = "rejected"  # HITL tool was rejected
 
 
 # ── TokenUsage ──────────────────────────────────────────────────────────
@@ -185,7 +184,8 @@ class AgentResult:
         if self.workflow_id:
             print(f"Workflow ID: {self.workflow_id}")
 
-        print(f"\n")
+        print("\n")
+
 
 # ── AgentStatus (returned by handle.get_status()) ──────────────────────
 
@@ -232,7 +232,9 @@ class AgentHandle:
         runtime: The :class:`AgentRuntime` that launched this workflow.
     """
 
-    def __init__(self, workflow_id: str, runtime: Any, correlation_id: Optional[str] = None) -> None:
+    def __init__(
+        self, workflow_id: str, runtime: Any, correlation_id: Optional[str] = None
+    ) -> None:
         self.workflow_id = workflow_id
         self.correlation_id = correlation_id
         self._runtime = runtime
@@ -457,9 +459,7 @@ class AgentStream:
                     tool_calls.append(pending_call)
                     pending_call = None
                 else:
-                    tool_calls.append(
-                        {"name": ev.tool_name, "result": ev.result}
-                    )
+                    tool_calls.append({"name": ev.tool_name, "result": ev.result})
             elif ev.type == EventType.DONE:
                 output = ev.output
                 finish_reason = FinishReason.STOP
@@ -522,7 +522,9 @@ class AgentStream:
 # ── Output normalization ──────────────────────────────────────────────
 
 
-def _normalize_event_output(output: Any, status: Status, error: Optional[str] = None) -> Dict[str, Any]:
+def _normalize_event_output(
+    output: Any, status: Status, error: Optional[str] = None
+) -> Dict[str, Any]:
     """Normalize output to always be a dict for a consistent contract.
 
     On failure, wraps string errors in ``{"error": ..., "status": "FAILED"}``.
@@ -568,9 +570,7 @@ def _build_result_from_events(
                 tool_calls.append(pending_call)
                 pending_call = None
             else:
-                tool_calls.append(
-                    {"name": ev.tool_name, "result": ev.result}
-                )
+                tool_calls.append({"name": ev.tool_name, "result": ev.result})
         elif ev.type == EventType.DONE:
             output = ev.output
             finish_reason = FinishReason.STOP

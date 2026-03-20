@@ -48,7 +48,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
-    from agentspan.agents.code_executor import CodeExecutor
+    pass
 
 
 @dataclass
@@ -111,18 +111,66 @@ class CommandValidator:
     ]
 
     # Bash/shell patterns
-    _BASH_COMMAND_RE = re.compile(
-        r"(?:^|[|;&]\s*|`|\$\(\s*)(\w[\w.+-]*)", re.MULTILINE
+    _BASH_COMMAND_RE = re.compile(r"(?:^|[|;&]\s*|`|\$\(\s*)(\w[\w.+-]*)", re.MULTILINE)
+    _BASH_BUILTINS = frozenset(
+        {
+            "if",
+            "then",
+            "else",
+            "elif",
+            "fi",
+            "for",
+            "while",
+            "do",
+            "done",
+            "case",
+            "esac",
+            "in",
+            "function",
+            "select",
+            "until",
+            "echo",
+            "printf",
+            "read",
+            "local",
+            "export",
+            "unset",
+            "set",
+            "shift",
+            "return",
+            "exit",
+            "true",
+            "false",
+            "test",
+            "[",
+            "[[",
+            "declare",
+            "typeset",
+            "readonly",
+            "source",
+            ".",
+            "eval",
+            "exec",
+            "trap",
+            "wait",
+            "break",
+            "continue",
+            "cd",
+            "pushd",
+            "popd",
+            "pwd",
+            "dirs",
+            "hash",
+            "type",
+            "command",
+            "builtin",
+            "enable",
+            "let",
+            "shopt",
+            "complete",
+            "compgen",
+        }
     )
-    _BASH_BUILTINS = frozenset({
-        "if", "then", "else", "elif", "fi", "for", "while", "do", "done",
-        "case", "esac", "in", "function", "select", "until", "echo", "printf",
-        "read", "local", "export", "unset", "set", "shift", "return", "exit",
-        "true", "false", "test", "[", "[[", "declare", "typeset", "readonly",
-        "source", ".", "eval", "exec", "trap", "wait", "break", "continue",
-        "cd", "pushd", "popd", "pwd", "dirs", "hash", "type", "command",
-        "builtin", "enable", "let", "shopt", "complete", "compgen",
-    })
 
     def __init__(self, allowed_commands: List[str]) -> None:
         self.allowed_commands = frozenset(allowed_commands)
@@ -215,7 +263,11 @@ def _make_code_execution_tool(
         """Execute code in a sandboxed environment."""
         # Guard against bad parameters (LLM may omit args or send wrong types)
         if not code:
-            return {"status": "success", "stdout": "No code provided. Nothing to execute.", "stderr": ""}
+            return {
+                "status": "success",
+                "stdout": "No code provided. Nothing to execute.",
+                "stderr": "",
+            }
         if not isinstance(code, str):
             # LLM sometimes sends code as a JSON object instead of a string
             code = str(code)

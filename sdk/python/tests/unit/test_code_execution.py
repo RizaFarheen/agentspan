@@ -13,7 +13,6 @@ from agentspan.agents.code_execution_config import (
 )
 from agentspan.agents.code_executor import LocalCodeExecutor
 
-
 # ── CodeExecutionConfig ────────────────────────────────────────────────
 
 
@@ -266,7 +265,8 @@ class TestAgentCodeExecution:
 
     def test_allowed_languages_propagated(self):
         a = Agent(
-            name="coder", model="openai/gpt-4o",
+            name="coder",
+            model="openai/gpt-4o",
             local_code_execution=True,
             allowed_languages=["python", "bash"],
         )
@@ -277,7 +277,8 @@ class TestAgentCodeExecution:
 
     def test_allowed_commands_propagated(self):
         a = Agent(
-            name="coder", model="openai/gpt-4o",
+            name="coder",
+            model="openai/gpt-4o",
             local_code_execution=True,
             allowed_commands=["pip", "ls"],
         )
@@ -310,7 +311,8 @@ class TestAgentCodeExecution:
             return x
 
         a = Agent(
-            name="coder", model="openai/gpt-4o",
+            name="coder",
+            model="openai/gpt-4o",
             tools=[my_tool],
             local_code_execution=True,
         )
@@ -326,6 +328,7 @@ class TestAgentCodeExecution:
 
         # Resolve to Agent
         from agentspan.agents.agent import _resolve_agent
+
         a = _resolve_agent(coder)
         assert a.code_execution_config is not None
         assert a.code_execution_config.enabled is True

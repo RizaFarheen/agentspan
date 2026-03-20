@@ -11,7 +11,6 @@ handles both simple and complex orchestration patterns.
 from __future__ import annotations
 
 import functools
-import inspect
 import re
 import warnings
 from dataclasses import dataclass, field
@@ -228,10 +227,7 @@ def _resolve_agent(obj: Any, parent_model: str = "") -> "Agent":
             cli_config=ad.cli_config,
             cli_allowed_commands=ad.cli_allowed_commands or None,
         )
-    raise TypeError(
-        f"Expected an Agent or @agent-decorated function, "
-        f"got {type(obj).__name__}"
-    )
+    raise TypeError(f"Expected an Agent or @agent-decorated function, got {type(obj).__name__}")
 
 
 class Agent:
@@ -358,24 +354,17 @@ class Agent:
             strategy = Strategy(strategy)
         except ValueError:
             valid = ", ".join(s.value for s in Strategy)
-            raise ValueError(
-                f"Invalid strategy {strategy!r}. "
-                f"Must be one of: {valid}"
-            )
+            raise ValueError(f"Invalid strategy {strategy!r}. Must be one of: {valid}")
         if strategy == "router" and router is None:
             raise ValueError("strategy='router' requires a router argument")
         if max_turns is not None and max_turns < 1:
-            raise ValueError(
-                f"max_turns must be >= 1, got {max_turns}"
-            )
+            raise ValueError(f"max_turns must be >= 1, got {max_turns}")
 
         self.name = name
         self.model = model
         self.instructions = instructions
         self.tools: List[Any] = list(tools) if tools else []
-        self.agents: List[Agent] = (
-            [_resolve_agent(a, model) for a in agents] if agents else []
-        )
+        self.agents: List[Agent] = [_resolve_agent(a, model) for a in agents] if agents else []
         # Validate sub-agent name uniqueness
         if self.agents:
             seen: Dict[str, int] = {}
@@ -434,14 +423,11 @@ class Agent:
             self.code_execution_config = code_execution
         elif local_code_execution:
             from agentspan.agents.code_execution_config import CodeExecutionConfig
+
             self.code_execution_config = CodeExecutionConfig(
                 enabled=True,
-                allowed_languages=(
-                    list(allowed_languages) if allowed_languages else ["python"]
-                ),
-                allowed_commands=(
-                    list(allowed_commands) if allowed_commands else []
-                ),
+                allowed_languages=(list(allowed_languages) if allowed_languages else ["python"]),
+                allowed_commands=(list(allowed_commands) if allowed_commands else []),
             )
         if self.code_execution_config and self.code_execution_config.enabled:
             self._attach_code_execution_tool()
@@ -452,10 +438,13 @@ class Agent:
             self.cli_config = cli_config
         elif cli_commands:
             from agentspan.agents.cli_config import CliConfig
+
             self.cli_config = CliConfig(
                 allowed_commands=(
-                    list(cli_allowed_commands) if cli_allowed_commands
-                    else list(allowed_commands) if allowed_commands
+                    list(cli_allowed_commands)
+                    if cli_allowed_commands
+                    else list(allowed_commands)
+                    if allowed_commands
                     else []
                 ),
             )
@@ -465,7 +454,6 @@ class Agent:
     def _attach_code_execution_tool(self) -> None:
         """Auto-create and attach a code execution tool from config."""
         from agentspan.agents.code_execution_config import (
-            CodeExecutionConfig,
             _make_code_execution_tool,
         )
         from agentspan.agents.code_executor import LocalCodeExecutor
@@ -491,13 +479,15 @@ class Agent:
         from agentspan.agents.cli_config import _make_cli_tool
 
         cfg = self.cli_config
-        self.tools.append(_make_cli_tool(
-            allowed_commands=cfg.allowed_commands,
-            timeout=cfg.timeout,
-            working_dir=cfg.working_dir,
-            allow_shell=cfg.allow_shell,
-            guardrails=cfg.guardrails if cfg.guardrails else None,
-        ))
+        self.tools.append(
+            _make_cli_tool(
+                allowed_commands=cfg.allowed_commands,
+                timeout=cfg.timeout,
+                working_dir=cfg.working_dir,
+                allow_shell=cfg.allow_shell,
+                guardrails=cfg.guardrails if cfg.guardrails else None,
+            )
+        )
 
     # ── External detection ────────────────────────────────────────────
 
@@ -518,12 +508,8 @@ class Agent:
 
         Returns a new Agent with ``strategy="sequential"`` combining both sides.
         """
-        left_agents = (
-            self.agents if self.strategy == "sequential" else [self]
-        )
-        right_agents = (
-            other.agents if other.strategy == "sequential" else [other]
-        )
+        left_agents = self.agents if self.strategy == "sequential" else [self]
+        right_agents = other.agents if other.strategy == "sequential" else [other]
         all_agents = list(left_agents) + list(right_agents)
         combined_name = "_".join(a.name for a in all_agents)
         return Agent(

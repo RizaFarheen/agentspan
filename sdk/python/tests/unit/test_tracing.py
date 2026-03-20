@@ -3,7 +3,7 @@
 
 """Unit tests for OpenTelemetry tracing instrumentation."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -121,7 +121,9 @@ class TestWithMockedOtel:
             # Patch StatusCode in the tracing module
             tracing_mod.StatusCode = mock_status_code
 
-            with tracing_mod.trace_agent_run("my_agent", "hello", model="gpt-4o", session_id="s1") as span:
+            with tracing_mod.trace_agent_run(
+                "my_agent", "hello", model="gpt-4o", session_id="s1"
+            ) as span:
                 assert span is mock_span
 
             mock_tracer.start_as_current_span.assert_called_once_with("agent.run")
@@ -183,7 +185,9 @@ class TestWithMockedOtel:
             tracing_mod._HAS_OTEL = True
             tracing_mod._tracer = mock_tracer
 
-            with tracing_mod.trace_llm_call("agent", "gpt-4o", prompt_tokens=100, completion_tokens=50) as span:
+            with tracing_mod.trace_llm_call(
+                "agent", "gpt-4o", prompt_tokens=100, completion_tokens=50
+            ) as span:
                 assert span is mock_span
 
             mock_span.set_attribute.assert_any_call("llm.model", "gpt-4o")

@@ -6,21 +6,19 @@
 Tests cover the native-FC workers: check_approval_worker and make_tool_worker.
 """
 
-import json
-
 import pytest
 
 from agentspan.agents.runtime._dispatch import (
-    check_approval_worker,
-    _tool_registry,
-    _tool_type_registry,
-    _tool_task_names,
-    _tool_approval_flags,
     _mcp_servers,
+    _tool_approval_flags,
+    _tool_registry,
+    _tool_task_names,
+    _tool_type_registry,
+    check_approval_worker,
 )
 
-
 # ── helpers ──────────────────────────────────────────────────────────────
+
 
 def _register_tools(name: str, funcs: dict):
     """Register tools under a fake task name and populate _tool_task_names."""
@@ -47,6 +45,7 @@ def _clean_registry():
 
 # ── tests: check_approval_worker (native FC) ────────────────────────────
 
+
 class TestCheckApprovalWorker:
     """Test check_approval_worker — checks _tool_approval_flags for any tool in batch."""
 
@@ -57,10 +56,12 @@ class TestCheckApprovalWorker:
 
     def test_approval_required_in_batch(self):
         _tool_approval_flags["danger"] = True
-        result = check_approval_worker(tool_calls=[
-            {"name": "safe_tool"},
-            {"name": "danger"},
-        ])
+        result = check_approval_worker(
+            tool_calls=[
+                {"name": "safe_tool"},
+                {"name": "danger"},
+            ]
+        )
         assert result["needs_approval"] is True
 
     def test_no_approval(self):

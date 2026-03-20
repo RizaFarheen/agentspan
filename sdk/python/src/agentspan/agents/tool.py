@@ -323,19 +323,49 @@ def image_tool(
         input_schema = {
             "type": "object",
             "properties": {
-                "prompt": {"type": "string", "description": "Text description of the image to generate."},
+                "prompt": {
+                    "type": "string",
+                    "description": "Text description of the image to generate.",
+                },
                 "style": {"type": "string", "description": "Image style: 'vivid' or 'natural'."},
-                "width": {"type": "integer", "description": "Image width in pixels.", "default": 1024},
-                "height": {"type": "integer", "description": "Image height in pixels.", "default": 1024},
-                "size": {"type": "string", "description": "Image size (e.g. '1024x1024'). Alternative to width/height."},
-                "n": {"type": "integer", "description": "Number of images to generate.", "default": 1},
-                "outputFormat": {"type": "string", "description": "Output format: 'png', 'jpg', or 'webp'.", "default": "png"},
+                "width": {
+                    "type": "integer",
+                    "description": "Image width in pixels.",
+                    "default": 1024,
+                },
+                "height": {
+                    "type": "integer",
+                    "description": "Image height in pixels.",
+                    "default": 1024,
+                },
+                "size": {
+                    "type": "string",
+                    "description": "Image size (e.g. '1024x1024'). Alternative to width/height.",
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Number of images to generate.",
+                    "default": 1,
+                },
+                "outputFormat": {
+                    "type": "string",
+                    "description": "Output format: 'png', 'jpg', or 'webp'.",
+                    "default": "png",
+                },
                 "weight": {"type": "number", "description": "Image weight parameter."},
             },
             "required": ["prompt"],
         }
-    return _media_tool("generate_image", "GENERATE_IMAGE", name, description,
-                        llm_provider, model, input_schema, **defaults)
+    return _media_tool(
+        "generate_image",
+        "GENERATE_IMAGE",
+        name,
+        description,
+        llm_provider,
+        model,
+        input_schema,
+        **defaults,
+    )
 
 
 def audio_tool(
@@ -380,14 +410,34 @@ def audio_tool(
                     "enum": ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
                     "default": "alloy",
                 },
-                "speed": {"type": "number", "description": "Speech speed multiplier (0.25 to 4.0).", "default": 1.0},
-                "responseFormat": {"type": "string", "description": "Audio format: 'mp3', 'wav', 'opus', 'aac', or 'flac'.", "default": "mp3"},
-                "n": {"type": "integer", "description": "Number of audio outputs to generate.", "default": 1},
+                "speed": {
+                    "type": "number",
+                    "description": "Speech speed multiplier (0.25 to 4.0).",
+                    "default": 1.0,
+                },
+                "responseFormat": {
+                    "type": "string",
+                    "description": "Audio format: 'mp3', 'wav', 'opus', 'aac', or 'flac'.",
+                    "default": "mp3",
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Number of audio outputs to generate.",
+                    "default": 1,
+                },
             },
             "required": ["text"],
         }
-    return _media_tool("generate_audio", "GENERATE_AUDIO", name, description,
-                        llm_provider, model, input_schema, **defaults)
+    return _media_tool(
+        "generate_audio",
+        "GENERATE_AUDIO",
+        name,
+        description,
+        llm_provider,
+        model,
+        input_schema,
+        **defaults,
+    )
 
 
 def video_tool(
@@ -428,30 +478,94 @@ def video_tool(
             "type": "object",
             "properties": {
                 "prompt": {"type": "string", "description": "Text description of the video scene."},
-                "inputImage": {"type": "string", "description": "Base64-encoded or URL image for image-to-video generation."},
-                "duration": {"type": "integer", "description": "Video duration in seconds.", "default": 5},
-                "width": {"type": "integer", "description": "Video width in pixels.", "default": 1280},
-                "height": {"type": "integer", "description": "Video height in pixels.", "default": 720},
+                "inputImage": {
+                    "type": "string",
+                    "description": "Base64-encoded or URL image for image-to-video generation.",
+                },
+                "duration": {
+                    "type": "integer",
+                    "description": "Video duration in seconds.",
+                    "default": 5,
+                },
+                "width": {
+                    "type": "integer",
+                    "description": "Video width in pixels.",
+                    "default": 1280,
+                },
+                "height": {
+                    "type": "integer",
+                    "description": "Video height in pixels.",
+                    "default": 720,
+                },
                 "fps": {"type": "integer", "description": "Frames per second.", "default": 24},
-                "outputFormat": {"type": "string", "description": "Video format (e.g. 'mp4').", "default": "mp4"},
-                "style": {"type": "string", "description": "Video style (e.g. 'cinematic', 'natural')."},
-                "motion": {"type": "string", "description": "Movement intensity (e.g. 'slow', 'normal', 'extreme')."},
+                "outputFormat": {
+                    "type": "string",
+                    "description": "Video format (e.g. 'mp4').",
+                    "default": "mp4",
+                },
+                "style": {
+                    "type": "string",
+                    "description": "Video style (e.g. 'cinematic', 'natural').",
+                },
+                "motion": {
+                    "type": "string",
+                    "description": "Movement intensity (e.g. 'slow', 'normal', 'extreme').",
+                },
                 "seed": {"type": "integer", "description": "Seed for reproducibility."},
-                "guidanceScale": {"type": "number", "description": "Prompt adherence strength (1.0 to 20.0)."},
-                "aspectRatio": {"type": "string", "description": "Aspect ratio (e.g. '16:9', '1:1')."},
-                "negativePrompt": {"type": "string", "description": "Description of what to exclude from the video."},
-                "personGeneration": {"type": "string", "description": "Controls for human figure generation."},
-                "resolution": {"type": "string", "description": "Quality level (e.g. '720p', '1080p')."},
-                "generateAudio": {"type": "boolean", "description": "Whether to generate audio with the video."},
-                "size": {"type": "string", "description": "Video size specification (e.g. '1280x720')."},
-                "n": {"type": "integer", "description": "Number of videos to generate.", "default": 1},
-                "maxDurationSeconds": {"type": "integer", "description": "Maximum duration ceiling in seconds."},
-                "maxCostDollars": {"type": "number", "description": "Maximum cost limit in dollars."},
+                "guidanceScale": {
+                    "type": "number",
+                    "description": "Prompt adherence strength (1.0 to 20.0).",
+                },
+                "aspectRatio": {
+                    "type": "string",
+                    "description": "Aspect ratio (e.g. '16:9', '1:1').",
+                },
+                "negativePrompt": {
+                    "type": "string",
+                    "description": "Description of what to exclude from the video.",
+                },
+                "personGeneration": {
+                    "type": "string",
+                    "description": "Controls for human figure generation.",
+                },
+                "resolution": {
+                    "type": "string",
+                    "description": "Quality level (e.g. '720p', '1080p').",
+                },
+                "generateAudio": {
+                    "type": "boolean",
+                    "description": "Whether to generate audio with the video.",
+                },
+                "size": {
+                    "type": "string",
+                    "description": "Video size specification (e.g. '1280x720').",
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "Number of videos to generate.",
+                    "default": 1,
+                },
+                "maxDurationSeconds": {
+                    "type": "integer",
+                    "description": "Maximum duration ceiling in seconds.",
+                },
+                "maxCostDollars": {
+                    "type": "number",
+                    "description": "Maximum cost limit in dollars.",
+                },
             },
             "required": ["prompt"],
         }
-    return _media_tool("generate_video", "GENERATE_VIDEO", name, description,
-                        llm_provider, model, input_schema, **defaults)
+    return _media_tool(
+        "generate_video",
+        "GENERATE_VIDEO",
+        name,
+        description,
+        llm_provider,
+        model,
+        input_schema,
+        **defaults,
+    )
 
 
 def pdf_tool(
@@ -585,7 +699,10 @@ def index_tool(
             "properties": {
                 "text": {"type": "string", "description": "The text content to index."},
                 "docId": {"type": "string", "description": "Unique document identifier."},
-                "metadata": {"type": "object", "description": "Optional metadata to store with the document."},
+                "metadata": {
+                    "type": "object",
+                    "description": "Optional metadata to store with the document.",
+                },
             },
             "required": ["text", "docId"],
         }

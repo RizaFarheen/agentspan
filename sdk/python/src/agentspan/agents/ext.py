@@ -97,10 +97,7 @@ class UserProxyAgent(Agent):
         )
 
     def __repr__(self) -> str:
-        return (
-            f"UserProxyAgent(name={self.name!r}, "
-            f"mode={self.human_input_mode!r})"
-        )
+        return f"UserProxyAgent(name={self.name!r}, mode={self.human_input_mode!r})"
 
 
 # ── GPTAssistantAgent ──────────────────────────────────────────────────
@@ -198,10 +195,7 @@ class GPTAssistantAgent(Agent):
         try:
             import openai
         except ImportError:
-            return (
-                "Error: openai package not installed. "
-                "Install with: pip install openai"
-            )
+            return "Error: openai package not installed. Install with: pip install openai"
 
         import os
 
@@ -214,10 +208,7 @@ class GPTAssistantAgent(Agent):
         # Create assistant if needed
         assistant_id = self.assistant_id
         if not assistant_id:
-            instructions = (
-                self.instructions() if callable(self.instructions)
-                else self.instructions
-            )
+            instructions = self.instructions() if callable(self.instructions) else self.instructions
             model_name = self.model.split("/", 1)[-1]
             assistant = client.beta.assistants.create(
                 model=model_name,
@@ -259,7 +250,4 @@ class GPTAssistantAgent(Agent):
             return f"OpenAI Assistant error: {e}"
 
     def __repr__(self) -> str:
-        return (
-            f"GPTAssistantAgent(name={self.name!r}, "
-            f"assistant_id={self.assistant_id!r})"
-        )
+        return f"GPTAssistantAgent(name={self.name!r}, assistant_id={self.assistant_id!r})"
