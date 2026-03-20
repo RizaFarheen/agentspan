@@ -22,9 +22,9 @@ import { getCardVariant } from "components/flow/components/shapes/styles";
 import { ArrowRight, Check, Prohibit } from "@phosphor-icons/react";
 import CardIcon from "components/flow/components/shapes/TaskCard/CardIcon";
 import { TaskStatus, TaskType } from "types";
-import { AgentEvent, AgentRunData, AgentStatus, AgentTurn, EventType } from "./types";
+import { AgentEvent, AgentRunData, AgentStatus, AgentStrategy, AgentTurn, EventType } from "./types";
 import { DetailNodeData } from "./AgentDetailPanel";
-import { formatTokens, formatDuration } from "./agentExecutionUtils";
+import { formatTokens, formatDuration, getModelIconPath } from "./agentExecutionUtils";
 import "components/flow/ReaflowOverrides.scss";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -70,11 +70,26 @@ function toTS(s?: AgentStatus): TaskStatus {
   return TaskStatus.COMPLETED;
 }
 
+
+const STRATEGY_BADGE: Record<AgentStrategy, string> = {
+  [AgentStrategy.HANDOFF]:    "HANDOFF",
+  [AgentStrategy.PARALLEL]:   "PARALLEL",
+  [AgentStrategy.SEQUENTIAL]: "SEQUENTIAL",
+  [AgentStrategy.ROUTER]:     "ROUTER",
+  [AgentStrategy.SINGLE]:     "AGENT",
+};
+
 interface DiagramNodeData {
   kind: Kind;
   label: string;
   sublabel?: string;
   meta?: string;
+  /** Overrides KIND_LABEL for the TypeBadge (e.g. "GUARDRAIL" on an output/error node) */
+  typeLabel?: string;
+  /** Strategy used to spawn this node's sub-agent(s) */
+  strategy?: AgentStrategy;
+  /** Model name for provider icon (LLM and agent nodes) */
+  modelName?: string;
   ts: TaskStatus;
   event?: AgentEvent;
   subAgentRun?: AgentRunData;
@@ -116,10 +131,15 @@ function NodeStatusBadge({ status }: { status: TaskStatus }) {
       <div style={{
         position: "absolute", top: -half, right: -half,
         width: size, height: size, zIndex: 1,
-        borderRadius: "50%", backgroundColor: "#fde8bb",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
-        <CircularProgress size={size} sx={{ color: "#f59e0b" }} />
+        <CircularProgress size={size} thickness={3} sx={{ color: "#f59e0b" }} />
+        <div style={{
+          position: "absolute",
+          width: 6, height: 6,
+          borderRadius: "50%",
+          backgroundColor: "#f59e0b",
+        }} />
       </div>
     );
   }
@@ -233,7 +253,7 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack }
                   {running > 0 && ` · ${running} ⟳`}
                 </div>
               </div>
-              <TypeBadge label="PARALLEL" />
+              <TypeBadge label={data.strategy ? STRATEGY_BADGE[data.strategy] : "PARALLEL"} />
             </div>
           </div>
         </div>
@@ -313,10 +333,20 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack }
         boxSizing: "border-box",
         color: "#111111",
       }}>
-        <NodeStatusBadge status={data.ts} />
+        {/* Agent container nodes don't show spinner — the LLM child node represents active work */}
+        {!(data.kind === "start" && data.ts === TaskStatus.IN_PROGRESS) && (
+          <NodeStatusBadge status={data.ts} />
+        )}
 
         <div style={{ display: "flex", width: "100%", position: "relative" }}>
-          <CardIcon type={type} integrationType={undefined} />
+          {(() => {
+            const iconPath = getModelIconPath(data.modelName);
+            return iconPath ? (
+              <img src={iconPath} style={{ width: 24, height: 24, marginRight: 8, flexShrink: 0, objectFit: "contain" }} alt="" />
+            ) : (
+              <CardIcon type={type} integrationType={undefined} />
+            );
+          })()}
           <div style={{ flexGrow: 1, overflow: "hidden" }}>
             <div style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {data.label}
@@ -327,7 +357,7 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack }
               </div>
             )}
           </div>
-          <TypeBadge label={KIND_LABEL[data.kind]} />
+          <TypeBadge label={data.typeLabel ?? (data.strategy ? STRATEGY_BADGE[data.strategy] : KIND_LABEL[data.kind])} />
         </div>
 
         {/* "View execution" drill-in for sub-agents */}
@@ -394,13 +424,36 @@ function buildTurnNodes(
     prevRef.id = id;
   };
 
+  // Sequential chain turns: sub-agent FIRST, then gate event — entirely separate flow
+  if (turn.strategy === AgentStrategy.SEQUENTIAL && turn.subAgents.length === 1) {
+    const sub = turn.subAgents[0];
+    push(`sub-${sub.id}`, {
+      kind: "subagent", label: sub.agentName,
+      meta: sub.model, modelName: sub.model,
+      sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
+      strategy: turn.strategy,
+      ts: toTS(sub.status), subAgentRun: sub,
+    });
+    for (const ev of turn.events) {
+      if (ev.type === EventType.GUARDRAIL_PASS || ev.type === EventType.GUARDRAIL_FAIL) {
+        push(ev.id, {
+          kind: ev.type === EventType.GUARDRAIL_FAIL ? "error" : "output",
+          label: "Gate", typeLabel: "GATE", sublabel: ev.summary,
+          ts: ev.type === EventType.GUARDRAIL_FAIL ? TaskStatus.FAILED : TaskStatus.COMPLETED,
+          event: ev,
+        });
+      }
+    }
+    return; // Skip normal event + sub-agent processing below
+  }
+
   // Group consecutive TOOL_CALL events so large parallel batches collapse into one node
   type Grp = AgentEvent | { type: "__toolGroup"; events: AgentEvent[] };
   const groups: Grp[] = [];
   let toolBatch: AgentEvent[] = [];
   const flushBatch = () => {
     if (toolBatch.length === 0) return;
-    groups.push(toolBatch.length === 1 ? toolBatch[0] : { type: "__toolGroup", events: toolBatch });
+    groups.push({ type: "__toolGroup", events: [...toolBatch] });
     toolBatch = [];
   };
   for (const ev of turn.events) {
@@ -442,6 +495,7 @@ function buildTurnNodes(
           push(ev.id, {
             kind: "llm", label: "LLM",
             sublabel: ev.toolName,
+            modelName: ev.toolName,
             meta: tok ? `${formatTokens(tok.promptTokens)}↑  ${formatTokens(tok.completionTokens)}↓` : undefined,
             ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
             event: ev,
@@ -453,6 +507,14 @@ function buildTurnNodes(
             kind: "handoff", label: target,
             ts: TaskStatus.COMPLETED, event: ev,
           }, H_HANDOFF); break;
+        }
+        case EventType.MESSAGE: {
+          const txt = typeof ev.detail === "string" ? ev.detail : undefined;
+          push(ev.id, {
+            kind: "output", label: "response",
+            sublabel: txt?.slice(0, 70) + (txt && txt.length > 70 ? "…" : ""),
+            ts: TaskStatus.COMPLETED, event: ev,
+          }); break;
         }
         case EventType.DONE: {
           const txt = typeof ev.detail === "string" ? ev.detail : undefined;
@@ -467,6 +529,28 @@ function buildTurnNodes(
             kind: "error", label: "error", sublabel: ev.summary,
             ts: TaskStatus.FAILED, event: ev,
           }); break;
+        case EventType.GUARDRAIL_PASS:
+          push(ev.id, {
+            kind: "output",
+            label: ev.toolName === "gate" ? "Gate" : (ev.toolName ?? "Guardrail"),
+            typeLabel: ev.toolName === "gate" ? "GATE" : "GUARDRAIL",
+            sublabel: ev.toolName === "gate" ? ev.summary : "passed",
+            ts: TaskStatus.COMPLETED, event: ev,
+          }); break;
+        case EventType.GUARDRAIL_FAIL:
+          push(ev.id, {
+            kind: "error",
+            label: ev.toolName === "gate" ? "Gate" : (ev.toolName ?? "Guardrail"),
+            typeLabel: ev.toolName === "gate" ? "GATE" : "GUARDRAIL",
+            sublabel: ev.summary,
+            ts: TaskStatus.FAILED, event: ev,
+          }); break;
+        case EventType.WAITING:
+          push(ev.id, {
+            kind: "output", label: "Waiting",
+            typeLabel: "WAITING", sublabel: ev.summary,
+            ts: TaskStatus.IN_PROGRESS, event: ev,
+          }); break;
         default: break;
       }
     }
@@ -477,8 +561,9 @@ function buildTurnNodes(
     const sub = turn.subAgents[0];
     push(`sub-${sub.id}`, {
       kind: "subagent", label: sub.agentName,
-      meta: sub.model,
+      meta: sub.model, modelName: sub.model,
       sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
+      strategy: turn.strategy,
       ts: toTS(sub.status), subAgentRun: sub,
     });
   } else if (turn.subAgents.length > 1) {
@@ -489,6 +574,7 @@ function buildTurnNodes(
     push(`subgroup-${turn.turnNumber}`, {
       kind: "group",
       label: turn.subAgents[0].agentName,
+      strategy: turn.strategy,
       groupType: "agents", groupAgents: turn.subAgents,
       groupCompleted: completed, groupFailed: failed, groupRunning: running,
       ts,
@@ -512,7 +598,7 @@ function buildDiagram(agentRun: AgentRunData, _activeTurnNum: number, hasBack: b
   nodes.push({ id: "start", width: W, height: H, data: {
     kind: "start", label: agentRun.agentName,
     sublabel: agentRun.input?.slice(0, 55),
-    meta: agentRun.model, ts: toTS(agentRun.status),
+    meta: agentRun.model, modelName: agentRun.model, ts: toTS(agentRun.status),
   }});
   if (agentRun.status === AgentStatus.COMPLETED) done.add("start");
 
@@ -600,11 +686,11 @@ interface AgentExecutionDiagramProps {
 
 export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, selectedId, onNodeSelect, onDrillIn, onBack }: AgentExecutionDiagramProps) {
   const hasBack = !!onBack;
-  // Memoize so ELK only re-runs when turn or agent actually changes (not on pan/zoom state updates)
+  // buildDiagram doesn't use activeTurn (shows all turns always) — only re-run on agent/back change
   const { nodes, edges, done } = useMemo(
     () => buildDiagram(agentRun, activeTurn, hasBack),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [agentRun.id, activeTurn, hasBack],
+    [agentRun.id, hasBack],
   );
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -616,22 +702,56 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
   const panZoomRef = useRef(panZoom);
   panZoomRef.current = panZoom;
 
-  // ELK layout dimensions — needed so reaflow's useDimensions can measure
-  // the Canvas container correctly (debug view does the same via xstate canvasSize).
+  // ELK layout dimensions + per-node positions (populated after ELK runs)
   const [layoutSize, setLayoutSize] = useState({ width: 0, height: 0 });
+  type NodePos = { x: number; y: number; width: number; height: number };
+  const [nodePositions, setNodePositions] = useState<Map<string, NodePos>>(new Map());
 
-  // Reset pan + layout when the active turn or agent changes
+  // Reset pan + layout when the agent changes (NOT on turn change — we pan instead)
   useEffect(() => {
     setPanZoom({ x: 40, y: 40, zoom: 1 });
     setLayoutSize({ width: 0, height: 0 });
-  }, [agentRun.id, activeTurn]);
+    setNodePositions(new Map());
+  }, [agentRun.id]);
 
-  // Called by reaflow after ELK computes layout — capture the layout dimensions
+  // Called by reaflow after ELK computes layout — capture dimensions + per-node positions
   const handleLayoutChange = useCallback((result: any) => {
     if (result?.width > 0 && result?.height > 0) {
       setLayoutSize({ width: result.width, height: result.height });
+      const positions = new Map<string, NodePos>();
+      for (const child of result.children ?? []) {
+        if (child.id && child.x != null) {
+          positions.set(child.id, { x: child.x, y: child.y, width: child.width, height: child.height });
+        }
+      }
+      setNodePositions(positions);
     }
   }, []);
+
+  // Pan to center the selected turn's node when activeTurn changes
+  const prevTurnRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevTurnRef.current === null) {
+      prevTurnRef.current = activeTurn;
+      return;
+    }
+    if (prevTurnRef.current === activeTurn) return;
+    prevTurnRef.current = activeTurn;
+
+    if (!viewportRef.current || nodePositions.size === 0) return;
+
+    const firstTurn = agentRun.turns[0]?.turnNumber ?? 1;
+    const targetId = activeTurn === firstTurn ? "start" : `turn-sep-${activeTurn}`;
+    const pos = nodePositions.get(targetId);
+    if (!pos) return;
+
+    const { offsetHeight: vh } = viewportRef.current;
+    const nodeCenterY = pos.y + pos.height / 2;
+    setPanZoom(prev => ({
+      ...prev,
+      y: vh / 2 - nodeCenterY * prev.zoom,
+    }));
+  }, [activeTurn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Zoom control callbacks ────────────────────────────────────────────────────
   const handleReset = useCallback(() => {

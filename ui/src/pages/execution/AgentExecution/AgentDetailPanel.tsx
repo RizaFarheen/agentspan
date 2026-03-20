@@ -2,15 +2,15 @@
  * AgentDetailPanel — right-hand panel matching Conductor's task detail style.
  * Tabs: Summary | Input | Output | JSON
  */
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Box, Paper, Typography, IconButton, Select, MenuItem } from "@mui/material";
-import { X as CloseIcon, ArrowRight } from "@phosphor-icons/react";
+import { X as CloseIcon, ArrowRight, Scissors } from "@phosphor-icons/react";
 import { Tab, Tabs } from "components";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgentEvent, AgentRunData, AgentStatus, EventType } from "./types";
-import { formatTokens, formatDuration } from "./agentExecutionUtils";
+import { formatTokens, formatDuration, getModelIconPath } from "./agentExecutionUtils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -168,24 +168,157 @@ function StatusChip({ status }: { status: AgentStatus }) {
 // Keep old name as alias for backward compat within this file
 const StatusBadgeInline = StatusChip;
 
+// ─── Model display with provider icon ─────────────────────────────────────────
+
+function ModelValue({ model }: { model: string }) {
+  const icon = getModelIconPath(model);
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+      {icon && <img src={icon} style={{ width: 14, height: 14, objectFit: "contain", flexShrink: 0 }} alt="" />}
+      {model}
+    </Box>
+  );
+}
+
+// ─── Context condensation banner ──────────────────────────────────────────────
+
+function CondensationBanner({ info }: { info: NonNullable<AgentEvent["condensationInfo"]> }) {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 1,
+        mx: 2,
+        my: 1,
+        px: 1.25,
+        py: 0.75,
+        borderRadius: 1,
+        backgroundColor: "#e1f5fe",
+        border: "1px dashed #0288d1",
+        color: "#0277bd",
+      }}
+    >
+      <Scissors size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+      <Box>
+        <Typography sx={{ fontWeight: 700, fontSize: "0.75rem", lineHeight: 1.4 }}>
+          Context condensed before this call
+        </Typography>
+        <Typography sx={{ fontSize: "0.72rem", lineHeight: 1.5, opacity: 0.85 }}>
+          {info.messagesBefore} → {info.messagesAfter} messages
+          &nbsp;·&nbsp;{info.exchangesCondensed} exchange{info.exchangesCondensed !== 1 ? "s" : ""} summarized
+          &nbsp;·&nbsp;{info.trigger}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 // ─── Agent definition section ─────────────────────────────────────────────────
 
-function getToolName(t: unknown): string {
+function getItemName(t: unknown, fallback = "[item]"): string {
   if (typeof t === "string") return t;
   if (t && typeof t === "object") {
     const o = t as Record<string, unknown>;
     const n = o.name ?? o._worker_ref ?? (o.function as any)?.name;
     if (typeof n === "string" && n) return n;
   }
-  return "[tool]";
+  return fallback;
+}
+
+function TagList({ items, color, bg, border }: { items: string[]; color: string; bg: string; border: string }) {
+  return (
+    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+      {items.slice(0, 12).map((name, i) => (
+        <Box key={i} sx={{ px: 0.75, py: 0.25, borderRadius: 0.5, backgroundColor: bg, border: `1px solid ${border}`, fontSize: "0.72rem", color }}>
+          {name}
+        </Box>
+      ))}
+      {items.length > 12 && (
+        <Box sx={{ fontSize: "0.72rem", color: "text.secondary", alignSelf: "center" }}>+{items.length - 12} more</Box>
+      )}
+    </Box>
+  );
+}
+
+/** Categorise a tool entry by its toolType field */
+type ToolCategory = "agent" | "tool" | "guardrail" | "http" | "mcp" | "rag";
+function toolCategory(t: Record<string, unknown>): ToolCategory {
+  const tt = (t.toolType as string | undefined)?.toLowerCase() ?? "";
+  if (tt === "agent_tool" || tt === "agent") return "agent";
+  if (tt === "guardrail") return "guardrail";
+  if (tt === "http") return "http";
+  if (tt === "mcp") return "mcp";
+  if (tt === "rag") return "rag";
+  return "tool"; // worker, tool, simple, or unknown
+}
+
+/** Compact card for an agent_tool entry (shows model + nested tools + instructions) */
+function AgentToolCard({ tool }: { tool: Record<string, unknown> }) {
+  const name = getItemName(tool);
+  const agentConfig = (tool.config as any)?.agentConfig as Record<string, unknown> | undefined;
+  const model = (agentConfig?.model ?? tool.model) as string | undefined;
+  const nestedTools = (agentConfig?.tools ?? tool.tools) as Array<unknown> | undefined;
+  const instructions = (agentConfig?.instructions) as string | undefined;
+  const iconPath = getModelIconPath(model);
+
+  return (
+    <Box sx={{
+      border: "1px solid #d1d9f5", borderRadius: 1,
+      backgroundColor: "#f8f9ff", p: 1, mb: 0.5,
+    }}>
+      {/* Name + model */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
+        <Typography sx={{ fontWeight: 600, fontSize: "0.78rem", color: "#4969e4" }}>{name}</Typography>
+        {model && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+            {iconPath && <img src={iconPath} style={{ width: 11, height: 11, objectFit: "contain" }} alt="" />}
+            <Typography sx={{ fontSize: "0.68rem", color: "text.disabled" }}>{model}</Typography>
+          </Box>
+        )}
+      </Box>
+      {/* Instructions snippet */}
+      {instructions && (
+        <Typography sx={{ fontSize: "0.7rem", color: "text.secondary", lineHeight: 1.4, mb: nestedTools?.length ? 0.5 : 0 }}>
+          {instructions.slice(0, 100)}{instructions.length > 100 ? "…" : ""}
+        </Typography>
+      )}
+      {/* Nested tools */}
+      {nestedTools && nestedTools.length > 0 && (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.4 }}>
+          {nestedTools.slice(0, 8).map((nt, i) => (
+            <Box key={i} sx={{ px: 0.5, py: 0.15, borderRadius: 0.5, backgroundColor: "#e8eeff", border: "1px solid #c7d2fc", fontSize: "0.66rem", color: "#6366f1" }}>
+              {getItemName(nt)}
+            </Box>
+          ))}
+          {nestedTools.length > 8 && <Box sx={{ fontSize: "0.66rem", color: "text.disabled", alignSelf: "center" }}>+{nestedTools.length - 8}</Box>}
+        </Box>
+      )}
+    </Box>
+  );
 }
 
 function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
   const instructions = (agentDef.instructions ?? agentDef.description) as string | undefined;
-  const tools = agentDef.tools as Array<unknown> | undefined;
+  const allTools = (agentDef.tools as Array<Record<string, unknown>> | undefined) ?? [];
+  const guardrailsDef = (agentDef.guardrails as Array<unknown> | undefined) ?? [];
   const defModel = agentDef.model as string | undefined;
 
-  if (!instructions && !tools?.length && !defModel) return null;
+  // Split tools by category
+  const agentTools    = allTools.filter(t => toolCategory(t) === "agent");
+  const regularTools  = allTools.filter(t => toolCategory(t) === "tool");
+  const guardrailTools = allTools.filter(t => toolCategory(t) === "guardrail");
+  const httpTools     = allTools.filter(t => toolCategory(t) === "http");
+  const mcpTools      = allTools.filter(t => toolCategory(t) === "mcp");
+  const ragTools      = allTools.filter(t => toolCategory(t) === "rag");
+
+  const guardrailNames = [
+    ...guardrailTools.map(g => getItemName(g)),
+    ...guardrailsDef.map(g => getItemName(g)),
+  ];
+
+  const hasContent = instructions || allTools.length || guardrailsDef.length || defModel;
+  if (!hasContent) return null;
 
   return (
     <Box sx={{ borderTop: "1px solid rgba(0,0,0,0.06)", mt: 1 }}>
@@ -196,30 +329,62 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
       }}>
         Agent Definition
       </Typography>
-      {defModel && <SummaryRow label="Configured model" value={defModel} />}
-      {tools && tools.length > 0 && (
+
+      {defModel && <SummaryRow label="Configured model" value={<ModelValue model={defModel} />} />}
+
+      {/* Agent tools — each shown as a mini card */}
+      {agentTools.length > 0 && (
         <SummaryRow
-          label={`Tools (${tools.length})`}
+          label={`Agents (${agentTools.length})`}
           value={
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-              {tools.slice(0, 12).map((t, i) => (
-                <Box key={i} sx={{
-                  px: 0.75, py: 0.25, borderRadius: 0.5,
-                  backgroundColor: "#f0f4ff", border: "1px solid #d1d9f5",
-                  fontSize: "0.72rem", color: "#4969e4",
-                }}>
-                  {getToolName(t)}
-                </Box>
-              ))}
-              {tools.length > 12 && (
-                <Box sx={{ fontSize: "0.72rem", color: "text.secondary", alignSelf: "center" }}>
-                  +{tools.length - 12} more
-                </Box>
-              )}
+            <Box>
+              {agentTools.map((t, i) => <AgentToolCard key={i} tool={t} />)}
             </Box>
           }
         />
       )}
+
+      {/* Regular tools (worker, tool, simple) */}
+      {regularTools.length > 0 && (
+        <SummaryRow
+          label={`Tools (${regularTools.length})`}
+          value={<TagList items={regularTools.map(t => getItemName(t))} color="#4969e4" bg="#f0f4ff" border="#d1d9f5" />}
+        />
+      )}
+
+      {/* HTTP tools */}
+      {httpTools.length > 0 && (
+        <SummaryRow
+          label={`HTTP (${httpTools.length})`}
+          value={<TagList items={httpTools.map(t => getItemName(t))} color="#0369a1" bg="#f0f9ff" border="#bae6fd" />}
+        />
+      )}
+
+      {/* MCP tools */}
+      {mcpTools.length > 0 && (
+        <SummaryRow
+          label={`MCP (${mcpTools.length})`}
+          value={<TagList items={mcpTools.map(t => getItemName(t))} color="#7c3aed" bg="#faf5ff" border="#e9d5ff" />}
+        />
+      )}
+
+      {/* RAG tools */}
+      {ragTools.length > 0 && (
+        <SummaryRow
+          label={`RAG (${ragTools.length})`}
+          value={<TagList items={ragTools.map(t => getItemName(t))} color="#b45309" bg="#fffbeb" border="#fde68a" />}
+        />
+      )}
+
+      {/* Guardrails (from both tools list and agentDef.guardrails) */}
+      {guardrailNames.length > 0 && (
+        <SummaryRow
+          label={`Guardrails (${guardrailNames.length})`}
+          value={<TagList items={guardrailNames} color="#0369a1" bg="#e0f2fe" border="#bae6fd" />}
+        />
+      )}
+
+      {/* Instructions */}
       {instructions && (
         <SummaryRow
           label="Instructions"
@@ -228,9 +393,9 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
               m: 0, fontSize: "0.78rem", fontFamily: "inherit",
               whiteSpace: "pre-wrap", wordBreak: "break-word",
               color: "text.secondary", lineHeight: 1.5,
-              maxHeight: 120, overflowY: "auto",
+              maxHeight: 180, overflowY: "auto",
             }}>
-              {instructions.slice(0, 400)}{instructions.length > 400 ? "…" : ""}
+              {instructions}
             </Box>
           }
         />
@@ -244,7 +409,7 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
 type WindowItem = { type: "chip"; idx: number } | { type: "gap"; from: number; to: number };
 
 function buildWindow(total: number, sel: number): WindowItem[] {
-  if (total <= 9) return Array.from({ length: total }, (_, i) => ({ type: "chip" as const, idx: i }));
+  if (total <= 10) return Array.from({ length: total }, (_, i) => ({ type: "chip" as const, idx: i }));
   const visible = new Set(
     [0, 1, total - 2, total - 1,
      Math.max(0, sel - 2), Math.max(0, sel - 1), sel,
@@ -288,13 +453,13 @@ function RunBar({ count, statuses, selected, onSelect, labels }: RunBarProps) {
                 appearance: "none", fontFamily: "inherit", cursor: "pointer",
                 minWidth: 32, height: 24, px: 0.5,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                backgroundColor: active ? color : "#fff",
-                color: active ? "#fff" : "#858585",
+                backgroundColor: "#fff",
+                color: active ? color : "#858585",
                 border: `1px solid ${active ? color : "#DDDDDD"}`,
                 borderRadius: "3px",
                 fontSize: "0.65rem", fontWeight: active ? 700 : 500,
                 transition: "all 0.1s", outline: "none",
-                "&:hover": { borderColor: color, color: active ? "#fff" : color, backgroundColor: active ? color : `${color}12` },
+                "&:hover": { borderColor: color, color: color, backgroundColor: `${color}0d` },
               }}
             >
               {idx + 1}
@@ -382,7 +547,7 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
           <Box>
             <SummaryTable>
               <SummaryRow label="Agent" value={selAgent.agentName} />
-              {selAgent.model && <SummaryRow label="Model" value={selAgent.model} />}
+              {selAgent.model && <SummaryRow label="Model" value={<ModelValue model={selAgent.model} />} />}
               <SummaryRow label="Status" value={<StatusBadgeInline status={selAgent.status} />} />
               {selAgent.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(selAgent.totalDurationMs)} />}
               {(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens) > 0 && (
@@ -446,21 +611,65 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
   );
 }
 
+// ─── Lazy-fetch sub-agent definition (model + agentDef) ──────────────────────
+
+interface SubAgentFetchResult {
+  model?: string;
+  agentDef?: Record<string, unknown>;
+}
+
+function useSubAgentDef(run: AgentRunData | undefined): { data: SubAgentFetchResult | null; loading: boolean } {
+  const [data, setData] = useState<SubAgentFetchResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Already have definition data or no sub-workflow to fetch
+    if (!run?.subWorkflowId || run.agentDef || run.model) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/workflow/${run.subWorkflowId}?summarize=true`)
+      .then(r => r.ok ? r.json() : null)
+      .then((exec: any) => {
+        if (!exec || cancelled) return;
+        const agentDef = exec.workflowDefinition?.metadata?.agentDef as Record<string, unknown> | undefined;
+        const model = (exec.tasks as any[] | undefined)
+          ?.find((t: any) => t.taskType === "LLM_CHAT_COMPLETE")
+          ?.inputData?.model as string | undefined;
+        if (!cancelled) setData({ model, agentDef });
+      })
+      .catch(() => { if (!cancelled) setData(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [run?.subWorkflowId, run?.agentDef, run?.model]);
+
+  return { data, loading };
+}
+
 // ─── Summary tab content per node kind ──────────────────────────────────────
 
 function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?: (run: AgentRunData) => void }) {
   const ev = node.event;
   const detail = ev?.detail as any;
 
+  // Lazy-load sub-agent definition for subagent/start nodes that don't have it yet
+  const agentRun = (node.kind === "subagent" || node.kind === "start") ? node.subAgentRun : undefined;
+  const { data: fetchedDef, loading: defLoading } = useSubAgentDef(agentRun);
+
   if (node.kind === "start" && node.subAgentRun) {
     const run = node.subAgentRun;
+    const effectiveModel = run.model ?? fetchedDef?.model;
+    const effectiveAgentDef = run.agentDef ?? fetchedDef?.agentDef;
     const pt = run.totalTokens.promptTokens;
     const ct = run.totalTokens.completionTokens;
     return (
       <Box>
         <SummaryTable>
           <SummaryRow label="Agent" value={run.agentName} />
-          {run.model && <SummaryRow label="Model" value={run.model} />}
+          {effectiveModel && <SummaryRow label="Model" value={<ModelValue model={effectiveModel} />} />}
           <SummaryRow label="Status" value={<StatusBadgeInline status={run.status} />} />
           {run.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(run.totalDurationMs)} />}
           {(pt + ct) > 0 && <SummaryRow label="Total tokens" value={formatTokens(pt + ct)} />}
@@ -484,7 +693,10 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
             </Box>
           </Box>
         )}
-        {run.agentDef && <AgentDefSection agentDef={run.agentDef} />}
+        {defLoading && !effectiveAgentDef && (
+          <Box sx={{ px: 3, py: 1.5, color: "text.disabled", fontSize: "0.75rem" }}>Loading agent definition…</Box>
+        )}
+        {effectiveAgentDef && <AgentDefSection agentDef={effectiveAgentDef} />}
       </Box>
     );
   }
@@ -493,10 +705,11 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
     const tok = ev?.tokens;
     return (
       <Box>
+        {ev?.condensationInfo && <CondensationBanner info={ev.condensationInfo} />}
         <SummaryTable>
           <SummaryRow label="Kind" value="LLM Call" />
           <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
-          {ev?.toolName && <SummaryRow label="Model" value={ev.toolName} />}
+          {ev?.toolName && <SummaryRow label="Model" value={<ModelValue model={ev.toolName} />} />}
           {tok && (tok.promptTokens + tok.completionTokens) > 0 && <SummaryRow label="Total tokens" value={formatTokens(tok.promptTokens + tok.completionTokens)} />}
           {tok && tok.promptTokens > 0 && <SummaryRow label="Prompt tokens" value={formatTokens(tok.promptTokens)} />}
           {tok && tok.completionTokens > 0 && <SummaryRow label="Completion tokens" value={formatTokens(tok.completionTokens)} />}
@@ -546,20 +759,59 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
     );
   }
 
+  // Gate event (GUARDRAIL_PASS/FAIL with toolName === "gate")
+  if ((node.kind === "output" || node.kind === "error") && ev?.toolName === "gate") {
+    const gateDetail = ev.detail as Record<string, unknown> | undefined;
+    const gateCfg = gateDetail?.gate as Record<string, unknown> | undefined;
+    const decision = gateDetail?.decision as string | undefined;
+    const stopped = decision === "stop";
+    return (
+      <Box>
+        <Box sx={{
+          mx: 2, my: 1, px: 1.25, py: 0.75, borderRadius: 1,
+          backgroundColor: stopped ? "#fff5f5" : "#f0fdf4",
+          border: `1px solid ${stopped ? "#fca5a5" : "#86efac"}`,
+        }}>
+          <Typography sx={{ fontWeight: 700, fontSize: "0.8rem", color: stopped ? "#dc2626" : "#16a34a" }}>
+            {stopped ? "Gate triggered — chain stopped" : "Gate passed — chain continues"}
+          </Typography>
+        </Box>
+        <SummaryTable>
+          <SummaryRow label="Decision" value={
+            <span style={{ fontWeight: 600, color: stopped ? "#dc2626" : "#16a34a" }}>
+              {decision ?? "continue"}
+            </span>
+          } />
+          {gateCfg?.type != null && <SummaryRow label="Gate type" value={String(gateCfg.type)} />}
+          {gateCfg?.text != null && <SummaryRow label="Sentinel text" value={
+            <Box component="code" sx={{ fontSize: "0.78rem", backgroundColor: "#f1f5f9", px: 0.5, py: 0.15, borderRadius: 0.5, fontFamily: "monospace" }}>
+              {String(gateCfg.text)}
+            </Box>
+          } />}
+          {gateCfg?.caseSensitive != null && <SummaryRow label="Case sensitive" value={String(gateCfg.caseSensitive)} />}
+          {ev.durationMs && <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} />}
+        </SummaryTable>
+      </Box>
+    );
+  }
+
   if (node.kind === "subagent" && node.subAgentRun) {
     const run = node.subAgentRun;
+    const effectiveModel = run.model ?? fetchedDef?.model;
+    const effectiveAgentDef = run.agentDef ?? fetchedDef?.agentDef;
     const pt = run.totalTokens.promptTokens;
     const ct = run.totalTokens.completionTokens;
     return (
       <Box>
         <SummaryTable>
           <SummaryRow label="Agent" value={run.agentName} />
-          {run.model && <SummaryRow label="Model" value={run.model} />}
+          {effectiveModel && <SummaryRow label="Model" value={<ModelValue model={effectiveModel} />} />}
           <SummaryRow label="Status" value={<StatusBadgeInline status={run.status} />} />
           {run.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(run.totalDurationMs)} />}
           {(pt + ct) > 0 && <SummaryRow label="Total tokens" value={formatTokens(pt + ct)} />}
           {pt > 0 && <SummaryRow label="Prompt tokens" value={formatTokens(pt)} />}
           {ct > 0 && <SummaryRow label="Completion tokens" value={formatTokens(ct)} />}
+          {run.failureReason && <SummaryRow label="Failure reason" value={<span style={{ color: "#DC2626" }}>{run.failureReason}</span>} />}
         </SummaryTable>
         {onDrillIn && (
           <Box sx={{ px: 2, py: 1 }}>
@@ -577,7 +829,10 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
             </Box>
           </Box>
         )}
-        {run.agentDef && <AgentDefSection agentDef={run.agentDef} />}
+        {defLoading && !effectiveAgentDef && (
+          <Box sx={{ px: 3, py: 1.5, color: "text.disabled", fontSize: "0.75rem" }}>Loading agent definition…</Box>
+        )}
+        {effectiveAgentDef && <AgentDefSection agentDef={effectiveAgentDef} />}
       </Box>
     );
   }
@@ -611,7 +866,8 @@ function resolveOutput(node: DetailNodeData): unknown {
   if (node.kind === "subagent" && node.subAgentRun) return node.subAgentRun.output;
   const detail = node.event?.detail as any;
   if (detail && typeof detail === "object" && "output" in detail) return detail.output;
-  if (node.event?.type === EventType.DONE) return detail;
+  // DONE and MESSAGE both carry the text content directly as detail
+  if (node.event?.type === EventType.DONE || node.event?.type === EventType.MESSAGE) return detail;
   // Fallback: result field carries tool output
   if (node.event?.result != null) return node.event.result;
   return null;
@@ -666,6 +922,9 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
       <Paper square elevation={0} sx={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", borderLeft: "1px solid", borderColor: "divider", backgroundColor: "#fff" }}>
         <Box sx={{ px: 2.5, pt: 2, pb: 1.5, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
           <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+            <IconButton size="small" onClick={onClose} sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, mt: 0.25, "&:hover": { color: "text.primary" } }}>
+              <CloseIcon size={14} />
+            </IconButton>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.5 }}>
                 <Typography sx={{ fontWeight: 700, fontSize: "1rem", lineHeight: 1.3, color: "text.primary", wordBreak: "break-word" }}>
@@ -677,9 +936,6 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
                 {node.groupType === "agents" ? "Parallel Agents" : "Parallel Tool Calls"}
               </Typography>
             </Box>
-            <IconButton size="small" onClick={onClose} sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, mt: 0.25, "&:hover": { color: "text.primary" } }}>
-              <CloseIcon size={14} />
-            </IconButton>
           </Box>
         </Box>
         <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
@@ -712,6 +968,12 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
         flexShrink: 0, backgroundColor: "#fff",
       }}>
         <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+          <IconButton
+            size="small" onClick={onClose}
+            sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, mt: 0.25, "&:hover": { color: "text.primary" } }}
+          >
+            <CloseIcon size={14} />
+          </IconButton>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {/* Name + status badge inline */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.5 }}>
@@ -725,12 +987,6 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
               {KIND_DISPLAY[node.kind]}
             </Typography>
           </Box>
-          <IconButton
-            size="small" onClick={onClose}
-            sx={{ width: 26, height: 26, color: "text.disabled", flexShrink: 0, mt: 0.25, "&:hover": { color: "text.primary" } }}
-          >
-            <CloseIcon size={14} />
-          </IconButton>
         </Box>
       </Box>
 
