@@ -44,7 +44,7 @@ const executionFields: LegacyColumn[] = [
   {
     id: "workflowType",
     name: "workflowType",
-    label: "Workflow Name",
+    label: "Agent Name",
     grow: 2,
     sortable: true,
     tooltip: "The name of the workflow.",

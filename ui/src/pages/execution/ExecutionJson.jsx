@@ -31,7 +31,7 @@ export default function ExecutionJson({ execution }) {
       <ReactJson
         src={execution}
         initialCollapse={true}
-        title="Complete Workflow JSON"
+        title="Complete Agent JSON"
         theme={theme}
         indentWidth={2}
         workflowName={execution.workflowName}

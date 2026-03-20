@@ -227,7 +227,7 @@ export const WorkflowPropertiesForm: FunctionComponent<
               >
                 <PanelAccordion
                   id="workflow-details-panel-accordion"
-                  title="Workflow Details"
+                  title="Agent Details"
                   defaultExpanded
                 >
                   <TaskFormSection title="Name and Description">
@@ -240,7 +240,7 @@ export const WorkflowPropertiesForm: FunctionComponent<
                               label="Name"
                               value={name ? name : ""}
                               onTextInputChange={(value) => onChange(value)}
-                              helperText="Workflow name must be unique."
+                              helperText="Agent name must be unique."
                               fullWidth
                               id="workflow-name-field"
                             />
@@ -281,7 +281,7 @@ export const WorkflowPropertiesForm: FunctionComponent<
                       aria-label="schema and parameters tabs"
                     >
                       <Tab label="Input and Output Parameters" />
-                      <Tab label="Workflow Schema" />
+                      <Tab label="Agent Schema" />
                     </Tabs>
                   </Box>
                   {activeTab === 0 && (

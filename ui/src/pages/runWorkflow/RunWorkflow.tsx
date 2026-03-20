@@ -523,7 +523,7 @@ export function RunWorkflow() {
   return (
     <>
       <Helmet>
-        <title>Run Workflow</title>
+        <title>Run Agent</title>
       </Helmet>
       {showCodeDialog && (
         <RunWorkflowApiSearchModal
@@ -541,7 +541,7 @@ export function RunWorkflow() {
           header={
             <SectionHeader
               _deprecate_marginTop={0}
-              title="Run Workflow"
+              title="Run Agent"
               actions={
                 <>
                   <Button
@@ -600,7 +600,7 @@ export function RunWorkflow() {
                 }}
                 severity="success"
               >
-                Workflow created :&nbsp;
+                Agent created :&nbsp;
                 <NavLink
                   id="workflow-execution-id"
                   path={`/execution/${runWorkflowState.lastCreatedWorkflowId}`}

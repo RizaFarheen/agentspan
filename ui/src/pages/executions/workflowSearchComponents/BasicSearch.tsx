@@ -428,7 +428,7 @@ export default function BasicSearch({
               <ConductorAutoComplete
                 id="workflow-search-name-dropdown"
                 fullWidth
-                label="Workflow name"
+                label="Agent name"
                 options={workflowNames.sort((a, b) =>
                   a.toLowerCase().localeCompare(b.toLowerCase()),
                 )}
@@ -497,7 +497,7 @@ export default function BasicSearch({
                 error={correlationIdHasError}
                 conductorInputProps={{
                   tooltip: {
-                    title: "Get Workflows by Correlation ID",
+                    title: "Get Agents by Correlation ID",
                     content:
                       "Search workflows by Correlation ID. This field has support for multiple values, so please remember to press 'Enter' for each value to apply the search.",
                   },

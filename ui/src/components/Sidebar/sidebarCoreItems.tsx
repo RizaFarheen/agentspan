@@ -88,7 +88,7 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
       items: [
         {
           id: "workflowExeItem",
-          title: "Workflow",
+          title: "Agents",
           icon: null,
           linkTo: "/executions",
           activeRoutes: [WORKFLOW_EXECUTION_URL.WF_ID_TASK_ID],
@@ -112,7 +112,7 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
     // Run Workflow button
     {
       id: "runWorkflow",
-      title: "Run Workflow",
+      title: "Run Agent",
       icon: <PlayIcon />,
       linkTo: RUN_WORKFLOW_URL,
       shortcuts: [],
@@ -147,7 +147,7 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
         },
         {
           id: "taskDefItem",
-          title: "Task",
+          title: "Tools",
           icon: null,
           linkTo: TASK_DEF_URL.BASE,
           activeRoutes: [NEW_TASK_DEF_URL, TASK_DEF_URL.NAME],
@@ -155,17 +155,6 @@ export function getCoreSidebarItems(open: boolean): MenuItemType[] {
           hotkeys: "",
           hidden: false,
           position: D.taskDefItem,
-        },
-        {
-          id: "eventHandlerDefItem",
-          title: "Event Handler",
-          icon: null,
-          linkTo: EVENT_HANDLERS_URL.BASE,
-          activeRoutes: [EVENT_HANDLERS_URL.NEW, EVENT_HANDLERS_URL.NAME],
-          shortcuts: [],
-          hotkeys: "",
-          hidden: false,
-          position: D.eventHandlerDefItem,
         },
       ],
     },

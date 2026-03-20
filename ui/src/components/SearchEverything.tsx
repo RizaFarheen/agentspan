@@ -254,7 +254,7 @@ function SearchEverything({
               sx={noResultSuggestion}
               onClick={() => handleChangeText("workflow")}
             >
-              <CaretDoubleRight color={"#000000"} /> Workflow names
+              <CaretDoubleRight color={"#000000"} /> Agent names
             </Box>
             <Box
               sx={noResultSuggestion}

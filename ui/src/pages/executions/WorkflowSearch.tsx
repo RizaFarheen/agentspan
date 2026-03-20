@@ -139,16 +139,16 @@ export default function WorkflowPanel() {
   return (
     <>
       <Helmet>
-        <title>Workflow Executions</title>
+        <title>Agent Executions</title>
       </Helmet>
       <SectionHeader
         _deprecate_marginTop={0}
-        title="Workflow Executions"
+        title="Agent Executions"
         actions={
           <SectionHeaderActions
             buttons={[
               {
-                label: "Run workflow",
+                label: "Run agent",
                 color: "secondary",
                 onClick: () => pushHistory(RUN_WORKFLOW_URL),
                 startIcon: <PlayIcon />,

@@ -50,7 +50,7 @@ const RunWorkflowButton = ({ open }: { open: boolean }) => {
         onClick={() => pushHistory(RUN_WORKFLOW_URL)}
         disabled={isTrialExpired}
       >
-        Run Workflow
+        Run Agent
       </MuiButton>
     </Box>
   );

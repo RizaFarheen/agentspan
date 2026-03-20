@@ -24,6 +24,7 @@ import "components/flow/ReaflowOverrides.scss";
 // ─── Constants ────────────────────────────────────────────────────────────────
 const W = 264;
 const H = 90;          // slightly taller to fit strategy row
+const H_GATE = 80;     // gate/decision nodes
 const MIN_ZOOM = 0.1, MAX_ZOOM = 2.5;
 const MAX_INDIVIDUAL = 8; // show individual nodes up to this count, group beyond
 
@@ -42,7 +43,7 @@ function strategyStyle(s?: string) {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DefNodeData {
-  kind: "agent" | "subagent" | "tool" | "guardrail" | "group";
+  kind: "agent" | "subagent" | "tool" | "guardrail" | "group" | "gate";
   label: string;
   sublabel?: string;       // model or instructions snippet
   badge: string;           // type label: AGENT / TOOL / GUARDRAIL / HTTP / MCP / RAG / AGENTS / TOOLS
@@ -52,8 +53,12 @@ interface DefNodeData {
   modelName?: string;
   strategy?: string;       // routing strategy (raw lowercase)
   maxTurns?: number;
+  subAgentCount?: number;  // number of nested sub-agents this agent orchestrates
   count?: number;          // for group nodes
   items?: string[];
+  // Gate-specific
+  gateType?: string;       // e.g. "text_contains"
+  gateText?: string;       // the condition value
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -77,8 +82,54 @@ function toolCat(t: Record<string, unknown>): "agent" | "tool" | "guardrail" | "
   return "tool";
 }
 
+// ─── Gate (decision / conditional) card ──────────────────────────────────────
+function GateNodeCard({ data, width, height }: { data: DefNodeData; width: number; height: number }) {
+  const typeLabel = (() => {
+    switch (data.gateType) {
+      case "text_contains":     return "contains";
+      case "text_not_contains": return "not contains";
+      case "equals":            return "equals";
+      case "not_equals":        return "≠";
+      case "regex":             return "regex";
+      default:                  return data.gateType ?? "condition";
+    }
+  })();
+
+  // Diamond: rotated inner square, text sits on top unrotated
+  const d = Math.min(width, height) * 0.88;
+
+  return (
+    <div style={{ width, height, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {/* Rotated square → diamond shape */}
+      <div style={{
+        position: "absolute",
+        width: d, height: d,
+        transform: "rotate(45deg)",
+        background: "#fffbeb",
+        border: "2px solid #f59e0b",
+        borderRadius: 6,
+      }} />
+      {/* Label (unrotated, centered) */}
+      <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: "70%", padding: "0 4px" }}>
+        <div style={{ fontSize: "0.58rem", fontWeight: 800, color: "#b45309", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>
+          gate
+        </div>
+        <div style={{ fontSize: "0.68rem", color: "#78350f", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {typeLabel}
+        </div>
+        {data.gateText && (
+          <div style={{ fontSize: "0.68rem", color: "#92400e", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            "{data.gateText}"
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Node card ────────────────────────────────────────────────────────────────
 function NodeCard({ data, width, height }: { data: DefNodeData; width: number; height: number }) {
+  if (data.kind === "gate") return <GateNodeCard data={data} width={width} height={height} />;
   const isRoot  = data.kind === "agent";
   const isGroup = data.kind === "group";
   const ss      = strategyStyle(data.strategy);
@@ -140,8 +191,8 @@ function NodeCard({ data, width, height }: { data: DefNodeData; width: number; h
         </div>
       </div>
 
-      {/* ── Bottom row: strategy pill + maxTurns ── */}
-      {(data.strategy || data.maxTurns) && (
+      {/* ── Bottom row: strategy pill + maxTurns + sub-agent count ── */}
+      {(data.strategy || data.maxTurns || (data.subAgentCount && data.subAgentCount > 0)) && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
           {data.strategy && (
             <span style={{
@@ -157,6 +208,11 @@ function NodeCard({ data, width, height }: { data: DefNodeData; width: number; h
           {data.maxTurns !== undefined && (
             <span style={{ fontSize: "0.67rem", color: "#9ca3af" }}>
               {data.maxTurns} turns
+            </span>
+          )}
+          {data.subAgentCount != null && data.subAgentCount > 0 && (
+            <span style={{ fontSize: "0.67rem", color: "#9ca3af", marginLeft: "auto" }}>
+              {data.subAgentCount} sub-agent{data.subAgentCount !== 1 ? "s" : ""}
             </span>
           )}
         </div>
@@ -236,18 +292,22 @@ function buildDefDiagram(agentDef: Record<string, unknown>) {
   // Merge all sub-agents into a unified list
   const allSubAgents = [
     ...agentsList.map(a => ({
-      name:         getItemName(a),
-      model:        a.model as string | undefined,
-      instructions: a.instructions as string | undefined,
-      strategy:     a.strategy as string | undefined,
-      maxTurns:     a.maxTurns as number | undefined,
+      name:          getItemName(a),
+      model:         a.model as string | undefined,
+      instructions:  a.instructions as string | undefined,
+      strategy:      a.strategy as string | undefined,
+      maxTurns:      a.maxTurns as number | undefined,
+      subAgentCount: ((a.agents as unknown[]) ?? []).length,
+      gate:          a.gate as Record<string, unknown> | undefined,
     })),
     ...agentToolList.map(t => ({
-      name:         getItemName(t),
-      model:        ((t.config as any)?.agentConfig?.model ?? t.model) as string | undefined,
-      instructions: ((t.config as any)?.agentConfig?.instructions) as string | undefined,
-      strategy:     t.strategy as string | undefined,
-      maxTurns:     undefined as number | undefined,
+      name:          getItemName(t),
+      model:         ((t.config as any)?.agentConfig?.model ?? t.model) as string | undefined,
+      instructions:  ((t.config as any)?.agentConfig?.instructions) as string | undefined,
+      strategy:      t.strategy as string | undefined,
+      maxTurns:      undefined as number | undefined,
+      subAgentCount: 0,
+      gate:          undefined as Record<string, unknown> | undefined,
     })),
   ];
 
@@ -277,24 +337,58 @@ function buildDefDiagram(agentDef: Record<string, unknown>) {
     edges.push({ id: `agent→${id}`, from: "agent", to: id });
   };
 
-  // ── Sub-agents (fan out in parallel from root) ────────────────────────────
+  const isSequential = strategy?.toLowerCase() === "sequential";
+
+  // ── Sub-agents: chain for sequential, fan-out otherwise ──────────────────
   if (allSubAgents.length > 0 && allSubAgents.length <= MAX_INDIVIDUAL) {
+    let prevId = "agent";
     for (let i = 0; i < allSubAgents.length; i++) {
       const sa = allSubAgents[i];
+      const id = `subagent-${i}`;
       const instSub = sa.instructions
         ? sa.instructions.slice(0, 55) + (sa.instructions.length > 55 ? "…" : "")
         : undefined;
-      addFromRoot(`subagent-${i}`, {
-        kind: "subagent",
-        label: sa.name,
-        sublabel: instSub ?? sa.model,
-        badge: "AGENT",
-        badgeColor: "#3d5fc0", badgeBg: "#e8eeff",
-        borderColor: "#93c5fd",
-        modelName: sa.model,
-        strategy: sa.strategy,
-        maxTurns: sa.maxTurns,
+      nodes.push({
+        id, width: W, height: H,
+        data: {
+          kind: "subagent",
+          label: sa.name,
+          sublabel: instSub ?? sa.model,
+          badge: "AGENT",
+          badgeColor: "#3d5fc0", badgeBg: "#e8eeff",
+          borderColor: "#93c5fd",
+          modelName: sa.model,
+          strategy: sa.strategy,
+          maxTurns: sa.maxTurns,
+          subAgentCount: sa.subAgentCount || undefined,
+        },
       });
+      if (isSequential) {
+        edges.push({ id: `${prevId}→${id}`, from: prevId, to: id });
+        prevId = id;
+
+        // If this sub-agent has a gate, insert a gate/decision node after it
+        if (sa.gate) {
+          const gateId = `gate-${i}`;
+          nodes.push({
+            id: gateId, width: W, height: H_GATE,
+            data: {
+              kind: "gate",
+              label: "Gate",
+              badge: "GATE",
+              badgeColor: "#b45309", badgeBg: "#fef3c7",
+              borderColor: "#f59e0b",
+              gateType: sa.gate.type as string | undefined,
+              gateText: sa.gate.text as string | undefined,
+            },
+          });
+          edges.push({ id: `${id}→${gateId}`, from: id, to: gateId });
+          prevId = gateId;
+        }
+      } else {
+        // Fan-out: all connect directly from root
+        edges.push({ id: `agent→${id}`, from: "agent", to: id });
+      }
     }
   } else if (allSubAgents.length > MAX_INDIVIDUAL) {
     addFromRoot("subagents", {

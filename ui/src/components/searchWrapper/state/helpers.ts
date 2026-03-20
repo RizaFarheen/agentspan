@@ -144,7 +144,7 @@ export const searchResultExtractor = ({
 
   const workflowDefinitionsSub = searchResultsToRoutes(wfSearchResult, {
     routePrefix: WORKFLOW_DEFINITION_URL.BASE,
-    viewAllTitle: "View all workflow definitions",
+    viewAllTitle: "View all agent definitions",
     toSuffix: fromName,
     toLabel: fromName,
   });
@@ -160,7 +160,7 @@ export const searchResultExtractor = ({
   });
 
   const emptyOutput = [
-    { title: "Workflows", sub: [], route: WORKFLOW_DEFINITION_URL.BASE },
+    { title: "Agents", sub: [], route: WORKFLOW_DEFINITION_URL.BASE },
     { title: "Task Definitions", sub: [], route: TASK_DEF_URL.BASE },
     { title: "Schedules", sub: [], route: SCHEDULER_DEFINITION_URL.BASE },
     { title: "Events", sub: [], route: EVENT_HANDLERS_URL.BASE },

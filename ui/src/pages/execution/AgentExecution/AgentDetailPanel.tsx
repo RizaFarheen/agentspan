@@ -949,8 +949,9 @@ export function AgentDetailPanel({ node, onClose, onDrillIn }: AgentDetailPanelP
   const outputValue = resolveOutput(node);
   const jsonData    = resolveJsonData(node);
 
+  const isAgentNode = node.kind === "start" || node.kind === "subagent";
   const hasInput  = inputValue  != null;
-  const hasOutput = outputValue != null;
+  const hasOutput = outputValue != null || isAgentNode;
 
   return (
     <Paper

@@ -116,7 +116,7 @@ export default function WorkflowDefinitions() {
       {
         id: "workflow_name",
         name: "name",
-        label: "Workflow name",
+        label: "Agent name",
         renderer: (val: string) => {
           return (
             <NavLink
@@ -258,7 +258,7 @@ export default function WorkflowDefinitions() {
         renderer: (name: string, workflowRowData: WorkflowDef) => {
           return (
             <Box style={{ display: "flex", justifyContent: "space-evenly" }}>
-              <Tooltip title={"Run workflow"}>
+              <Tooltip title={"Run agent"}>
                 <IconButton
                   id={`run-${workflowRowData.name}-btn`}
                   disabled={isTrialExpired}
@@ -289,7 +289,7 @@ export default function WorkflowDefinitions() {
                 </IconButton>
               </Tooltip>
 
-              <Tooltip title={"Clone Workflow"}>
+              <Tooltip title={"Clone agent"}>
                 <IconButton
                   onClick={() =>
                     setSelectedWorkflowWithAction({
@@ -324,7 +324,7 @@ export default function WorkflowDefinitions() {
                 </IconButton>
               </Tooltip>
 
-              <Tooltip title={"Delete workflow"}>
+              <Tooltip title={"Delete agent"}>
                 <IconButton
                   id={`delete-${workflowRowData.name}-btn`}
                   disabled={isTrialExpired}
@@ -463,7 +463,7 @@ export default function WorkflowDefinitions() {
           <SectionHeaderActions
             buttons={[
               {
-                label: "Run workflow",
+                label: "Run agent",
                 color: "secondary",
                 onClick: () => pushHistory(RUN_WORKFLOW_URL),
                 startIcon: <PlayIcon />,
@@ -482,7 +482,7 @@ export default function WorkflowDefinitions() {
             <DataTable
               localStorageKey="workflowsTable"
               quickSearchEnabled
-              quickSearchPlaceholder="Search workflow definitions"
+              quickSearchPlaceholder="Search agent definitions"
               searchTerm={searchParam}
               onSearchTermChange={setSearchParam}
               defaultShowColumns={[
@@ -503,7 +503,7 @@ export default function WorkflowDefinitions() {
               filterByTags
               customActions={[
                 <Tooltip
-                  title="Refresh workflow definitions"
+                  title="Refresh agent definitions"
                   key={"rfrshWdefs"}
                 >
                   <Button

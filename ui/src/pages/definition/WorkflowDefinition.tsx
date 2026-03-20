@@ -59,7 +59,7 @@ export default function Workflow() {
       )}
       <Box sx={sharedStyles.wrapper}>
         <Helmet>
-          <title>Workflow Definition - {workflowName || "NEW"}</title>
+          <title>Agent Definition - {workflowName || "NEW"}</title>
         </Helmet>
         <SnackbarMessage
           message={message?.text as string}

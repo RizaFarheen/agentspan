@@ -422,6 +422,19 @@ function transformChainWorkflowToAgentRun(execution: WorkflowExecution): AgentRu
       ? (execInput.prompt || execInput.conversation || execInput.message || undefined)
     : undefined;
 
+  // Root output: last step's result, or workflow output field
+  const lastStep = sortedSteps[sortedSteps.length - 1];
+  let chainOutput: string | undefined;
+  if (lastStep) {
+    const r = lastStep[1].outputData?.result;
+    if (typeof r === "string" && r.length > 0) chainOutput = r;
+  }
+  if (!chainOutput && execution.output) {
+    const wfOut = execution.output;
+    const candidate = wfOut.result ?? wfOut.output ?? wfOut.message;
+    if (typeof candidate === "string" && (candidate as string).length > 0) chainOutput = candidate as string;
+  }
+
   return {
     id: execution.workflowId,
     agentName: (execution as any).workflowName ?? execution.workflowType ?? "agent",
@@ -433,6 +446,7 @@ function transformChainWorkflowToAgentRun(execution: WorkflowExecution): AgentRu
     finishReason,
     strategy: AgentStrategy.SEQUENTIAL,
     input: agentInput,
+    output: chainOutput,
   };
 }
 
@@ -710,6 +724,9 @@ export function transformWorkflowExecutionToAgentRun(
       }
 
       // Tool worker events — ONE combined block per call showing input + output
+      // Track whether a HANDOFF was already emitted this turn to avoid duplicates.
+      let handoffEmittedThisTurn = false;
+
       for (const toolTask of toolWorkerTasks) {
         const idData = (toolTask.inputData ?? {}) as Record<string, unknown>;
         const od = (toolTask.outputData ?? {}) as Record<string, unknown>;
@@ -725,13 +742,42 @@ export function transformWorkflowExecutionToAgentRun(
           Object.entries(idData).filter(([k]) => k !== "_agent_state"),
         );
 
-        // Detect transfer-check tasks by output shape { is_transfer: bool, transfer_to: string }
-        // These are orchestration-infrastructure tasks (e.g. coder_check_transfer__N), NOT user tools.
+        // ── Handoff / transfer tools ──────────────────────────────────────────
+        // Tools named transfer_to_* or handoff_to_* are agent-handoff mechanisms,
+        // not real user tools. Convert them to a HANDOFF event.
+        const isHandoffTool =
+          /^(transfer_to_|handoff_to_|route_to_|delegate_to_)/i.test(toolName);
+        if (isHandoffTool) {
+          // Extract target agent name: everything after the prefix
+          const target =
+            toolName
+              .replace(/^(transfer_to_|handoff_to_|route_to_|delegate_to_)/i, "")
+              .replace(/_/g, " ")
+              .trim() || toolName;
+          if (!handoffEmittedThisTurn) {
+            events.push({
+              id: `${toolTask.taskId}-handoff`,
+              type: EventType.HANDOFF,
+              timestamp: toolTask.endTime ?? 0,
+              summary: `→ ${target}`,
+              targetAgent: target,
+              detail: { transfer_to: target },
+              durationMs: toolDuration,
+            });
+            handoffEmittedThisTurn = true;
+          }
+          continue;
+        }
+
+        // ── Transfer-check tasks (e.g. coder_check_transfer__N) ───────────────
+        // These are orchestration infrastructure tasks that confirm a handoff decision.
+        // Detected by output shape { is_transfer: bool, transfer_to: string }.
+        // Emit HANDOFF only as a fallback when no handoff tool ran.
         const isTransferCheck = "is_transfer" in od;
         if (isTransferCheck) {
           const isTransfer = od.is_transfer === true;
           const transferTo = od.transfer_to as string | undefined;
-          if (isTransfer && transferTo) {
+          if (isTransfer && transferTo && !handoffEmittedThisTurn) {
             events.push({
               id: `${toolTask.taskId}-handoff`,
               type: EventType.HANDOFF,
@@ -741,12 +787,13 @@ export function transformWorkflowExecutionToAgentRun(
               detail: { transfer_to: transferTo },
               durationMs: toolDuration,
             });
+            handoffEmittedThisTurn = true;
           }
-          // If not transferring, skip entirely — pure infra, not user-visible
+          // Always skip — pure orchestration infra, never show as a tool call
           continue;
         }
 
-        // Detect guardrail tasks by task type name convention
+        // ── Detect guardrail tasks by task type name convention ───────────────
         const isGuardrail = toolName.toLowerCase().includes("guardrail");
         if (isGuardrail) {
           events.push({
@@ -927,47 +974,76 @@ export function transformWorkflowExecutionToAgentRun(
         const failed = task.status === "FAILED";
         const dur = task.endTime && task.startTime ? task.endTime - task.startTime : 0;
         const cleanInput = Object.fromEntries(Object.entries(idData).filter(([k]) => k !== "_agent_state"));
-        const isGuardrail = task.taskType.toLowerCase().includes("guardrail");
-        if (isGuardrail) {
+
+        // Handoff/transfer tools → HANDOFF event, not TOOL_CALL
+        if (/^(transfer_to_|handoff_to_|route_to_|delegate_to_)/i.test(task.taskType)) {
+          const target = task.taskType.replace(/^(transfer_to_|handoff_to_|route_to_|delegate_to_)/i, "").replace(/_/g, " ").trim();
           rootEvents.push({
-            id: `${task.taskId}-guardrail`,
-            type: failed ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
-            timestamp: task.startTime ?? 0,
-            toolName: task.taskType,
-            summary: failed
-              ? `${task.taskType} blocked: ${task.reasonForIncompletion ?? "content blocked"}`
-              : `${task.taskType} passed`,
-            detail: { input: cleanInput, output: failed ? task.reasonForIncompletion : od },
-            success: !failed,
+            id: `${task.taskId}-handoff`,
+            type: EventType.HANDOFF,
+            timestamp: task.endTime ?? 0,
+            summary: `→ ${target}`,
+            targetAgent: target,
+            detail: { transfer_to: target },
             durationMs: dur,
           });
+        // Transfer-check infra tasks → emit HANDOFF only if is_transfer=true, else skip
+        } else if ("is_transfer" in od) {
+          if (od.is_transfer === true && od.transfer_to) {
+            rootEvents.push({
+              id: `${task.taskId}-handoff`,
+              type: EventType.HANDOFF,
+              timestamp: task.endTime ?? 0,
+              summary: `→ ${od.transfer_to}`,
+              targetAgent: od.transfer_to as string,
+              detail: { transfer_to: od.transfer_to },
+              durationMs: dur,
+            });
+          }
+          // skip regardless
         } else {
-          rootEvents.push({
-            id: `${task.taskId}-tool`,
-            type: EventType.TOOL_CALL,
-            timestamp: task.startTime ?? 0,
-            toolName: task.taskType,
-            summary: task.taskType,
-            detail: { input: cleanInput, output: failed ? task.reasonForIncompletion : od },
-            toolArgs: cleanInput,
-            result: failed ? undefined : od,
-            success: taskSuccess(task.status),
-            durationMs: dur,
-            taskMeta: {
-              taskId: task.taskId,
-              taskType: task.taskType,
-              referenceTaskName: task.referenceTaskName ?? (task as any).taskRefName,
-              scheduledTime: task.scheduledTime ?? undefined,
-              startTime: task.startTime ?? undefined,
-              endTime: task.endTime ?? undefined,
-              workerId: (task as any).workerId ?? undefined,
-              reasonForIncompletion: task.reasonForIncompletion ?? undefined,
-              retryCount: task.retryCount,
-              pollCount: task.pollCount,
-              seq: task.seq,
-              queueWaitTime: task.queueWaitTime,
-            },
-          });
+          const isGuardrail = task.taskType.toLowerCase().includes("guardrail");
+          if (isGuardrail) {
+            rootEvents.push({
+              id: `${task.taskId}-guardrail`,
+              type: failed ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
+              timestamp: task.startTime ?? 0,
+              toolName: task.taskType,
+              summary: failed
+                ? `${task.taskType} blocked: ${task.reasonForIncompletion ?? "content blocked"}`
+                : `${task.taskType} passed`,
+              detail: { input: cleanInput, output: failed ? task.reasonForIncompletion : od },
+              success: !failed,
+              durationMs: dur,
+            });
+          } else {
+            rootEvents.push({
+              id: `${task.taskId}-tool`,
+              type: EventType.TOOL_CALL,
+              timestamp: task.startTime ?? 0,
+              toolName: task.taskType,
+              summary: task.taskType,
+              detail: { input: cleanInput, output: failed ? task.reasonForIncompletion : od },
+              toolArgs: cleanInput,
+              result: failed ? undefined : od,
+              success: taskSuccess(task.status),
+              durationMs: dur,
+              taskMeta: {
+                taskId: task.taskId,
+                taskType: task.taskType,
+                referenceTaskName: task.referenceTaskName ?? (task as any).taskRefName,
+                scheduledTime: task.scheduledTime ?? undefined,
+                startTime: task.startTime ?? undefined,
+                endTime: task.endTime ?? undefined,
+                workerId: (task as any).workerId ?? undefined,
+                reasonForIncompletion: task.reasonForIncompletion ?? undefined,
+                retryCount: task.retryCount,
+                pollCount: task.pollCount,
+                seq: task.seq,
+                queueWaitTime: task.queueWaitTime,
+              },
+            });
+          }
         }
       }
     }
@@ -996,6 +1072,15 @@ export function transformWorkflowExecutionToAgentRun(
         finalOutput = event.detail;
         break;
       }
+    }
+  }
+
+  // Last resort: check the Conductor workflow output field
+  if (!finalOutput && execution.output) {
+    const wfOut = execution.output;
+    const candidate = wfOut.result ?? wfOut.output ?? wfOut.message;
+    if (typeof candidate === "string" && candidate.length > 0) {
+      finalOutput = candidate;
     }
   }
 
@@ -1138,40 +1223,80 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
       }
     }
   } else {
-    // Generic worker / custom task → single TOOL_CALL with input + output
-    const inputData = task.inputData;
-    const outputData = task.outputData;
+    // Generic worker / custom task
+    const inputData = task.inputData ?? {};
+    const outputData = (task.outputData ?? {}) as Record<string, unknown>;
     const failed = task.status === "FAILED";
 
-    events.push({
-      id: `${task.taskId}-call`,
-      type: EventType.TOOL_CALL,
-      timestamp: task.startTime ?? 0,
-      summary: `${task.taskRefName ?? task.taskType}`,
-      toolName: task.taskRefName ?? task.taskType,
-      toolArgs: inputData as Record<string, unknown> | undefined,
-      detail: {
-        input: inputData,
-        output: failed ? task.reasonForIncompletion : outputData,
-      },
-      result: failed ? undefined : outputData,
-      success: taskSuccess(task.status),
-      durationMs,
-      taskMeta: {
-        taskId: task.taskId,
-        taskType: task.taskType,
-        referenceTaskName: task.referenceTaskName ?? task.taskRefName,
-        scheduledTime: task.scheduledTime ?? undefined,
-        startTime: task.startTime ?? undefined,
-        endTime: task.endTime ?? undefined,
-        workerId: (task as any).workerId ?? (task as any).workerTask?.workerId ?? undefined,
-        reasonForIncompletion: task.reasonForIncompletion ?? undefined,
-        retryCount: task.retryCount,
-        pollCount: task.pollCount,
-        seq: task.seq,
-        queueWaitTime: task.queueWaitTime,
-      },
-    });
+    // Handoff/transfer tools → HANDOFF event
+    if (/^(transfer_to_|handoff_to_|route_to_|delegate_to_)/i.test(task.taskType)) {
+      const target = task.taskType.replace(/^(transfer_to_|handoff_to_|route_to_|delegate_to_)/i, "").replace(/_/g, " ").trim();
+      events.push({
+        id: `${task.taskId}-handoff`,
+        type: EventType.HANDOFF,
+        timestamp: task.endTime ?? 0,
+        summary: `→ ${target}`,
+        targetAgent: target,
+        detail: { transfer_to: target },
+        durationMs,
+      });
+    // Transfer-check infra → HANDOFF if transferring, else skip
+    } else if ("is_transfer" in outputData) {
+      if (outputData.is_transfer === true && outputData.transfer_to) {
+        events.push({
+          id: `${task.taskId}-handoff`,
+          type: EventType.HANDOFF,
+          timestamp: task.endTime ?? 0,
+          summary: `→ ${outputData.transfer_to}`,
+          targetAgent: outputData.transfer_to as string,
+          detail: { transfer_to: outputData.transfer_to },
+          durationMs,
+        });
+      }
+    } else if (task.taskType.toLowerCase().includes("guardrail")) {
+      events.push({
+        id: `${task.taskId}-guardrail`,
+        type: failed ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
+        timestamp: task.startTime ?? 0,
+        toolName: task.taskType,
+        summary: failed
+          ? `${task.taskType} blocked`
+          : `${task.taskType} passed`,
+        detail: { input: inputData, output: failed ? task.reasonForIncompletion : outputData },
+        success: !failed,
+        durationMs,
+      });
+    } else {
+      events.push({
+        id: `${task.taskId}-call`,
+        type: EventType.TOOL_CALL,
+        timestamp: task.startTime ?? 0,
+        summary: `${task.taskRefName ?? task.taskType}`,
+        toolName: task.taskRefName ?? task.taskType,
+        toolArgs: inputData as Record<string, unknown> | undefined,
+        detail: {
+          input: inputData,
+          output: failed ? task.reasonForIncompletion : outputData,
+        },
+        result: failed ? undefined : outputData,
+        success: taskSuccess(task.status),
+        durationMs,
+        taskMeta: {
+          taskId: task.taskId,
+          taskType: task.taskType,
+          referenceTaskName: task.referenceTaskName ?? task.taskRefName,
+          scheduledTime: task.scheduledTime ?? undefined,
+          startTime: task.startTime ?? undefined,
+          endTime: task.endTime ?? undefined,
+          workerId: (task as any).workerId ?? (task as any).workerTask?.workerId ?? undefined,
+          reasonForIncompletion: task.reasonForIncompletion ?? undefined,
+          retryCount: task.retryCount,
+          pollCount: task.pollCount,
+          seq: task.seq,
+          queueWaitTime: task.queueWaitTime,
+        },
+      });
+    }
   }
 
   return events;
