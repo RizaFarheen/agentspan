@@ -44,8 +44,6 @@ spec:
                   name: agentspan-config
                   key: SPRING_PROFILES_ACTIVE
             # PostgreSQL connection
-            - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
             - name: POSTGRES_HOST
               valueFrom:
                 configMapKeyRef:
@@ -61,6 +59,9 @@ spec:
                 configMapKeyRef:
                   name: agentspan-config
                   key: POSTGRES_DB
+            # Kubernetes expands $(VAR) in env values only after prior env vars are set.
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
             - name: SPRING_DATASOURCE_USERNAME
               valueFrom:
                 secretKeyRef:
