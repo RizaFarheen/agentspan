@@ -295,7 +295,7 @@ class TestMakeSubagentHook:
             hook({"tool_name": "Agent", "tool_input": {"prompt": "do something"}}, "tu-2", {})
         )
 
-        conductor.start_workflow.assert_called_once_with("my_wf", {"prompt": "do something"})
+        conductor.start_workflow.assert_called_once_with("my_wf", {"prompt": "do something", "_is_subagent": True})
         conductor.poll_until_done.assert_called_once_with("sub-wf-001")
         assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert result["hookSpecificOutput"]["permissionDecisionReason"] == "subagent result"

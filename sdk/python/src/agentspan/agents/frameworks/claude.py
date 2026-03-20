@@ -247,6 +247,47 @@ class _ConductorSubagentClient:
                     raise RuntimeError(f"Subworkflow {workflow_id} ended with status {status}")
                 await asyncio.sleep(poll_interval)
 
+    async def start_tool_workflow(self, tool_name: str, input_data: dict) -> str:
+        """Register a single-task tool wrapper workflow (idempotent) and start it.
+
+        Workflow name: _mcp_tool_<tool_name>  (prefixed to avoid collision with
+        the Conductor task definition of the same name).
+        """
+        import httpx
+
+        workflow_name = f"_mcp_tool_{tool_name}"
+        workflow_def = {
+            "name": workflow_name,
+            "version": 1,
+            "schemaVersion": 2,
+            "tasks": [
+                {
+                    "name": tool_name,
+                    "taskReferenceName": f"{tool_name}_ref",
+                    "type": "SIMPLE",
+                    "inputParameters": {k: f"${{workflow.input.{k}}}" for k in input_data},
+                }
+            ],
+            "outputParameters": {"result": f"${{{tool_name}_ref.output.result}}"},
+            "inputParameters": list(input_data.keys()),
+            "timeoutSeconds": 0,
+            "timeoutPolicy": "ALERT_ONLY",
+            "restartable": True,
+        }
+        async with httpx.AsyncClient(timeout=15) as client:
+            await client.put(
+                f"{self._server_url}/metadata/workflow",
+                json=[workflow_def],
+                headers=self._headers,
+            )
+            resp = await client.post(
+                f"{self._server_url}/workflow/{workflow_name}",
+                json=input_data,
+                headers=self._headers,
+            )
+            resp.raise_for_status()
+            return resp.text.strip().strip('"')
+
 
 class _AgentspanEventClient:
     """Async HTTP client for pushing SSE events to the Agentspan server (Tier 2 & 3)."""
@@ -297,7 +338,10 @@ def make_subagent_hook(
 
         prompt = input_data.get("tool_input", {}).get("prompt", "")
         try:
-            sub_id = await conductor.start_workflow(workflow_name, {"prompt": prompt})
+            sub_id = await conductor.start_workflow(
+                workflow_name, {"prompt": prompt, "_is_subagent": True}
+            )
+            logger.info("Tier 2 sub-workflow started: %s", sub_id)
             await events.push(workflow_id, "subagent_start", {"subWorkflowId": sub_id})
             result = await conductor.poll_until_done(sub_id)
             await events.push(
