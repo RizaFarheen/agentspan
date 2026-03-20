@@ -415,6 +415,15 @@ class WorkerCredentialFetcher:
         return {n: os.environ[n] for n in names if n in os.environ}
 ```
 
+**HTTP error contract for `/api/credentials/resolve`:**
+
+| Status | Behavior |
+|---|---|
+| 200 | Return resolved credentials; missing names → env fallback or error per strict_mode |
+| 401 | Token expired or revoked — raise `CredentialAuthError` immediately, do not retry, do not fall through to env var |
+| 429 | Rate limit hit — raise `CredentialRateLimitError` immediately, do not fall through to env var |
+| 5xx | Server error — raise `CredentialServiceError`; in strict_mode never fall through to env var; in non-strict_mode implementer may choose env fallback with a warning log |
+
 ### SubprocessIsolator
 
 Every tool runs in a fresh subprocess with an isolated HOME directory. Credentials are injected and cleaned up after task completion:
@@ -529,7 +538,7 @@ class AgentConfig:
     worker_thread_count: int     = 1
     auto_start_workers: bool     = True
     daemon_workers: bool         = True
-    credential_strict_mode: bool = False   # disables env var fallback
+    credential_strict_mode: bool = False   # True = disable env var fallback (strict compliance mode)
 
     @classmethod
     def from_env(cls) -> "AgentConfig": ...
@@ -612,7 +621,7 @@ OSS writes to server log. Enterprise module persists to a queryable audit store.
 |---|---|
 | Worker process compromised | Execution token only — 1h TTL, narrow scope, not the real credential |
 | Concurrent task credential bleed | Subprocess isolation — parent never holds credentials in `os.environ` |
-| `/proc/PID/environ` readable on Linux | Subprocess exits immediately after task; LLM keys never leave server |
+| `/proc/PID/environ` readable on Linux | Subprocess is short-lived and exits immediately after task; temp HOME deleted synchronously (credential files are gone before any external read is likely). LLM keys are a separate path — they never leave the server at all. |
 | Token replay | `jti` deny-list + `exp` + `wid` — revocable, single-workflow-scoped |
 | Malicious CLI tool reads temp HOME | Credential files written `0600`; temp dir deleted synchronously after task |
 | Credential exfiltration via tool code | Token scope bounded to declared names; short TTL; revocation on cancel; audit trail |
