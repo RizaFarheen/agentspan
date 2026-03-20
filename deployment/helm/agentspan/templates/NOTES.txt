@@ -1,0 +1,15 @@
+1. Get the application URL by running these commands:
+
+{{- if .Values.ingress.enabled }}
+  kubectl get ingress {{ include "agentspan.fullname" . }} -n {{ .Release.Namespace }}
+{{- else }}
+  kubectl port-forward svc/{{ include "agentspan.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  echo "Open http://127.0.0.1:8080"
+{{- end }}
+
+2. Check rollout status:
+
+  kubectl rollout status deployment/{{ include "agentspan.fullname" . }} -n {{ .Release.Namespace }}
+{{- if .Values.postgres.enabled }}
+  kubectl rollout status statefulset/{{ include "agentspan.postgresFullname" . }} -n {{ .Release.Namespace }}
+{{- end }}
