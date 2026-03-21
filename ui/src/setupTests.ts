@@ -4,11 +4,10 @@ import { vi } from "vitest";
 // Node.js v25+ ships a native `localStorage` global that does not implement
 // the Web Storage API (no getItem/setItem/removeItem/clear/key/length).
 // This conflicts with jsdom's implementation in Vitest's jsdom environment.
-// Replace it with a spec-compliant in-memory implementation so all tests
-// that call localStorage.getItem / .setItem / .clear etc. work correctly.
-(function installLocalStorageMock() {
+// Replace both storage globals with isolated spec-compliant in-memory instances.
+function makeStorageMock(): Storage {
   const store: Record<string, string> = {};
-  const mock: Storage = {
+  return {
     get length() {
       return Object.keys(store).length;
     },
@@ -30,17 +29,17 @@ import { vi } from "vitest";
       return Object.keys(store)[index] ?? null;
     },
   };
-  Object.defineProperty(globalThis, "localStorage", {
-    value: mock,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(globalThis, "sessionStorage", {
-    value: { ...mock },
-    writable: true,
-    configurable: true,
-  });
-})();
+}
+Object.defineProperty(globalThis, "localStorage", {
+  value: makeStorageMock(),
+  writable: true,
+  configurable: true,
+});
+Object.defineProperty(globalThis, "sessionStorage", {
+  value: makeStorageMock(),
+  writable: true,
+  configurable: true,
+});
 
 // Monaco Editor calls document.queryCommandSupported during module init,
 // which jsdom does not implement. Stub it out globally.
