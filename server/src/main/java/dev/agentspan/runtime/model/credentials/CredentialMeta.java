@@ -4,6 +4,7 @@
  */
 package dev.agentspan.runtime.model.credentials;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,8 +21,15 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CredentialMeta {
+    @JsonProperty("name")
     private String name;
+
+    @JsonProperty("partial")
     private String partial;    // first4 + "..." + last4
+
+    @JsonProperty("created_at")
     private Instant createdAt;
+
+    @JsonProperty("updated_at")
     private Instant updatedAt;
 }

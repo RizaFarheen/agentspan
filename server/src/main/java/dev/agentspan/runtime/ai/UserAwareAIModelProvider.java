@@ -23,6 +23,11 @@ import java.util.Optional;
  * the server-configured key from application.properties).</p>
  *
  * <p>Provider → env var name mapping mirrors application.properties.</p>
+ *
+ * <p>TODO: VectorDBProvider per-user key injection is not yet implemented here.
+ * When vector DB providers (e.g. Pinecone, Weaviate) support per-user API keys,
+ * extend this class (or create a parallel VectorDBKeyProvider) to resolve those
+ * credentials via the same pipeline. Deferred to a future task.</p>
  */
 @Component
 public class UserAwareAIModelProvider {

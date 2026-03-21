@@ -20,6 +20,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -55,6 +56,7 @@ class CredentialResolveTest {
     void tearDown() { RequestContextHolder.clear(); }
 
     @Test
+    @SuppressWarnings("unchecked")
     void resolve_validToken_returnsCredentials() {
         String token = tokenService.mint("u-test", "wf-1", List.of("GITHUB_TOKEN"), 3600);
         when(resolutionService.resolve("u-test", "GITHUB_TOKEN")).thenReturn("ghp_secret");
@@ -65,6 +67,25 @@ class CredentialResolveTest {
 
         ResponseEntity<?> response = controller.resolve(req);
         assertThat(response.getStatusCode().value()).isEqualTo(200);
+
+        // Response body should be a flat map, not wrapped in {"credentials": ...}
+        Map<String, String> body = (Map<String, String>) response.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body).containsEntry("GITHUB_TOKEN", "ghp_secret");
+        assertThat(body).doesNotContainKey("credentials");
+    }
+
+    @Test
+    void resolve_loginToken_returns401() {
+        // Login tokens use wid="login" — must not be accepted at /resolve
+        String loginToken = tokenService.mint("u-test", "login", List.of(), 3600);
+
+        ResolveRequest req = new ResolveRequest();
+        req.setToken(loginToken);
+        req.setNames(List.of("GITHUB_TOKEN"));
+
+        ResponseEntity<?> response = controller.resolve(req);
+        assertThat(response.getStatusCode().value()).isEqualTo(401);
     }
 
     @Test

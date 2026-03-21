@@ -5,9 +5,9 @@ package config
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type Config struct {
@@ -17,10 +17,15 @@ type Config struct {
 	APIKey     string `json:"api_key,omitempty"`
 }
 
-// IsLocalhost returns true when the server URL points to localhost or 127.0.0.1.
+// IsLocalhost returns true when the server URL points to a loopback address
+// (localhost, 127.0.0.1, or ::1) over any scheme (http or https).
 func (c *Config) IsLocalhost() bool {
-	return strings.HasPrefix(c.ServerURL, "http://localhost") ||
-		strings.HasPrefix(c.ServerURL, "http://127.0.0.1")
+	u, err := url.Parse(c.ServerURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
 }
 
 func DefaultConfig() *Config {

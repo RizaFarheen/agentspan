@@ -53,14 +53,19 @@ class AgentEventListenerTokenRevocationTest {
     }
 
     @Test
-    void onWorkflowCompleted_doesNotRevoke() {
+    void onWorkflowCompleted_revokesExecutionToken() {
+        String token = tokenService.mint("u1", "wf-2", List.of(), 3600);
+        ExecutionTokenService.TokenPayload payload = tokenService.validate(token);
+
         WorkflowModel workflow = new WorkflowModel();
         workflow.setWorkflowId("wf-2");
         workflow.setStatus(WorkflowModel.Status.COMPLETED);
         workflow.setOutput(Map.of());
+        workflow.setVariables(Map.of("__agentspan_ctx__",
+            Map.of("execution_token", token)));
 
         listener.onWorkflowCompletedIfEnabled(workflow);
 
-        verify(tokenService, never()).revoke(anyString(), anyLong());
+        verify(tokenService).revoke(payload.jti(), payload.exp());
     }
 }

@@ -201,6 +201,9 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         logger.info("onWorkflowCompleted: wfId={}", wfId);
         Map<String, Object> output = workflow.getOutput();
         emit(wfId, AgentSSEEvent.done(wfId, output));
+        if (executionTokenService != null) {
+            revokeWorkflowToken(workflow);
+        }
         streamRegistry.complete(wfId);
     }
 

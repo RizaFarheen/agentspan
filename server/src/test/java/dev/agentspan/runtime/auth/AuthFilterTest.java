@@ -115,4 +115,18 @@ class AuthFilterTest {
         // After the filter completes, the context must be cleared
         assertThat(RequestContextHolder.get()).isEmpty();
     }
+
+    @Test
+    void loginEndpoint_isAllowedWithoutAuthentication() throws Exception {
+        // shouldNotFilter() must return true for /api/auth/login so the filter
+        // never blocks the login endpoint (even when auth is enabled).
+        when(request.getServletPath()).thenReturn("/api/auth/login");
+        assertThat(filter.shouldNotFilter(request)).isTrue();
+    }
+
+    @Test
+    void nonLoginEndpoint_isNotExemptFromFilter() throws Exception {
+        when(request.getServletPath()).thenReturn("/api/credentials");
+        assertThat(filter.shouldNotFilter(request)).isFalse();
+    }
 }

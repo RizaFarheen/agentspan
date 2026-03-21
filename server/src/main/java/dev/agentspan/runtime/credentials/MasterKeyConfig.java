@@ -15,6 +15,7 @@ import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
 import java.util.Base64;
 
@@ -100,6 +101,11 @@ public class MasterKeyConfig {
             new SecureRandom().nextBytes(key);
             String encoded = Base64.getEncoder().encodeToString(key);
             Files.writeString(keyFile, encoded);
+            try {
+                Files.setPosixFilePermissions(keyFile, PosixFilePermissions.fromString("rw-------"));
+            } catch (UnsupportedOperationException ignored) {
+                // Non-POSIX filesystem (e.g. Windows) — skip
+            }
 
             log.warn("┌─────────────────────────────────────────────────────────────────┐");
             log.warn("│  AGENTSPAN_MASTER_KEY not set — auto-generated for localhost.   │");

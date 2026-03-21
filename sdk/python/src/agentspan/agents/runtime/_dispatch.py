@@ -372,9 +372,10 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
                         )
 
                 isolator = SubprocessIsolator()
+                wf_id = task.workflow_instance_id or ""
 
                 def _subprocess_wrapper(**kwargs):
-                    return _execute(kwargs, wf_id="", agent_state=agent_state)
+                    return _execute(kwargs, wf_id=wf_id, agent_state=agent_state)
 
                 result = isolator.run(
                     _subprocess_wrapper,

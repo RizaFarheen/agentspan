@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.LinkedHashMap;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * REST controller for credential management and runtime resolution.
@@ -112,7 +114,11 @@ public class CredentialController {
     /** GET /api/credentials/bindings — list all bindings */
     @GetMapping("/bindings")
     public ResponseEntity<?> listBindings() {
-        return ResponseEntity.ok(bindingService.listBindings(currentUserId()));
+        Map<String, String> bindings = bindingService.listBindings(currentUserId());
+        List<Map<String, String>> list = bindings.entrySet().stream()
+            .map(e -> Map.of("logical_key", e.getKey(), "store_name", e.getValue()))
+            .collect(Collectors.toList());
+        return ResponseEntity.ok(list);
     }
 
     /** PUT /api/credentials/bindings/{key} — set a binding { store_name } */
@@ -144,12 +150,12 @@ public class CredentialController {
      * rate-limited, and credential names are bounded to those declared at compile time.</p>
      */
     @PostMapping("/resolve")
-    public ResponseEntity<?> resolve(@RequestBody ResolveRequest request) {
+    public ResponseEntity<Map<String, String>> resolve(@RequestBody ResolveRequest request) {
         if (request.getToken() == null || request.getToken().isBlank()) {
             return ResponseEntity.status(401).body(Map.of("error", "Missing execution token"));
         }
         if (request.getNames() == null || request.getNames().isEmpty()) {
-            return ResponseEntity.ok(ResolveResponse.builder().credentials(Map.of()).build());
+            return ResponseEntity.ok(Map.of());
         }
 
         ExecutionTokenService.TokenPayload payload;
@@ -161,6 +167,12 @@ public class CredentialController {
             return ResponseEntity.status(401).body(Map.of("error", "Token revoked"));
         } catch (ExecutionTokenService.TokenInvalidException e) {
             return ResponseEntity.status(401).body(Map.of("error", "Token invalid"));
+        }
+
+        // Reject login tokens — only execution tokens are accepted at /resolve
+        if ("login".equals(payload.workflowId())) {
+            return ResponseEntity.status(401).body(Map.of("error",
+                "Execution token required for /resolve — login tokens are not accepted"));
         }
 
         // Rate limit check
@@ -189,7 +201,7 @@ public class CredentialController {
         log.info("AUDIT resolve: userId={} workflowId={} names={} resolved={}",
             payload.userId(), payload.workflowId(), requested, result.keySet());
 
-        return ResponseEntity.ok(ResolveResponse.builder().credentials(result).build());
+        return ResponseEntity.ok(result);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
@@ -203,6 +215,16 @@ public class CredentialController {
         RateLimitBucket bucket = rateLimitMap.computeIfAbsent(
             jti + ":" + windowStart, k -> new RateLimitBucket());
         return bucket.increment() <= resolveRateLimit;
+    }
+
+    /** Periodically evict stale rate-limit window entries to prevent unbounded growth. */
+    @Scheduled(fixedDelay = 120_000) // every 2 minutes
+    void pruneRateLimitWindows() {
+        long cutoff = System.currentTimeMillis() / 60_000 - 2;
+        rateLimitMap.keySet().removeIf(key -> {
+            String[] parts = key.split(":");
+            return parts.length == 2 && Long.parseLong(parts[1]) < cutoff;
+        });
     }
 
     private static class RateLimitBucket {
