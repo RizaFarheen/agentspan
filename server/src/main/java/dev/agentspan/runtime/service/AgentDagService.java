@@ -40,7 +40,7 @@ public class AgentDagService {
         task.setStatus(TaskModel.Status.IN_PROGRESS);
         task.setWorkflowInstanceId(workflowId);
         task.setWorkflowType(workflow.getWorkflowName());
-        task.setInputData(req.getInputData());
+        task.setInputData(req.getInputData() != null ? req.getInputData() : Collections.emptyMap());
         task.setSeq(workflow.getTasks().size() + 1);
         long now = System.currentTimeMillis();
         task.setScheduledTime(now);
