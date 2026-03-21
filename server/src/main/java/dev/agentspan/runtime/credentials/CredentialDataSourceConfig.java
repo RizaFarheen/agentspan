@@ -4,18 +4,18 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.DataSourceInitializer;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.core.io.ClassPathResource;
-
-import org.springframework.context.annotation.Primary;
 
 import javax.sql.DataSource;
 
@@ -26,6 +26,17 @@ import javax.sql.DataSource;
  *
  * <p>Spring's spring.sql.init.mode=always is tied to the primary DataSource.
  * We use a DataSourceInitializer bean instead to explicitly run schema-credentials.sql.</p>
+ *
+ * <p>Note: We mark credentialDataSource as @Primary to resolve the DataSource ambiguity
+ * when multiple beans of type DataSource exist (Conductor also creates "dataSource").
+ * Since both use the same JDBC URL, Conductor's Flyway migration runs correctly
+ * on our bean. The credential schema initializer also runs on the same bean,
+ * so all tables end up in the same database.</p>
+ *
+ * <p>We use HikariCP with minimumIdle=1 to keep at least one connection alive.
+ * This is required for in-memory SQLite databases (shared-cache mode) so that
+ * the database is not dropped between the schema initializer and the first query.
+ * SQLite does not support concurrent writers, so maximumPoolSize=1.</p>
  */
 @Configuration
 public class CredentialDataSourceConfig {
@@ -38,11 +49,18 @@ public class CredentialDataSourceConfig {
     @Bean("credentialDataSource")
     @Primary
     public DataSource credentialDataSource() {
-        DriverManagerDataSource ds = new DriverManagerDataSource();
-        ds.setDriverClassName("org.sqlite.JDBC");
-        ds.setUrl(datasourceUrl);
-        log.info("Credential DataSource initialized: {}", datasourceUrl);
-        return ds;
+        HikariConfig config = new HikariConfig();
+        config.setDriverClassName("org.sqlite.JDBC");
+        config.setJdbcUrl(datasourceUrl);
+        config.setPoolName("credential-pool");
+        // SQLite does not support concurrent writers; cap at 1 connection
+        config.setMaximumPoolSize(1);
+        // Keep at least 1 connection alive — required for in-memory SQLite
+        // shared-cache databases so they are not dropped between operations
+        config.setMinimumIdle(1);
+        config.setConnectionTestQuery("SELECT 1");
+        log.info("Credential DataSource (HikariCP) initialized: {}", datasourceUrl);
+        return new HikariDataSource(config);
     }
 
     @Bean("credentialJdbc")
