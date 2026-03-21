@@ -1,5 +1,3 @@
-import Visibility from "@mui/icons-material/Visibility";
-import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import {
   Autocomplete,
   Button,
@@ -8,14 +6,12 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
-  IconButton,
-  InputAdornment,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import ConductorInput from "components/v1/ConductorInput";
+import { Controller, useForm } from "react-hook-form";
 import {
   useCreateCredential,
   useUpdateCredential,
@@ -70,13 +66,12 @@ export function AddEditCredentialDialog({
   onSuccess,
   onClose,
 }: Props) {
-  const [showValue, setShowValue] = useState(false);
   const apiOpts = { token, onUnauthorized };
   const createMutation = useCreateCredential(apiOpts);
   const updateMutation = useUpdateCredential(apiOpts);
 
   const {
-    register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
     setError,
@@ -108,13 +103,13 @@ export function AddEditCredentialDialog({
       <DialogTitle>{mode === "add" ? "Add Credential" : "Edit Credential"}</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent>
-          <Stack spacing={4} sx={{ mt: 1 }}>
+          <Stack spacing={3} sx={{ mt: 1 }}>
             {mode === "add" && (
               <>
                 <Autocomplete
                   options={KNOWN_LLM_CREDENTIALS}
                   getOptionLabel={(opt) =>
-                    typeof opt === "string" ? opt : `${opt.name}`
+                    typeof opt === "string" ? opt : opt.name
                   }
                   renderOption={(props, opt) => (
                     <li {...props} key={opt.name}>
@@ -146,51 +141,54 @@ export function AddEditCredentialDialog({
               </>
             )}
 
-            <TextField
-              label="Name"
-              inputProps={{
-                "aria-label": "Name",
-                readOnly: mode === "edit",
-                style: { fontFamily: "monospace" },
-              }}
-              {...register("name", { required: "Name is required." })}
-              error={!!errors.name}
-              helperText={
-                errors.name?.message ??
-                "Convention: UPPER_SNAKE_CASE e.g. GITHUB_TOKEN"
-              }
-              fullWidth
-              required
-              autoFocus={mode === "add"}
+            <Controller
+              name="name"
+              control={control}
+              rules={{ required: "Name is required." }}
+              render={({ field }) => (
+                <ConductorInput
+                  label="Name"
+                  value={field.value}
+                  onTextInputChange={field.onChange}
+                  onBlur={field.onBlur}
+                  inputProps={{
+                    readOnly: mode === "edit",
+                    style: { fontFamily: "monospace" },
+                  }}
+                  error={!!errors.name}
+                  helperText={
+                    errors.name?.message ??
+                    "Convention: UPPER_SNAKE_CASE e.g. GITHUB_TOKEN"
+                  }
+                  fullWidth
+                  required
+                  autoFocus={mode === "add"}
+                />
+              )}
             />
 
-            <TextField
-              label="Value"
-              type={showValue ? "text" : "password"}
-              inputProps={{ "aria-label": "Value" }}
-              {...register("value", { required: "Value is required." })}
-              error={!!errors.value}
-              helperText={
-                errors.value?.message ??
-                (mode === "add"
-                  ? "Encrypted at rest. Value shown only now — never displayed again."
-                  : "Enter the full new value to update the stored secret.")
-              }
-              fullWidth
-              required
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      aria-label={showValue ? "Hide" : "Show"}
-                      onClick={() => setShowValue((v) => !v)}
-                      edge="end"
-                    >
-                      {showValue ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
+            <Controller
+              name="value"
+              control={control}
+              rules={{ required: "Value is required." }}
+              render={({ field }) => (
+                <ConductorInput
+                  label="Value"
+                  value={field.value}
+                  onTextInputChange={field.onChange}
+                  onBlur={field.onBlur}
+                  isSecret
+                  error={!!errors.value}
+                  helperText={
+                    errors.value?.message ??
+                    (mode === "add"
+                      ? "Encrypted at rest. Value shown only now — never displayed again."
+                      : "Enter the full new value to update the stored secret.")
+                  }
+                  fullWidth
+                  required
+                />
+              )}
             />
           </Stack>
         </DialogContent>
