@@ -167,6 +167,34 @@ def _checkpoint_session(
         logger.warning("Failed to checkpoint session for %s: %s", workflow_id, exc)
 
 
+def _read_last_result_from_transcript(transcript_path: str) -> str:
+    """Read the final ResultMessage text from a Claude JSONL transcript file.
+
+    Returns empty string if the file cannot be read or has no ResultMessage.
+    """
+    import json
+
+    if not transcript_path:
+        return ""
+    try:
+        result = ""
+        with open(transcript_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if entry.get("type") == "result":
+                        result = entry.get("result", "")
+                except json.JSONDecodeError:
+                    continue
+        return result
+    except Exception as exc:
+        logger.debug("Could not read transcript %s: %s", transcript_path, exc)
+        return ""
+
+
 # ── Event push ─────────────────────────────────────────────────────────────────
 
 _push_executor = concurrent.futures.ThreadPoolExecutor(
@@ -383,7 +411,7 @@ class _AgentDagClient:
     async def complete_task(
         self, workflow_id: str, task_id: str, output_data: Dict[str, Any]
     ) -> None:
-        """Mark a Conductor task as COMPLETED with output."""
+        """Mark a Conductor task as COMPLETED with output. Non-fatal: silently logs on failure."""
         import httpx
 
         try:
@@ -403,7 +431,7 @@ class _AgentDagClient:
             logger.debug("complete_task failed (%s/%s): %s", workflow_id, task_id, exc)
 
     async def fail_task(self, workflow_id: str, task_id: str, error: str) -> None:
-        """Mark a Conductor task as FAILED with a reason."""
+        """Mark a Conductor task as FAILED with a reason. Non-fatal: silently logs on failure."""
         import httpx
 
         try:
@@ -425,7 +453,12 @@ class _AgentDagClient:
     async def push_event(
         self, workflow_id: str, event_type: str, payload: Dict[str, Any]
     ) -> None:
-        """POST an SSE event to the Agentspan server (non-fatal)."""
+        """POST an SSE event to the Agentspan server (non-fatal).
+
+        Duplicates _AgentspanEventClient.push intentionally — _AgentDagClient
+        consolidates all DAG + event operations. _AgentspanEventClient will be
+        removed in a later cleanup step once all callers are migrated here.
+        """
         import httpx
 
         try:
@@ -525,10 +558,10 @@ def make_claude_worker(
         from agentspan.agents.frameworks.claude import (
             ClaudeAgentOptions,
             HookMatcher,
-            _AgentspanEventClient,
+            # Used by DAG hooks (Task 3: new hook implementation)
+            _AgentDagClient,
             _checkpoint_session,
-            _ConductorSubagentClient,
-            _push_event_nonblocking,
+            _read_last_result_from_transcript,
             _restore_session,
             query,
         )
@@ -544,56 +577,105 @@ def make_claude_worker(
 
         # ── Build MCP server if needed ─────────────────────────────────────────
         mcp_server_config = None
-        needs_mcp = (agent_obj.mcp_tools or agent_obj.conductor_subagents) and not _is_subagent
+        needs_mcp = bool(agent_obj.mcp_tools)
 
         if needs_mcp:
             from agentspan.agents.frameworks.claude_mcp_server import AgentspanMcpServer
 
-            conductor_client = _ConductorSubagentClient(server_url, auth_key, auth_secret)
-            event_client = _AgentspanEventClient(server_url, auth_key, auth_secret)
-
-            mcp_server = AgentspanMcpServer(
-                tools=agent_obj.mcp_tools,
-                subagent_workflow_name=name if agent_obj.conductor_subagents else None,
-                conductor_client=conductor_client,
-                event_client=event_client,
-                parent_workflow_id=workflow_id,
-            )
+            mcp_server = AgentspanMcpServer(tools=agent_obj.mcp_tools)
             mcp_server_config = mcp_server.build()
 
-        # ── Observability hooks (always on) ────────────────────────────────────
+        # ── DAG client + per-execution state ───────────────────────────────────
+        dag = _AgentDagClient(server_url, auth_key, auth_secret)
+        # tool_use_id → (workflow_id, conductor_task_id)
+        tool_task_map: Dict[str, Tuple[str, str]] = {}
+
+        # ── Hooks ──────────────────────────────────────────────────────────────
+
         async def pre_tool_hook(input_data, tool_use_id, context):
-            _push_event_nonblocking(
-                workflow_id,
-                "tool_call",
-                {
-                    "source": "builtin",
-                    "toolName": input_data.get("tool_name", ""),
-                    "args": input_data.get("tool_input", {}),
-                },
-                server_url,
-                headers,
-            )
+            if tool_use_id is None:
+                return {}
+            tool_name = input_data.get("tool_name", "")
+            tool_input = input_data.get("tool_input", {})
+
+            try:
+                if tool_name == "Agent":
+                    # Subagent spawn: create child tracking workflow + SUB_WORKFLOW task.
+                    # NOTE: SDK 0.1.26 has no SubagentStart — we intercept here instead.
+                    sub_wf_id = await dag.create_tracking_workflow(
+                        name, {"prompt": tool_input.get("prompt", "")}
+                    )
+                    if sub_wf_id:
+                        task_id = await dag.inject_task(
+                            workflow_id,
+                            "claude-sub-agent",
+                            tool_use_id,
+                            tool_input,
+                            "SUB_WORKFLOW",
+                            sub_workflow_param={
+                                "name": name,
+                                "version": 1,
+                                "workflowId": sub_wf_id,
+                            },
+                        )
+                        if task_id:
+                            tool_task_map[tool_use_id] = (workflow_id, task_id)
+                    else:
+                        # Fallback: inject as SIMPLE if tracking workflow creation failed
+                        task_id = await dag.inject_task(
+                            workflow_id, tool_name, tool_use_id, tool_input
+                        )
+                        if task_id:
+                            tool_task_map[tool_use_id] = (workflow_id, task_id)
+                else:
+                    task_id = await dag.inject_task(
+                        workflow_id, tool_name, tool_use_id, tool_input
+                    )
+                    if task_id:
+                        tool_task_map[tool_use_id] = (workflow_id, task_id)
+            except Exception as exc:
+                logger.debug("pre_tool_hook failed (non-fatal): %s", exc)
+
             return {}
 
         async def post_tool_hook(input_data, tool_use_id, context):
-            _push_event_nonblocking(
-                workflow_id,
-                "tool_result",
-                {
-                    "source": "builtin",
-                    "toolName": input_data.get("tool_name", ""),
-                    "result": input_data.get("tool_response"),
-                },
-                server_url,
-                headers,
-            )
+            if tool_use_id and tool_use_id in tool_task_map:
+                wf_id, task_id = tool_task_map.pop(tool_use_id)
+                tool_response = input_data.get("tool_response")
+                try:
+                    await dag.complete_task(wf_id, task_id, {"result": tool_response})
+                except Exception as exc:
+                    logger.debug("post_tool_hook failed (non-fatal): %s", exc)
+            _checkpoint_session(workflow_id, session_id_ref["value"], cwd, server_url, headers)
+            return {}
+
+        async def post_tool_failure_hook(input_data, tool_use_id, context):
+            if tool_use_id and tool_use_id in tool_task_map:
+                wf_id, task_id = tool_task_map.pop(tool_use_id)
+                error = input_data.get("error", "tool failed")
+                try:
+                    await dag.fail_task(wf_id, task_id, error)
+                except Exception as exc:
+                    logger.debug("post_tool_failure_hook failed (non-fatal): %s", exc)
+            return {}
+
+        async def subagent_stop_hook(input_data, tool_use_id, context):
+            # SubagentStop fires after a subagent completes.
+            # tool_use_id matches the Agent tool call's tool_use_id from PreToolUse.
+            # (If the SDK changes this contract, update accordingly during E2E testing.)
+            if tool_use_id and tool_use_id in tool_task_map:
+                wf_id, task_id = tool_task_map.pop(tool_use_id)
+                transcript_path = input_data.get("transcript_path", "")
+                result = _read_last_result_from_transcript(transcript_path)
+                await dag.complete_task(wf_id, task_id, {"result": result})
             _checkpoint_session(workflow_id, session_id_ref["value"], cwd, server_url, headers)
             return {}
 
         hooks = {
             "PreToolUse": [HookMatcher(matcher=".*", hooks=[pre_tool_hook])],
             "PostToolUse": [HookMatcher(matcher=".*", hooks=[post_tool_hook])],
+            "PostToolUseFailure": [HookMatcher(matcher=".*", hooks=[post_tool_failure_hook])],
+            "SubagentStop": [HookMatcher(matcher=".*", hooks=[subagent_stop_hook])],
         }
 
         async def run():
