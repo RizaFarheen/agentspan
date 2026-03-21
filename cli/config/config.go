@@ -7,12 +7,20 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Config struct {
 	ServerURL  string `json:"server_url"`
 	AuthKey    string `json:"auth_key,omitempty"`
 	AuthSecret string `json:"auth_secret,omitempty"`
+	APIKey     string `json:"api_key,omitempty"`
+}
+
+// IsLocalhost returns true when the server URL points to localhost or 127.0.0.1.
+func (c *Config) IsLocalhost() bool {
+	return strings.HasPrefix(c.ServerURL, "http://localhost") ||
+		strings.HasPrefix(c.ServerURL, "http://127.0.0.1")
 }
 
 func DefaultConfig() *Config {
@@ -65,6 +73,9 @@ func Load() *Config {
 		}
 		if cfg.AuthSecret == "" && fileCfg.AuthSecret != "" {
 			cfg.AuthSecret = fileCfg.AuthSecret
+		}
+		if cfg.APIKey == "" {
+			cfg.APIKey = fileCfg.APIKey
 		}
 	}
 
