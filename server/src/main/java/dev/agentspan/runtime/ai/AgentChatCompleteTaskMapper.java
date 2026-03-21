@@ -37,7 +37,8 @@ import com.netflix.conductor.core.execution.mapper.TaskMapperContext;
 import dev.agentspan.runtime.model.AgentSSEEvent;
 import dev.agentspan.runtime.service.AgentStreamRegistry;
 import dev.agentspan.runtime.util.ModelContextWindows;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HTTP;
 import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SIMPLE;
@@ -64,8 +65,10 @@ import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SUB
 @Primary
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @Conditional(AIIntegrationEnabledCondition.class)
-@Slf4j
 public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletion> {
+
+    @SuppressWarnings("HidingField")
+    private static final Logger log = LoggerFactory.getLogger(AgentChatCompleteTaskMapper.class);
 
     private static final Set<String> TOOL_TASK_TYPES =
             Set.of(TASK_TYPE_HTTP, TASK_TYPE_SIMPLE, "MCP", "CALL_MCP_TOOL");
@@ -86,6 +89,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     @Autowired(required = false)
     private AgentStreamRegistry streamRegistry;
 
+    @Autowired(required = false)
+    private UserAwareAIModelProvider userAwareAIModelProvider;
+
     public AgentChatCompleteTaskMapper() {
         super(ChatCompletion.NAME);
         this.recentExchangesToKeep = 5; // default; overridden by @Value in Spring context
@@ -103,6 +109,18 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         // (skips ChatCompleteTaskMapper's broken getHistory)
         TaskModel taskModel = super.getMappedTask(taskMapperContext);
         WorkflowModel workflowModel = taskMapperContext.getWorkflowModel();
+
+        // Per-user LLM key resolution — override server key if user has their own
+        if (userAwareAIModelProvider != null) {
+            Object llmProvider = taskModel.getInputData().get("llmProvider");
+            if (llmProvider instanceof String providerName) {
+                String userKey = userAwareAIModelProvider.resolveUserApiKey(providerName);
+                if (userKey != null) {
+                    taskModel.getInputData().put("apiKey", userKey);
+                    log.debug("Per-user API key applied for provider '{}'", providerName);
+                }
+            }
+        }
 
         try {
             ChatCompletion chatCompletion =

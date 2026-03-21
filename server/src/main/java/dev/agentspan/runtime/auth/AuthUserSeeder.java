@@ -7,6 +7,7 @@ package dev.agentspan.runtime.auth;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * Uses createIfNotExists to avoid overwriting user-changed passwords.
  */
 @Component
+@DependsOn("credentialSchemaInitializer")
 public class AuthUserSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(AuthUserSeeder.class);

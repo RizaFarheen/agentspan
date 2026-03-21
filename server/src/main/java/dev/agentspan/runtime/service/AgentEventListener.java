@@ -9,9 +9,11 @@ import com.netflix.conductor.core.listener.TaskStatusListener;
 import com.netflix.conductor.core.listener.WorkflowStatusListener;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.AgentSSEEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -33,9 +35,19 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     private final AgentStreamRegistry streamRegistry;
 
+    @Autowired(required = false)
+    private ExecutionTokenService executionTokenService;
+
+    @Autowired
     public AgentEventListener(AgentStreamRegistry streamRegistry) {
         this.streamRegistry = streamRegistry;
         logger.info("AgentEventListener active (TaskStatusListener + WorkflowStatusListener)");
+    }
+
+    /** Package-private constructor for testing with token revocation. */
+    AgentEventListener(AgentStreamRegistry streamRegistry, ExecutionTokenService tokenService) {
+        this.streamRegistry = streamRegistry;
+        this.executionTokenService = tokenService;
     }
 
     // ── TaskStatusListener ───────────────────────────────────────────
@@ -197,7 +209,26 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         logger.info("onWorkflowTerminated: wfId={}, reason={}", wfId, workflow.getReasonForIncompletion());
         String reason = workflow.getReasonForIncompletion();
         emit(wfId, AgentSSEEvent.error(wfId, "workflow", reason != null ? reason : "Workflow terminated"));
+        if (executionTokenService != null) {
+            revokeWorkflowToken(workflow);
+        }
         streamRegistry.complete(wfId);
+    }
+
+    private void revokeWorkflowToken(WorkflowModel workflow) {
+        try {
+            Object ctx = workflow.getVariables() != null
+                ? workflow.getVariables().get("__agentspan_ctx__") : null;
+            if (!(ctx instanceof Map)) return;
+            Object tokenObj = ((Map<?, ?>) ctx).get("execution_token");
+            if (!(tokenObj instanceof String token)) return;
+            ExecutionTokenService.TokenPayload payload = executionTokenService.validate(token);
+            executionTokenService.revoke(payload.jti(), payload.exp());
+            logger.info("Execution token revoked for terminated workflow {}", workflow.getWorkflowId());
+        } catch (Exception e) {
+            logger.debug("Could not revoke execution token for workflow {}: {}",
+                workflow.getWorkflowId(), e.getMessage());
+        }
     }
 
     // ── Internal ─────────────────────────────────────────────────────
