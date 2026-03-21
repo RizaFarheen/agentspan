@@ -15,9 +15,8 @@ class TestClaudeCodeAgent:
         assert agent.model == "claude-opus-4-6"
         assert agent.max_tokens == 8192
         assert agent.system_prompt is None
-        assert agent.conductor_subagents is False
-        assert agent.agentspan_routing is False
-        assert agent.subagent_overrides == {}
+        assert agent.mcp_tools == []
+        assert agent.permission_mode is None
         assert agent.prompt == ""
 
     def test_custom_values(self):
@@ -26,12 +25,12 @@ class TestClaudeCodeAgent:
             cwd="/tmp/project",
             allowed_tools=["Read", "Bash"],
             max_turns=50,
-            conductor_subagents=True,
+            mcp_tools=[],
         )
         assert agent.name == "my_agent"
         assert agent.cwd == "/tmp/project"
         assert agent.allowed_tools == ["Read", "Bash"]
-        assert agent.conductor_subagents is True
+        assert agent.mcp_tools == []
 
     def test_is_dataclass(self):
         assert dataclasses.is_dataclass(ClaudeCodeAgent)
@@ -58,20 +57,14 @@ class TestSerializeClaude:
             allowed_tools=["Read", "Write"],
             max_turns=50,
             model="claude-sonnet-4-6",
-            conductor_subagents=True,
-            agentspan_routing=False,
         )
         raw_config, _ = serialize_claude(agent)
         assert raw_config["cwd"] == "/workspace"
         assert raw_config["allowed_tools"] == ["Read", "Write"]
         assert raw_config["max_turns"] == 50
         assert raw_config["model"] == "claude-sonnet-4-6"
-        assert raw_config["conductor_subagents"] is True
-        assert raw_config["agentspan_routing"] is False
         assert raw_config["max_tokens"] == 8192  # default since not overridden
         assert raw_config["system_prompt"] is None  # default
-        assert raw_config["permission_mode"] is None  # default
-        assert raw_config["disallowed_tools"] == []  # default
 
     def test_worker_func_is_none(self):
         """serialize_claude returns func=None — filled by _build_passthrough_func."""
