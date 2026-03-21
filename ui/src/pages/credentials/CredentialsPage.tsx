@@ -81,7 +81,8 @@ export function CredentialsPage() {
   // This matches the spec: "LoginDialog only appears in response to a 401."
   const needs401Login =
     !isAuthenticated &&
-    (credentialsQuery.error as any)?.status === 401;
+    ((credentialsQuery.error as any)?.status === 401 ||
+      (bindingsQuery.error as any)?.status === 401);
 
   return (
     <>
@@ -157,6 +158,7 @@ export function CredentialsPage() {
           token={token}
           onUnauthorized={clearToken}
           onSuccess={() => setToastMessage({ text: "Binding added.", severity: "success" })}
+          onError={() => setToastMessage({ text: "Failed to add binding.", severity: "error" })}
           onClose={() => setAddBindingFor(null)}
         />
       )}

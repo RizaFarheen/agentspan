@@ -20,6 +20,7 @@ interface Props {
   token: string | null;
   onUnauthorized: () => void;
   onSuccess: () => void;
+  onError?: () => void;
   onClose: () => void;
 }
 
@@ -28,6 +29,7 @@ export function AddBindingDialog({
   token,
   onUnauthorized,
   onSuccess,
+  onError,
   onClose,
 }: Props) {
   const createBinding = useCreateBinding({ token, onUnauthorized });
@@ -40,9 +42,13 @@ export function AddBindingDialog({
   });
 
   async function onSubmit(data: FormValues) {
-    await createBinding.mutateAsync(data);
-    onSuccess();
-    onClose();
+    try {
+      await createBinding.mutateAsync(data);
+      onSuccess();
+      onClose();
+    } catch {
+      onError?.();
+    }
   }
 
   const isLoading = isSubmitting || createBinding.isLoading;
