@@ -24,7 +24,15 @@ Quick start::
 """
 
 # Core primitive
-from agentspan.agents.agent import Agent, AgentDef, PromptTemplate, Strategy, agent, scatter_gather
+from agentspan.agents.agent import (
+    Agent,
+    AgentDef,
+    ConfigurationError,
+    PromptTemplate,
+    Strategy,
+    agent,
+    scatter_gather,
+)
 
 # Callback handlers
 from agentspan.agents.callback import CallbackHandler
@@ -39,6 +47,16 @@ from agentspan.agents.code_executor import (
     JupyterCodeExecutor,
     LocalCodeExecutor,
     ServerlessCodeExecutor,
+)
+
+# Credential management
+from agentspan.agents.runtime.credentials.accessor import get_credential
+from agentspan.agents.runtime.credentials.types import (
+    CredentialAuthError,
+    CredentialFile,
+    CredentialNotFoundError,
+    CredentialRateLimitError,
+    CredentialServiceError,
 )
 
 # Exceptions
@@ -233,4 +251,13 @@ __all__ = [
     "discover_agents",
     # Tracing
     "is_tracing_enabled",
+    # Credentials
+    "get_credential",
+    "CredentialFile",
+    "CredentialNotFoundError",
+    "CredentialAuthError",
+    "CredentialRateLimitError",
+    "CredentialServiceError",
+    # Configuration errors
+    "ConfigurationError",
 ]
