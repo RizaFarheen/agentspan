@@ -1,15 +1,18 @@
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import {
+  Autocomplete,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   InputAdornment,
   Stack,
   TextField,
+  Typography,
 } from "@mui/material";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -32,6 +35,33 @@ interface Props {
   onClose: () => void;
 }
 
+interface KnownCredential {
+  name: string;
+  provider: string;
+}
+
+const KNOWN_LLM_CREDENTIALS: KnownCredential[] = [
+  { name: "ANTHROPIC_API_KEY", provider: "Anthropic (Claude)" },
+  { name: "OPENAI_API_KEY", provider: "OpenAI (GPT-4, GPT-4o, etc.)" },
+  { name: "GEMINI_API_KEY", provider: "Google Gemini" },
+  { name: "GOOGLE_API_KEY", provider: "Google AI Studio" },
+  { name: "AZURE_OPENAI_API_KEY", provider: "Azure OpenAI" },
+  { name: "AZURE_OPENAI_ENDPOINT", provider: "Azure OpenAI endpoint" },
+  { name: "MISTRAL_API_KEY", provider: "Mistral AI" },
+  { name: "GROQ_API_KEY", provider: "Groq" },
+  { name: "COHERE_API_KEY", provider: "Cohere" },
+  { name: "TOGETHER_API_KEY", provider: "Together AI" },
+  { name: "PERPLEXITY_API_KEY", provider: "Perplexity" },
+  { name: "HUGGINGFACE_API_TOKEN", provider: "HuggingFace" },
+  { name: "REPLICATE_API_TOKEN", provider: "Replicate" },
+  { name: "AWS_ACCESS_KEY_ID", provider: "AWS Bedrock" },
+  { name: "AWS_SECRET_ACCESS_KEY", provider: "AWS Bedrock" },
+  { name: "BEDROCK_API_KEY", provider: "AWS Bedrock (custom)" },
+  { name: "VERTEX_AI_PROJECT_ID", provider: "Google Vertex AI" },
+  { name: "DEEPSEEK_API_KEY", provider: "DeepSeek" },
+  { name: "XAI_API_KEY", provider: "xAI (Grok)" },
+];
+
 export function AddEditCredentialDialog({
   mode,
   initialName = "",
@@ -50,6 +80,7 @@ export function AddEditCredentialDialog({
     handleSubmit,
     formState: { errors, isSubmitting },
     setError,
+    setValue,
   } = useForm<FormValues>({
     defaultValues: { name: initialName, value: "" },
   });
@@ -77,7 +108,44 @@ export function AddEditCredentialDialog({
       <DialogTitle>{mode === "add" ? "Add Credential" : "Edit Credential"}</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            {mode === "add" && (
+              <>
+                <Autocomplete
+                  options={KNOWN_LLM_CREDENTIALS}
+                  getOptionLabel={(opt) =>
+                    typeof opt === "string" ? opt : `${opt.name}`
+                  }
+                  renderOption={(props, opt) => (
+                    <li {...props} key={opt.name}>
+                      <Stack>
+                        <Typography variant="body2" fontFamily="monospace" fontWeight={500}>
+                          {opt.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {opt.provider}
+                        </Typography>
+                      </Stack>
+                    </li>
+                  )}
+                  onChange={(_, option) => {
+                    if (option && typeof option !== "string") {
+                      setValue("name", option.name, { shouldValidate: true });
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Quick select a well-known LLM key"
+                      placeholder="Search by provider or key name…"
+                      size="small"
+                    />
+                  )}
+                />
+                <Divider />
+              </>
+            )}
+
             <TextField
               label="Name"
               inputProps={{
@@ -95,6 +163,7 @@ export function AddEditCredentialDialog({
               required
               autoFocus={mode === "add"}
             />
+
             <TextField
               label="Value"
               type={showValue ? "text" : "password"}
