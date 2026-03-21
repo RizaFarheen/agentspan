@@ -312,6 +312,134 @@ class _AgentspanEventClient:
             logger.debug("Async event push failed for %s/%s: %s", workflow_id, event_type, exc)
 
 
+class _AgentDagClient:
+    """Async HTTP client for injecting tasks into running Conductor workflow instances.
+
+    All methods are non-fatal: exceptions are caught, logged at DEBUG, and swallowed.
+    Claude must never be blocked by observability failures.
+    """
+
+    def __init__(self, server_url: str, auth_key: str, auth_secret: str) -> None:
+        self._server_url = server_url.rstrip("/")
+        self._headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if auth_key:
+            self._headers["X-Auth-Key"] = auth_key
+        if auth_secret:
+            self._headers["X-Auth-Secret"] = auth_secret
+
+    async def inject_task(
+        self,
+        workflow_id: str,
+        task_def_name: str,
+        reference_name: str,
+        input_data: Dict[str, Any],
+        task_type: str = "SIMPLE",
+        sub_workflow_param: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Inject a new IN_PROGRESS task into a running workflow. Returns conductor task_id."""
+        import httpx
+
+        payload: Dict[str, Any] = {
+            "taskDefName": task_def_name,
+            "referenceTaskName": reference_name,
+            "type": task_type,
+            "inputData": input_data,
+            "status": "IN_PROGRESS",
+        }
+        if sub_workflow_param is not None:
+            payload["subWorkflowParam"] = sub_workflow_param
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    f"{self._server_url}/api/agent/{workflow_id}/tasks",
+                    json=payload,
+                    headers=self._headers,
+                )
+                resp.raise_for_status()
+                return resp.json().get("taskId")
+        except Exception as exc:
+            logger.debug("inject_task failed (%s/%s): %s", workflow_id, task_def_name, exc)
+            return None
+
+    async def create_tracking_workflow(
+        self, workflow_name: str, input_data: Dict[str, Any]
+    ) -> Optional[str]:
+        """Create a bare tracking workflow shell. Returns new workflow_id."""
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    f"{self._server_url}/api/agent/workflow",
+                    json={"workflowName": workflow_name, "input": input_data},
+                    headers=self._headers,
+                )
+                resp.raise_for_status()
+                return resp.json().get("workflowId")
+        except Exception as exc:
+            logger.debug("create_tracking_workflow failed (%s): %s", workflow_name, exc)
+            return None
+
+    async def complete_task(
+        self, workflow_id: str, task_id: str, output_data: Dict[str, Any]
+    ) -> None:
+        """Mark a Conductor task as COMPLETED with output."""
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    f"{self._server_url}/api/task",
+                    json={
+                        "taskId": task_id,
+                        "workflowInstanceId": workflow_id,
+                        "status": "COMPLETED",
+                        "outputData": output_data,
+                    },
+                    headers=self._headers,
+                )
+                resp.raise_for_status()
+        except Exception as exc:
+            logger.debug("complete_task failed (%s/%s): %s", workflow_id, task_id, exc)
+
+    async def fail_task(self, workflow_id: str, task_id: str, error: str) -> None:
+        """Mark a Conductor task as FAILED with a reason."""
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    f"{self._server_url}/api/task",
+                    json={
+                        "taskId": task_id,
+                        "workflowInstanceId": workflow_id,
+                        "status": "FAILED",
+                        "reasonFailed": error,
+                    },
+                    headers=self._headers,
+                )
+                resp.raise_for_status()
+        except Exception as exc:
+            logger.debug("fail_task failed (%s/%s): %s", workflow_id, task_id, exc)
+
+    async def push_event(
+        self, workflow_id: str, event_type: str, payload: Dict[str, Any]
+    ) -> None:
+        """POST an SSE event to the Agentspan server (non-fatal)."""
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.post(
+                    f"{self._server_url}/api/agent/events/{workflow_id}",
+                    json={"type": event_type, **payload},
+                    headers=self._headers,
+                )
+                resp.raise_for_status()
+        except Exception as exc:
+            logger.debug("push_event failed (%s/%s): %s", workflow_id, event_type, exc)
+
+
 # ── Tier 2 subagent hook ────────────────────────────────────────────────────
 
 
