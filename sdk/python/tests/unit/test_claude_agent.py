@@ -3,6 +3,7 @@
 import dataclasses
 
 from agentspan.agents.frameworks.claude import ClaudeCodeAgent, serialize_claude
+from agentspan.agents.frameworks.serializer import detect_framework, serialize_agent
 
 
 class TestClaudeCodeAgent:
@@ -71,9 +72,6 @@ class TestSerializeClaude:
         agent = ClaudeCodeAgent(name="test")
         _, workers = serialize_claude(agent)
         assert workers[0].func is None
-
-
-from agentspan.agents.frameworks.serializer import detect_framework, serialize_agent
 
 
 class TestClaudeDetection:
