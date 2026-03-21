@@ -1,0 +1,16 @@
+apiVersion: v2
+name: agentspan
+description: Helm chart for deploying Agentspan server with optional bundled PostgreSQL
+type: application
+version: 0.1.0
+appVersion: "0.0.7"
+home: https://github.com/agentspan/agentspan
+sources:
+  - https://github.com/agentspan/agentspan
+keywords:
+  - agents
+  - ai
+  - conductor
+maintainers:
+  - name: Agentspan
+    url: https://github.com/agentspan/agentspan

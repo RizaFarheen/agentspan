@@ -1,0 +1,18 @@
+{{- include "agentspan.validateValues" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agentspan.fullname" . }}-config
+  labels:
+    {{- include "agentspan.labels" . | nindent 4 }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ .Values.config.springProfilesActive | quote }}
+  POSTGRES_HOST: {{ include "agentspan.dbHost" . | quote }}
+  POSTGRES_PORT: {{ include "agentspan.dbPort" . | quote }}
+  POSTGRES_DB: {{ include "agentspan.dbName" . | quote }}
+  JAVA_OPTS: {{ .Values.config.javaOpts | quote }}
+  LOGGING_LEVEL_ROOT: {{ .Values.config.loggingLevelRoot | quote }}
+  LOGGING_LEVEL_DEV_AGENTSPAN: {{ .Values.config.loggingLevelAgentspan | quote }}
+  {{- if .Values.config.ollamaHost }}
+  OLLAMA_HOST: {{ .Values.config.ollamaHost | quote }}
+  {{- end }}
