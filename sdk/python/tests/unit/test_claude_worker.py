@@ -2,7 +2,7 @@
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 # sdk/python/tests/unit/test_claude_worker.py
-"""Tests for make_claude_worker — the Tier 1/2/3 passthrough worker factory."""
+"""Tests for make_claude_worker — hook-driven DAG passthrough worker factory."""
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -284,22 +284,6 @@ class TestMakeClaudeWorkerMcpWiring:
 
     def test_mcp_server_not_built_when_no_mcp_tools(self):
         """No MCP server built for plain Tier 1 agent (no mcp_tools)."""
-        from agentspan.agents.frameworks.claude import ClaudeCodeAgent, make_claude_worker
-
-        agent = ClaudeCodeAgent(name="test")  # no mcp_tools
-        worker = make_claude_worker(agent, "_fw_claude_test", "http://localhost:8080/api", "", "")
-
-        with (
-            patch("agentspan.agents.frameworks.claude.query", self._fake_query()),
-            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
-            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
-            patch("agentspan.agents.frameworks.claude_mcp_server.AgentspanMcpServer") as MockServer,
-        ):
-            worker(self._make_task())
-            MockServer.assert_not_called()
-
-    def test_no_mcp_server_when_no_mcp_tools(self):
-        """No MCP server built when mcp_tools is empty."""
         from agentspan.agents.frameworks.claude import ClaudeCodeAgent, make_claude_worker
 
         agent = ClaudeCodeAgent(name="test")  # no mcp_tools

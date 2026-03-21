@@ -351,7 +351,6 @@ def make_claude_worker(
         from agentspan.agents.frameworks.claude import (
             ClaudeAgentOptions,
             HookMatcher,
-            # Used by DAG hooks (Task 3: new hook implementation)
             _AgentDagClient,
             _checkpoint_session,
             _read_last_result_from_transcript,
