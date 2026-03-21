@@ -1,27 +1,17 @@
-import AddIcon from "@mui/icons-material/Add";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { Box, Tooltip, Typography } from "@mui/material";
 import {
-  Box,
-  Button,
-  Collapse,
-  IconButton,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material";
+  CaretRight as ExpandIcon,
+  CaretDown as CollapseIcon,
+  PencilSimple as EditIcon,
+  Trash as DeleteIcon,
+} from "@phosphor-icons/react";
+import { Button, DataTable, IconButton, Paper } from "components";
 import ConfirmChoiceDialog from "components/ConfirmChoiceDialog";
+import Header from "components/Header";
+import NoDataComponent from "components/NoDataComponent";
 import { SnackbarMessage } from "components/SnackbarMessage";
-import { Fragment, useState, useMemo } from "react";
+import AddIcon from "components/v1/icons/AddIcon";
+import { Fragment, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 import SectionContainer from "shared/SectionContainer";
 import SectionHeader from "shared/SectionHeader";
@@ -47,11 +37,13 @@ export function CredentialsPage() {
   const credentialsQuery = useListCredentials(apiOpts);
   const bindingsQuery = useListBindings(apiOpts);
 
-  const [expandedName, setExpandedName] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [expandedNames, setExpandedNames] = useState<Set<string>>(new Set());
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [editCredential, setEditCredential] = useState<CredentialListItem | null>(null);
-  const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null);
+  const [editCredential, setEditCredential] =
+    useState<CredentialListItem | null>(null);
+  const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(
+    null,
+  );
   const [addBindingFor, setAddBindingFor] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<PopoverMessage | null>(null);
 
@@ -61,20 +53,6 @@ export function CredentialsPage() {
   const credentials = credentialsQuery.data ?? [];
   const bindings = bindingsQuery.data ?? [];
 
-  const filtered = useMemo(
-    () =>
-      search.trim()
-        ? credentials.filter((c) =>
-            c.name.toLowerCase().includes(search.toLowerCase()),
-          )
-        : credentials,
-    [credentials, search],
-  );
-
-  function bindingsFor(storeName: string) {
-    return bindings.filter((b) => b.store_name === storeName);
-  }
-
   // Show LoginDialog only on 401, not on every page load with no token.
   // In OSS mode (auth.enabled=false) the server returns 200 with no token, so
   // isAuthenticated=false but credentialsQuery.error is null → dialog stays hidden.
@@ -83,6 +61,177 @@ export function CredentialsPage() {
     !isAuthenticated &&
     ((credentialsQuery.error as any)?.status === 401 ||
       (bindingsQuery.error as any)?.status === 401);
+
+  const toggleExpanded = (name: string) => {
+    setExpandedNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+
+  const columns = useMemo(
+    () => [
+      {
+        id: "expand",
+        name: "name",
+        label: "",
+        sortable: false,
+        searchable: false,
+        grow: 0,
+        width: "48px",
+        renderer: (name: string) => (
+          <IconButton
+            size="small"
+            data-testid={`expand-${name}`}
+            onClick={() => toggleExpanded(name)}
+          >
+            {expandedNames.has(name) ? (
+              <CollapseIcon size={16} />
+            ) : (
+              <ExpandIcon size={16} />
+            )}
+          </IconButton>
+        ),
+      },
+      {
+        id: "name",
+        name: "name",
+        label: "Name",
+        searchable: true,
+        renderer: (name: string) => (
+          <Typography variant="body2" fontFamily="monospace" fontWeight={500}>
+            {name}
+          </Typography>
+        ),
+      },
+      {
+        id: "partial",
+        name: "partial",
+        label: "Value",
+        searchable: false,
+        renderer: (partial: string) => (
+          <Typography
+            variant="body2"
+            fontFamily="monospace"
+            sx={{
+              bgcolor: "action.hover",
+              px: 0.75,
+              py: 0.25,
+              borderRadius: 1,
+              display: "inline",
+            }}
+          >
+            {partial}
+          </Typography>
+        ),
+      },
+      {
+        id: "updated_at",
+        name: "updated_at",
+        label: "Last updated",
+        searchable: false,
+        renderer: (updated_at: string) => (
+          <Typography variant="body2" color="text.secondary">
+            {new Date(updated_at).toLocaleString()}
+          </Typography>
+        ),
+      },
+      {
+        id: "actions",
+        name: "name",
+        label: "Actions",
+        sortable: false,
+        searchable: false,
+        grow: 0.5,
+        renderer: (name: string, cred: CredentialListItem) => (
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <Tooltip title="Edit credential">
+              <IconButton
+                size="small"
+                onClick={() => setEditCredential(cred)}
+                data-testid={`edit-${name}`}
+              >
+                <EditIcon size={20} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete credential">
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => setConfirmDeleteName(name)}
+                data-testid={`delete-${name}`}
+              >
+                <DeleteIcon size={20} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        ),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [expandedNames],
+  );
+
+  const ExpandedBindings = ({ data }: { data: CredentialListItem }) => {
+    const rowBindings = bindings.filter((b) => b.store_name === data.name);
+    return (
+      <Box
+        sx={{
+          py: 1.5,
+          px: 3,
+          bgcolor: "action.hover",
+          borderTop: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            mb: 1,
+          }}
+        >
+          <Typography
+            variant="caption"
+            fontWeight={600}
+            color="text.secondary"
+            textTransform="uppercase"
+            letterSpacing={0.5}
+          >
+            Bindings — logical keys that resolve to{" "}
+            <code style={{ fontSize: "inherit" }}>{data.name}</code>
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setAddBindingFor(data.name)}
+          >
+            + Add binding
+          </Button>
+        </Box>
+        <BindingChips
+          bindings={rowBindings}
+          onDelete={async (logicalKey) => {
+            try {
+              await deleteBinding.mutateAsync(logicalKey);
+              setToastMessage({ text: "Binding removed.", severity: "success" });
+            } catch {
+              setToastMessage({
+                text: "Failed to remove binding.",
+                severity: "error",
+              });
+            }
+          }}
+        />
+      </Box>
+    );
+  };
 
   return (
     <>
@@ -106,7 +255,9 @@ export function CredentialsPage() {
           mode="add"
           token={token}
           onUnauthorized={clearToken}
-          onSuccess={() => setToastMessage({ text: "Credential added.", severity: "success" })}
+          onSuccess={() =>
+            setToastMessage({ text: "Credential added.", severity: "success" })
+          }
           onClose={() => setAddDialogOpen(false)}
         />
       )}
@@ -117,7 +268,12 @@ export function CredentialsPage() {
           initialName={editCredential.name}
           token={token}
           onUnauthorized={clearToken}
-          onSuccess={() => setToastMessage({ text: "Credential updated.", severity: "success" })}
+          onSuccess={() =>
+            setToastMessage({
+              text: "Credential updated.",
+              severity: "success",
+            })
+          }
           onClose={() => setEditCredential(null)}
         />
       )}
@@ -142,9 +298,15 @@ export function CredentialsPage() {
             if (confirmed && confirmDeleteName) {
               try {
                 await deleteCredential.mutateAsync(confirmDeleteName);
-                setToastMessage({ text: "Credential deleted.", severity: "success" });
+                setToastMessage({
+                  text: "Credential deleted.",
+                  severity: "success",
+                });
               } catch {
-                setToastMessage({ text: "Failed to delete credential.", severity: "error" });
+                setToastMessage({
+                  text: "Failed to delete credential.",
+                  severity: "error",
+                });
               }
             }
             setConfirmDeleteName(null);
@@ -157,15 +319,22 @@ export function CredentialsPage() {
           credentialName={addBindingFor}
           token={token}
           onUnauthorized={clearToken}
-          onSuccess={() => setToastMessage({ text: "Binding added.", severity: "success" })}
-          onError={() => setToastMessage({ text: "Failed to add binding.", severity: "error" })}
+          onSuccess={() =>
+            setToastMessage({ text: "Binding added.", severity: "success" })
+          }
+          onError={() =>
+            setToastMessage({
+              text: "Failed to add binding.",
+              severity: "error",
+            })
+          }
           onClose={() => setAddBindingFor(null)}
         />
       )}
 
-      {/* Header */}
       <SectionHeader
         title="Credentials"
+        _deprecate_marginTop={0}
         actions={
           <SectionHeaderActions
             buttons={[
@@ -188,205 +357,41 @@ export function CredentialsPage() {
         }
       />
 
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ px: 3, pb: 1 }}
-      >
-        Per-user API keys and secrets. Values are encrypted at rest and never
-        shown after creation.
-      </Typography>
-
       <SectionContainer>
-        {/* Search */}
-        <Box sx={{ mb: 2 }}>
-          <TextField
-            size="small"
-            placeholder="Search credentials…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ width: 280 }}
+        {/*@ts-ignore*/}
+        <Paper variant="outlined">
+          <Header loading={credentialsQuery.isFetching} />
+          {/* @ts-ignore */}
+          <DataTable
+            localStorageKey="credentialsTable"
+            quickSearchEnabled
+            quickSearchPlaceholder="Search credentials"
+            keyField="name"
+            data={credentials}
+            columns={columns}
+            expandableRows
+            expandableRowExpanded={(row: CredentialListItem) =>
+              expandedNames.has(row.name)
+            }
+            expandableRowsHideExpander
+            expandableRowsComponent={ExpandedBindings}
+            noDataComponent={
+              <NoDataComponent
+                title="Credentials"
+                description="Store API keys and secrets securely. Values are encrypted at rest and never shown after creation."
+                buttonText="Add Credential"
+                buttonHandler={() => setAddDialogOpen(true)}
+              />
+            }
           />
-        </Box>
-
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: 32 }} /> {/* chevron — 5 columns total */}
-                <TableCell>Name</TableCell>
-                <TableCell>Value (partial)</TableCell>
-                <TableCell>Last updated</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filtered.map((cred) => {
-                const expanded = expandedName === cred.name;
-                const rowBindings = bindingsFor(cred.name);
-                return (
-                  <Fragment key={cred.name}>
-                    <TableRow
-                      hover
-                      sx={{ "& > *": { borderBottom: expanded ? 0 : undefined } }}
-                    >
-                      <TableCell padding="checkbox">
-                        <IconButton
-                          size="small"
-                          data-testid={`expand-${cred.name}`}
-                          onClick={() =>
-                            setExpandedName(expanded ? null : cred.name)
-                          }
-                        >
-                          {expanded ? (
-                            <ExpandMoreIcon fontSize="small" />
-                          ) : (
-                            <ChevronRightIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          fontFamily="monospace"
-                          fontWeight={500}
-                        >
-                          {cred.name}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          fontFamily="monospace"
-                          sx={{
-                            bgcolor: "action.hover",
-                            px: 0.75,
-                            py: 0.25,
-                            borderRadius: 1,
-                            display: "inline",
-                          }}
-                        >
-                          {cred.partial}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {cred.updated_at}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="Edit">
-                          <IconButton
-                            size="small"
-                            onClick={() => setEditCredential(cred)}
-                            data-testid={`edit-${cred.name}`}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => setConfirmDeleteName(cred.name)}
-                            data-testid={`delete-${cred.name}`}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-
-                    {/* Bindings expansion row */}
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        sx={{ py: 0, borderBottom: expanded ? undefined : 0 }}
-                      >
-                        <Collapse in={expanded} timeout="auto" unmountOnExit>
-                          <Box
-                            sx={{
-                              py: 1.5,
-                              px: 2,
-                              bgcolor: "action.hover",
-                              borderTop: "1px solid",
-                              borderColor: "divider",
-                            }}
-                          >
-                            <Box
-                              sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                mb: 1,
-                              }}
-                            >
-                              <Typography
-                                variant="caption"
-                                fontWeight={600}
-                                color="text.secondary"
-                                textTransform="uppercase"
-                                letterSpacing={0.5}
-                              >
-                                Bindings — logical keys that resolve to{" "}
-                                <code style={{ fontSize: "inherit" }}>
-                                  {cred.name}
-                                </code>
-                              </Typography>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => setAddBindingFor(cred.name)}
-                              >
-                                + Add binding
-                              </Button>
-                            </Box>
-                            <BindingChips
-                              bindings={rowBindings}
-                              onDelete={async (logicalKey) => {
-                                try {
-                                  await deleteBinding.mutateAsync(logicalKey);
-                                  setToastMessage({
-                                    text: "Binding removed.",
-                                    severity: "success",
-                                  });
-                                } catch {
-                                  setToastMessage({
-                                    text: "Failed to remove binding.",
-                                    severity: "error",
-                                  });
-                                }
-                              }}
-                            />
-                          </Box>
-                        </Collapse>
-                      </TableCell>
-                    </TableRow>
-                  </Fragment>
-                );
-              })}
-
-              {filtered.length === 0 && !credentialsQuery.isLoading && (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary">
-                      {search
-                        ? `No credentials match "${search}"`
-                        : "No credentials yet — click Add Credential to get started."}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        </Paper>
       </SectionContainer>
 
       {toastMessage && (
         <SnackbarMessage
+          autoHideDuration={3000}
           message={toastMessage.text}
           severity={toastMessage.severity}
-          autoHideDuration={3000}
           onDismiss={() => setToastMessage(null)}
         />
       )}
