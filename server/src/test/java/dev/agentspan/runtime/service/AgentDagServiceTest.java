@@ -16,7 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.web.server.ResponseStatusException;
+import com.netflix.conductor.core.exception.NotFoundException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -109,8 +109,8 @@ class AgentDagServiceTest {
         req.setType("SIMPLE");
 
         assertThatThrownBy(() -> service.injectTask("bad-id", req))
-                .isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("404");
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Workflow not found");
     }
 
     // ── createTrackingWorkflow ───────────────────────────────────────────────

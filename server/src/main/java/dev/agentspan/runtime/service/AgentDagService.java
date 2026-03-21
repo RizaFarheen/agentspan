@@ -10,10 +10,9 @@ import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
 import dev.agentspan.runtime.model.*;
+import com.netflix.conductor.core.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Collections;
 import java.util.List;
@@ -28,8 +27,7 @@ public class AgentDagService {
     public InjectTaskResponse injectTask(String workflowId, InjectTaskRequest req) {
         WorkflowModel workflow = executionDAO.getWorkflow(workflowId, true);
         if (workflow == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Workflow not found: " + workflowId);
+            throw new NotFoundException("Workflow not found: " + workflowId);
         }
 
         TaskModel task = new TaskModel();
