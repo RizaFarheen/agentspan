@@ -15,7 +15,7 @@ Requirements:
 """
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -112,7 +112,7 @@ graph = create_agent(
     llm,
     tools=[classify_department, classify_priority, classify_issue_type, suggest_response_template],
     name="classification_agent",
-    system_prompt=CLASSIFIER_SYSTEM,
+    state_modifier=CLASSIFIER_SYSTEM,
 )
 
 SAMPLE_TICKETS = [

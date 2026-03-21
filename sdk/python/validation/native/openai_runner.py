@@ -7,7 +7,6 @@ import logging
 from typing import Any
 
 from agentspan.agents.result import (
-    AgentEvent,
     AgentResult,
     FinishReason,
     Status,
@@ -30,12 +29,6 @@ def run_openai_native(agent_obj: Any, prompt: str) -> AgentResult:
     )
 
     prepared = _strip_model_prefix(agent_obj)
-    logger.info(
-        "Native sync: agents.Runner.run_sync(agent=%s, model=%s, prompt=%.80s...)",
-        getattr(prepared, "name", "?"),
-        getattr(prepared, "model", "?"),
-        prompt,
-    )
 
     try:
         run_result = Runner.run_sync(
@@ -65,7 +58,6 @@ def run_openai_native(agent_obj: Any, prompt: str) -> AgentResult:
             error=str(e),
         )
     except Exception as e:
-        logger.error("Native sync failed: %s", e)
         return AgentResult(
             output=None,
             status=Status.FAILED,
@@ -73,14 +65,7 @@ def run_openai_native(agent_obj: Any, prompt: str) -> AgentResult:
             error=str(e),
         )
 
-    result = _map_run_result(run_result)
-    logger.info(
-        "Native sync completed: status=%s, tokens=%s, tool_calls=%d",
-        result.status,
-        result.token_usage.total_tokens if result.token_usage else 0,
-        len(result.tool_calls),
-    )
-    return result
+    return _map_run_result(run_result)
 
 
 async def run_openai_native_async(agent_obj: Any, prompt: str) -> AgentResult:
@@ -93,12 +78,6 @@ async def run_openai_native_async(agent_obj: Any, prompt: str) -> AgentResult:
     )
 
     prepared = _strip_model_prefix(agent_obj)
-    logger.info(
-        "Native async: agents.Runner.run(agent=%s, model=%s, prompt=%.80s...)",
-        getattr(prepared, "name", "?"),
-        getattr(prepared, "model", "?"),
-        prompt,
-    )
 
     try:
         run_result = await Runner.run(
@@ -128,7 +107,6 @@ async def run_openai_native_async(agent_obj: Any, prompt: str) -> AgentResult:
             error=str(e),
         )
     except Exception as e:
-        logger.error("Native async failed: %s", e)
         return AgentResult(
             output=None,
             status=Status.FAILED,
@@ -136,58 +114,7 @@ async def run_openai_native_async(agent_obj: Any, prompt: str) -> AgentResult:
             error=str(e),
         )
 
-    result = _map_run_result(run_result)
-    logger.info(
-        "Native async completed: status=%s, tokens=%s, tool_calls=%d",
-        result.status,
-        result.token_usage.total_tokens if result.token_usage else 0,
-        len(result.tool_calls),
-    )
-    return result
-
-
-def run_openai_native_stream(agent_obj: Any, prompt: str):
-    """Run an OpenAI agent natively and yield AgentEvent objects.
-
-    Uses ``Runner.run_sync()`` under the hood (no real-time streaming), then
-    reconstructs events from the run result so the example's event loop works.
-    """
-    from agents import RunConfig, Runner
-    from agents.items import MessageOutputItem, ToolCallItem, ToolCallOutputItem
-
-    prepared = _strip_model_prefix(agent_obj)
-    try:
-        run_result = Runner.run_sync(
-            prepared,
-            input=prompt,
-            run_config=RunConfig(tracing_disabled=True),
-        )
-    except Exception as e:
-        yield AgentEvent(type=EventType.ERROR, content=str(e))
-        return
-
-    # Emit thinking / tool_call / tool_result events reconstructed from items.
-    # Use string values (not EventType enum) so f-strings render as "tool_call"
-    # rather than "EventType.TOOL_CALL" (Python 3.12 changed str-Enum formatting).
-    pending_call: dict | None = None
-    for item in run_result.new_items:
-        if isinstance(item, MessageOutputItem):
-            text = ""
-            for part in getattr(item.raw_item, "content", []):
-                if hasattr(part, "text"):
-                    text += part.text
-            if text:
-                yield AgentEvent(type="thinking", content=text)
-        elif isinstance(item, ToolCallItem):
-            raw = item.raw_item
-            pending_call = {"name": getattr(raw, "name", ""), "args": getattr(raw, "arguments", "")}
-            yield AgentEvent(type="tool_call", tool_name=pending_call["name"])
-        elif isinstance(item, ToolCallOutputItem):
-            name = pending_call["name"] if pending_call else ""
-            yield AgentEvent(type="tool_result", tool_name=name, result=item.output)
-            pending_call = None
-
-    yield AgentEvent(type="done", output=run_result.final_output)
+    return _map_run_result(run_result)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────

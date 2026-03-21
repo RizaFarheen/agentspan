@@ -5,10 +5,12 @@
 
 package dev.agentspan.runtime.service;
 
+import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+import com.netflix.conductor.core.exception.NotFoundException;
 import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
-import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import dev.agentspan.runtime.model.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,7 +18,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import com.netflix.conductor.core.exception.NotFoundException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,6 +71,15 @@ class AgentDagServiceTest {
         assertThat(created.getInputData()).containsEntry("command", "ls");
         assertThat(created.getSeq()).isEqualTo(1); // 0 tasks + 1
         assertThat(created.getTaskId()).isEqualTo(resp.getTaskId());
+
+        // Verify WorkflowTask added to definition and workflow updated
+        verify(executionDAO).updateWorkflow(wf);
+        List<WorkflowTask> defTasks = wf.getWorkflowDefinition().getTasks();
+        assertThat(defTasks).hasSize(1);
+        WorkflowTask wt = defTasks.get(0);
+        assertThat(wt.getName()).isEqualTo("Bash");
+        assertThat(wt.getTaskReferenceName()).isEqualTo("bash_tool_use_id_abc");
+        assertThat(wt.getType()).isEqualTo("SIMPLE");
     }
 
     @Test
@@ -98,6 +108,17 @@ class AgentDagServiceTest {
 
         assertThat(created.getSubWorkflowId()).isEqualTo("sub-wf-id-999");
         assertThat(created.getSeq()).isEqualTo(3); // 2 existing tasks + 1
+
+        // Verify WorkflowTask with SubWorkflowParams added to definition
+        verify(executionDAO).updateWorkflow(wf);
+        List<WorkflowTask> defTasks = wf.getWorkflowDefinition().getTasks();
+        assertThat(defTasks).hasSize(1);
+        WorkflowTask wt = defTasks.get(0);
+        assertThat(wt.getName()).isEqualTo("claude-sub-agent");
+        assertThat(wt.getType()).isEqualTo("SUB_WORKFLOW");
+        assertThat(wt.getSubWorkflowParam()).isNotNull();
+        assertThat(wt.getSubWorkflowParam().getName()).isEqualTo("my-sub-workflow");
+        assertThat(wt.getSubWorkflowParam().getVersion()).isEqualTo(1);
     }
 
     @Test
@@ -142,6 +163,7 @@ class AgentDagServiceTest {
         wf.setWorkflowId(id);
         WorkflowDef def = new WorkflowDef();
         def.setName(name);
+        def.setTasks(new ArrayList<>());
         wf.setWorkflowDefinition(def);
         List<TaskModel> tasks = new ArrayList<>();
         for (int i = 0; i < taskCount; i++) {

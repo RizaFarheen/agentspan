@@ -18,7 +18,7 @@ import json
 from typing import List
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -145,7 +145,7 @@ graph = create_agent(
     llm,
     tools=[get_book_recommendations, get_course_recommendations, explain_recommendation],
     name="recommendation_agent",
-    system_prompt=RECOMMENDER_SYSTEM,
+    state_modifier=RECOMMENDER_SYSTEM,
 )
 
 if __name__ == "__main__":

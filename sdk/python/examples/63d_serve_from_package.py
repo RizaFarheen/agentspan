@@ -52,15 +52,10 @@ monitoring_agent = Agent(
 )
 
 with AgentRuntime() as runtime:
-    # Deploy first so the workflow is registered on the server
-    results = runtime.deploy(monitoring_agent)
-    for info in results:
-        print(f"Deployed: {info.agent_name} -> {info.workflow_name}")
-
     # Serve an explicit agent + auto-discover from a package
     # runtime.serve(monitoring_agent, packages=["myapp.agents"])
 
     # For this example, just serve the explicit agent
     print("Serving monitoring agent. Press Ctrl+C to stop.")
-    print("Run 63e_run_monitoring.py in another terminal to trigger it.")
+    print("Uncomment the packages= line to also serve discovered agents.")
     runtime.serve(monitoring_agent)

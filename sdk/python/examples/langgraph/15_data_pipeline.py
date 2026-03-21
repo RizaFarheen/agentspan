@@ -1,38 +1,38 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Data Pipeline — create_agent with load, clean, analyze, and report tools.
+"""Data Pipeline — StateGraph with load → clean → analyze → report nodes.
 
 Demonstrates:
-    - An ETL-style pipeline modelled as tools called by the agent
-    - Each tool represents a stage: load → clean → analyze → report
-    - The LLM orchestrates the pipeline server-side via tool calls
-    - LLM-based analysis and report generation run inside tool functions
+    - A multi-step ETL-style pipeline modelled as a StateGraph
+    - Each node transforms the state as data flows through
+    - Using an LLM at the analysis and reporting stages
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-import json
-from typing import List, Dict, Any
+from typing import TypedDict, List, Dict, Any
 
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 
-@tool
-def load_data(dataset_name: str) -> str:
-    """Load a named mock dataset and return it as JSON.
+class State(TypedDict):
+    dataset_name: str
+    raw_data: List[Dict[str, Any]]
+    clean_data: List[Dict[str, Any]]
+    analysis: str
+    report: str
 
-    Args:
-        dataset_name: Name of the dataset to load — 'sales' or 'users'.
-    """
+
+def load_data(state: State) -> State:
+    """Load mock data for the requested dataset."""
     mock_datasets = {
         "sales": [
             {"product": "Widget A", "revenue": 15000, "units": 300, "region": "North"},
@@ -47,105 +47,72 @@ def load_data(dataset_name: str) -> str:
             {"id": 3, "name": "Bob", "age": 34, "active": True},
         ],
     }
-    dataset = mock_datasets.get(dataset_name.lower(), mock_datasets["sales"])
-    return f"Loaded {len(dataset)} records from '{dataset_name}':\n{json.dumps(dataset, indent=2)}"
+    dataset = mock_datasets.get(state["dataset_name"].lower(), mock_datasets["sales"])
+    return {"raw_data": dataset}
 
 
-@tool
-def clean_data(raw_json: str) -> str:
-    """Clean a JSON dataset by removing invalid rows and returning the cleaned result.
-
-    Removes rows with None revenue, negative units, or zero-revenue/zero-unit rows.
-
-    Args:
-        raw_json: JSON string containing a list of records to clean.
-    """
-    try:
-        records = json.loads(raw_json)
-    except json.JSONDecodeError:
-        # Try to extract JSON array from larger text
-        import re
-        match = re.search(r'\[.*\]', raw_json, re.DOTALL)
-        if match:
-            records = json.loads(match.group())
-        else:
-            return "Error: Could not parse JSON from input."
-
+def clean_data(state: State) -> State:
+    """Remove invalid rows and fill missing values."""
     cleaned = []
-    for row in records:
+    for row in state["raw_data"]:
+        # Skip rows with None revenue or negative units
         if row.get("revenue") is None or row.get("units", 0) < 0:
             continue
+        # Replace zero-revenue rows with a sentinel
         if row.get("revenue", 0) == 0 and row.get("units", 0) == 0:
             continue
-        if "name" in row and not row.get("name"):
-            continue
         cleaned.append(row)
+    return {"clean_data": cleaned}
 
-    return f"Cleaned data ({len(cleaned)} valid records):\n{json.dumps(cleaned, indent=2)}"
 
-
-@tool
-def analyze_data(dataset_name: str, clean_json: str) -> str:
-    """Analyze a cleaned dataset and return key statistics and business insights.
-
-    Args:
-        dataset_name: Name of the dataset being analyzed.
-        clean_json: JSON string of cleaned records to analyze.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You are a data analyst. Analyze the following dataset records and provide: "
-            "1) Key statistics (totals, averages, ranges), "
-            "2) Notable patterns or outliers, "
-            "3) Business insights. Be concise."
-        )),
-        ("human", "Dataset: {dataset_name}\n\n{data}"),
+def analyze_data(state: State) -> State:
+    """Run statistical analysis on the clean data using the LLM."""
+    data_str = "\n".join(str(row) for row in state["clean_data"])
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a data analyst. Analyze the following dataset records and provide: "
+                "1) Key statistics (totals, averages, ranges), "
+                "2) Notable patterns or outliers, "
+                "3) Business insights. Be concise."
+            )
+        ),
+        HumanMessage(content=f"Dataset: {state['dataset_name']}\n\n{data_str}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"dataset_name": dataset_name, "data": clean_json})
-    return response.content
+    return {"analysis": response.content}
 
 
-@tool
-def generate_report(analysis: str) -> str:
-    """Generate an executive summary report from a data analysis.
-
-    Args:
-        analysis: The data analysis text to turn into an executive report.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You are a business report writer. "
-            "Turn the following data analysis into a concise executive summary report "
-            "with an introduction, key findings, and recommendations."
-        )),
-        ("human", "{analysis}"),
+def generate_report(state: State) -> State:
+    """Generate an executive summary report from the analysis."""
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a business report writer. "
+                "Turn the following data analysis into a concise executive summary report "
+                "with an introduction, key findings, and recommendations."
+            )
+        ),
+        HumanMessage(content=state["analysis"]),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"analysis": analysis})
-    return response.content
+    return {"report": response.content}
 
 
-PIPELINE_SYSTEM = """You are a data pipeline orchestrator.
+builder = StateGraph(State)
+builder.add_node("load", load_data)
+builder.add_node("clean", clean_data)
+builder.add_node("analyze", analyze_data)
+builder.add_node("report", generate_report)
 
-For each dataset analysis request:
-1. Load the dataset using load_data
-2. Clean the raw data using clean_data (pass the raw JSON from step 1)
-3. Analyze the cleaned data using analyze_data
-4. Generate an executive report using generate_report
+builder.add_edge(START, "load")
+builder.add_edge("load", "clean")
+builder.add_edge("clean", "analyze")
+builder.add_edge("analyze", "report")
+builder.add_edge("report", END)
 
-Always complete all four steps and present the final report.
-"""
-
-graph = create_agent(
-    llm,
-    tools=[load_data, clean_data, analyze_data, generate_report],
-    name="data_pipeline",
-    system_prompt=PIPELINE_SYSTEM,
-)
+graph = builder.compile(name="data_pipeline")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(graph, "Run the full pipeline on the sales dataset.")
+        result = runtime.run(graph, "sales")
         print(f"Status: {result.status}")
         result.print_result()

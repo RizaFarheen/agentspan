@@ -17,7 +17,7 @@ from typing import List
 
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from agentspan.agents import AgentRuntime
 
 

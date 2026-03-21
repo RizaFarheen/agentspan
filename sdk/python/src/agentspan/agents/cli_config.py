@@ -37,7 +37,7 @@ import os
 import shlex
 import subprocess
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -58,7 +58,6 @@ class CliConfig:
     timeout: int = 30
     working_dir: Optional[str] = None
     allow_shell: bool = False
-    guardrails: List[Any] = field(default_factory=list)
 
 
 # ── Validation ─────────────────────────────────────────────────────────
@@ -91,26 +90,19 @@ def _make_cli_tool(
     timeout: int = 30,
     working_dir: Optional[str] = None,
     allow_shell: bool = False,
-    guardrails: Optional[List[Any]] = None,
-    agent_name: Optional[str] = None,
 ) -> Any:
     """Create a ``@tool``-decorated ``run_command`` function.
 
-    The task name is scoped to the agent (``{agent_name}_run_command``) so
-    that multiple agents with different ``cli_allowed_commands`` each get
-    their own Conductor worker without collision.
+    The returned function can be appended to ``Agent.tools`` directly.
     """
     from agentspan.agents.tool import tool
 
-    task_name = f"{agent_name}_run_command" if agent_name else "run_command"
-
-    @tool(name=task_name)
+    @tool(name="run_command")
     def run_command(
         command: str,
         args: list = [],
         cwd: str = "",
         shell: bool = False,
-        _allowed_commands: list = [],
     ) -> dict:
         """Run a CLI command."""
         if not command or not isinstance(command, str):
@@ -120,14 +112,15 @@ def _make_cli_tool(
                 "stderr": "No command provided.",
             }
 
-        # Use per-task allowed_commands injected by the server when available,
-        # otherwise fall back to the closure-captured list.
-        effective_allowed = _allowed_commands if _allowed_commands else allowed_commands
-        _validate_cli_command(command, effective_allowed)
+        # Validate against whitelist
+        _validate_cli_command(command, allowed_commands)
 
         # Shell gate
         if shell and not allow_shell:
-            raise ValueError("Shell mode is disabled for this agent. Do not set shell=True.")
+            raise ValueError(
+                "Shell mode is disabled for this agent. "
+                "Do not set shell=True."
+            )
 
         # Normalise args
         if args is None:
@@ -141,7 +134,9 @@ def _make_cli_tool(
         try:
             if shell:
                 # Build a safe shell command string
-                cmd_str = command + " " + " ".join(shlex.quote(str(a)) for a in args)
+                cmd_str = command + " " + " ".join(
+                    shlex.quote(str(a)) for a in args
+                )
                 result = subprocess.run(
                     cmd_str,
                     shell=True,
@@ -169,7 +164,8 @@ def _make_cli_tool(
                 return {
                     "status": "error",
                     "stdout": result.stdout,
-                    "stderr": (result.stderr or "") + f"\nExit code: {result.returncode}",
+                    "stderr": (result.stderr or "")
+                    + f"\nExit code: {result.returncode}",
                 }
 
         except subprocess.TimeoutExpired:
@@ -192,16 +188,14 @@ def _make_cli_tool(
             }
 
     # Build dynamic description
-    desc = f"Run a CLI command directly. Timeout: {timeout}s."
+    desc = (
+        "Run a CLI command directly. "
+        f"Timeout: {timeout}s."
+    )
     if allowed_commands:
         desc += f" Allowed commands: {', '.join(sorted(allowed_commands))}."
     if not allow_shell:
         desc += " Shell mode is disabled — do not set shell=True."
     run_command._tool_def.description = desc
-    run_command._tool_def.tool_type = "cli"
-    run_command._tool_def.config = {"allowedCommands": list(allowed_commands)}
-
-    if guardrails:
-        run_command._tool_def.guardrails = list(guardrails)
 
     return run_command

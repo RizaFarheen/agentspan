@@ -3,10 +3,8 @@
 Example 2: LangGraph custom StateGraph with non-messages state.
 Verifies auto-detection of non-messages input/output schemas.
 """
-
-from unittest.mock import MagicMock, patch
-
 import pytest
+from unittest.mock import MagicMock, patch
 
 
 @pytest.fixture
@@ -14,8 +12,7 @@ def custom_graph():
     """Build a simple StateGraph with a custom state schema (no messages)."""
     pytest.importorskip("langgraph")
     from typing import TypedDict
-
-    from langgraph.graph import END, StateGraph
+    from langgraph.graph import StateGraph, END
 
     class State(TypedDict):
         query: str
@@ -34,14 +31,12 @@ def custom_graph():
 class TestCustomStateGraph:
     def test_detect_framework(self, custom_graph):
         from agentspan.agents.frameworks.serializer import detect_framework
-
         assert detect_framework(custom_graph) == "langgraph"
 
     def test_worker_extracts_non_messages_output_as_json(self, custom_graph):
         """When state has no messages key, output is JSON of the state dict."""
-        import json
-
         from agentspan.agents.frameworks.langgraph import make_langgraph_worker
+        import json
 
         stream_chunks = [
             ("updates", {"process": {"answer": "Answer to: hello"}}),

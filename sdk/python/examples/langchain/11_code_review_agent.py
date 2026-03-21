@@ -17,7 +17,7 @@ Requirements:
 import ast
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -115,7 +115,7 @@ graph = create_agent(
     llm,
     tools=[check_syntax, check_complexity, check_naming_conventions, check_docstrings],
     name="code_review_agent",
-    system_prompt=CODE_REVIEWER_SYSTEM,
+    state_modifier=CODE_REVIEWER_SYSTEM,
 )
 
 SAMPLE_CODE = '''

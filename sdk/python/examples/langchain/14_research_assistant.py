@@ -18,7 +18,7 @@ import json
 from typing import List
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -137,7 +137,7 @@ graph = create_agent(
     llm,
     tools=[search_papers, get_field_statistics, summarize_paper, format_citations],
     name="research_assistant_agent",
-    system_prompt=RESEARCH_SYSTEM,
+    state_modifier=RESEARCH_SYSTEM,
 )
 
 if __name__ == "__main__":

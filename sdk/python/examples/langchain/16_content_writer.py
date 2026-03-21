@@ -16,7 +16,7 @@ Requirements:
 
 from langchain_core.tools import tool
 from langchain_core.prompts import PromptTemplate
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -125,7 +125,7 @@ graph = create_agent(
     llm,
     tools=[generate_blog_post, generate_social_post, generate_email_subject_lines, check_readability],
     name="content_writer_agent",
-    system_prompt=WRITER_SYSTEM,
+    state_modifier=WRITER_SYSTEM,
 )
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ Requirements:
 
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -122,7 +122,7 @@ graph = create_agent(
     llm,
     tools=[detect_language, translate_text, back_translate_check, cultural_adaptation],
     name="translation_agent",
-    system_prompt=TRANSLATION_SYSTEM,
+    state_modifier=TRANSLATION_SYSTEM,
 )
 
 if __name__ == "__main__":

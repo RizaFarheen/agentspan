@@ -17,7 +17,7 @@ Requirements:
 from typing import List
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -126,7 +126,7 @@ graph = create_agent(
     llm,
     tools=[classify_sentiment, aspect_sentiment, extract_key_phrases, batch_sentiment_summary],
     name="sentiment_analysis_agent",
-    system_prompt=SENTIMENT_SYSTEM,
+    state_modifier=SENTIMENT_SYSTEM,
 )
 
 SAMPLE_REVIEW = (

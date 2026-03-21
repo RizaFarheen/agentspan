@@ -17,7 +17,7 @@ Requirements:
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -82,7 +82,7 @@ graph = create_agent(
     llm,
     tools=[brief_summary, bullet_summary, extract_action_items, extract_decisions],
     name="document_summarizer_agent",
-    system_prompt=SUMMARIZER_SYSTEM,
+    state_modifier=SUMMARIZER_SYSTEM,
 )
 
 MEETING_NOTES = """

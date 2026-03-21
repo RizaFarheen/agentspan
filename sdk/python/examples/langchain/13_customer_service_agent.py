@@ -15,7 +15,7 @@ Requirements:
 """
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -121,7 +121,7 @@ graph = create_agent(
     llm,
     tools=[lookup_order, check_return_policy, get_shipping_info, escalate_to_human],
     name="customer_service_agent",
-    system_prompt=CS_SYSTEM,
+    state_modifier=CS_SYSTEM,
 )
 
 if __name__ == "__main__":

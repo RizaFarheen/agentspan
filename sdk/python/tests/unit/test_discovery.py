@@ -3,11 +3,14 @@
 
 """Tests for agentspan.agents.runtime.discovery."""
 
+import sys
 import types
+
+import pytest
 from unittest.mock import patch
 
 from agentspan.agents.agent import Agent
-from agentspan.agents.runtime.discovery import _scan_module, discover_agents
+from agentspan.agents.runtime.discovery import discover_agents, _scan_module
 
 
 class TestScanModule:

@@ -18,13 +18,10 @@ Required environment variables:
     NOTION_API_KEY       – Notion integration token
     NOTION_RUNBOOK_DB_ID – Database ID of the runbooks database in Notion
 
+    GITHUB_TOKEN         – GitHub personal access token
     GITHUB_ORG           – GitHub organization name (e.g. "agentspan-dev")
 
     AGENT_LLM_MODEL      – (optional) LLM model, defaults to openai/gpt-4o-mini
-
-Prerequisites:
-    - gh CLI installed and authenticated (`gh auth login`)
-    - Conductor server running (`agentspan server start`)
 
 Usage:
 
@@ -36,20 +33,51 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
-from typing import Optional
+from typing import List, Optional
 
 import requests
+from pydantic import BaseModel, Field
+
 from agentspan.agents import (
     Agent,
     AgentRuntime,
+    Guardrail,
+    OnFail,
+    Position,
     RegexGuardrail,
     agent_tool,
     tool,
 )
 
 from settings import settings
+
+# ---------------------------------------------------------------------------
+# Structured output
+# ---------------------------------------------------------------------------
+
+
+class RelatedIssue(BaseModel):
+    source: str = Field(description="Origin system: jira, github, or zendesk")
+    key: str = Field(description="Issue key or URL")
+    summary: str = Field(description="One-line summary")
+    status: str = Field(description="Current status")
+
+
+class TicketAnalysis(BaseModel):
+    ticket_id: str = Field(description="Zendesk ticket ID")
+    customer_name: str = Field(description="Customer / company name")
+    summary: str = Field(description="One-paragraph summary of the customer issue")
+    priority: str = Field(description="P0 (house on fire) | P1 (critical) | P2 (high) | P3 (medium) | P4 (low)")
+    priority_justification: str = Field(description="Why this priority was assigned")
+    root_cause: str = Field(description="Most likely root cause based on investigation")
+    solution: str = Field(description="Recommended solution with step-by-step instructions")
+    runbook_references: List[str] = Field(default_factory=list, description="Links or titles of relevant Notion runbooks")
+    related_issues: List[RelatedIssue] = Field(default_factory=list, description="Related issues found across systems")
+    code_references: List[str] = Field(default_factory=list, description="Relevant files, PRs, or commits in GitHub")
+    next_steps: List[str] = Field(default_factory=list, description="Actionable next steps for the CE team")
+    customer_tier: str = Field(default="unknown", description="Customer tier/plan from HubSpot")
+    escalation_needed: bool = Field(default=False, description="Whether engineering escalation is needed")
 
 
 # ---------------------------------------------------------------------------
@@ -69,11 +97,6 @@ def _zendesk_auth() -> tuple:
     return (f"{ZENDESK_EMAIL}/token", ZENDESK_API_TOKEN)
 
 
-def _require_zendesk() -> None:
-    if not ZENDESK_SUBDOMAIN or not ZENDESK_EMAIL or not ZENDESK_API_TOKEN:
-        raise ValueError("Missing Zendesk config. Set ZENDESK_SUBDOMAIN, ZENDESK_EMAIL, and ZENDESK_API_TOKEN.")
-
-
 @tool
 def get_zendesk_ticket(ticket_id: str) -> dict:
     """Fetch a Zendesk support ticket by its ID.
@@ -81,7 +104,6 @@ def get_zendesk_ticket(ticket_id: str) -> dict:
     Returns ticket subject, description, status, priority, tags,
     requester info, and recent comments.
     """
-    _require_zendesk()
     url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/tickets/{ticket_id}.json"
     resp = requests.get(url, auth=_zendesk_auth(), headers=_zendesk_headers(), timeout=15)
     resp.raise_for_status()
@@ -127,7 +149,6 @@ def search_zendesk_tickets(query: str) -> dict:
     Use this to find similar or related tickets from other customers.
     Returns up to 10 results.
     """
-    _require_zendesk()
     url = f"https://{ZENDESK_SUBDOMAIN}.zendesk.com/api/v2/search.json"
     params = {"query": f"type:ticket {query}", "per_page": 10}
     resp = requests.get(url, auth=_zendesk_auth(), headers=_zendesk_headers(), params=params, timeout=15)
@@ -166,11 +187,6 @@ def _jira_headers() -> dict:
     return {"Accept": "application/json", "Content-Type": "application/json"}
 
 
-def _require_jira() -> None:
-    if not JIRA_BASE_URL or not JIRA_EMAIL or not JIRA_API_TOKEN:
-        raise ValueError("Missing JIRA config. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN.")
-
-
 @tool
 def search_jira_issues(jql: str) -> dict:
     """Search JIRA issues using JQL (JIRA Query Language).
@@ -182,14 +198,9 @@ def search_jira_issues(jql: str) -> dict:
 
     Returns up to 15 matching issues with key, summary, status, assignee, and priority.
     """
-    _require_jira()
-    url = f"{JIRA_BASE_URL}/rest/api/3/search/jql"
-    params = {
-        "jql": jql,
-        "maxResults": 15,
-        "fields": "summary,status,assignee,priority,labels,created,updated,description",
-    }
-    resp = requests.get(url, auth=_jira_auth(), headers=_jira_headers(), params=params, timeout=15)
+    url = f"{JIRA_BASE_URL}/rest/api/3/search"
+    payload = {"jql": jql, "maxResults": 15, "fields": ["summary", "status", "assignee", "priority", "labels", "created", "updated", "description"]}
+    resp = requests.post(url, auth=_jira_auth(), headers=_jira_headers(), json=payload, timeout=15)
     resp.raise_for_status()
     issues = resp.json().get("issues", [])
     return {
@@ -216,7 +227,6 @@ def get_jira_issue(issue_key: str) -> dict:
 
     Returns summary, description, status, comments, and linked issues.
     """
-    _require_jira()
     url = f"{JIRA_BASE_URL}/rest/api/3/issue/{issue_key}"
     params = {"fields": "summary,status,assignee,priority,labels,description,comment,issuelinks,created,updated,resolution"}
     resp = requests.get(url, auth=_jira_auth(), headers=_jira_headers(), params=params, timeout=15)
@@ -269,11 +279,6 @@ def _hubspot_headers() -> dict:
     return {"Authorization": f"Bearer {HUBSPOT_ACCESS_TOKEN}", "Content-Type": "application/json"}
 
 
-def _require_hubspot() -> None:
-    if not HUBSPOT_ACCESS_TOKEN:
-        raise ValueError("Missing HubSpot config. Set HUBSPOT_ACCESS_TOKEN.")
-
-
 @tool
 def search_hubspot_company(company_name: str) -> dict:
     """Search HubSpot for a company by name.
@@ -281,7 +286,6 @@ def search_hubspot_company(company_name: str) -> dict:
     Returns company details including plan/tier, ARR, owner, and lifecycle stage.
     Useful for understanding customer context and importance.
     """
-    _require_hubspot()
     url = "https://api.hubapi.com/crm/v3/objects/companies/search"
     payload = {
         "filterGroups": [{"filters": [{"propertyName": "name", "operator": "CONTAINS_TOKEN", "value": company_name}]}],
@@ -319,7 +323,6 @@ def get_hubspot_contact(email: str) -> dict:
 
     Returns contact details, associated company, deal info, and recent activity.
     """
-    _require_hubspot()
     url = f"https://api.hubapi.com/crm/v3/objects/contacts/{email}"
     params = {
         "idProperty": "email",
@@ -363,11 +366,6 @@ def _notion_headers() -> dict:
     }
 
 
-def _require_notion() -> None:
-    if not NOTION_API_KEY:
-        raise ValueError("Missing Notion config. Set NOTION_API_KEY.")
-
-
 @tool
 def search_notion_runbooks(query: str) -> dict:
     """Search Notion runbooks database for articles matching a query.
@@ -375,7 +373,6 @@ def search_notion_runbooks(query: str) -> dict:
     Returns matching runbook titles, summaries, and page URLs.
     Use specific technical terms from the ticket for best results.
     """
-    _require_notion()
     # Search the specific runbooks database
     url = f"https://api.notion.com/v1/databases/{NOTION_RUNBOOK_DB_ID}/query"
     payload: dict = {}
@@ -428,7 +425,6 @@ def get_notion_page_content(page_id: str) -> dict:
 
     Returns the page blocks as plain text for reading runbook instructions.
     """
-    _require_notion()
     url = f"https://api.notion.com/v1/blocks/{page_id}/children"
     params = {"page_size": 100}
     resp = requests.get(url, headers=_notion_headers(), params=params, timeout=15)
@@ -464,137 +460,163 @@ def get_notion_page_content(page_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# GitHub tools (via gh CLI — requires `gh auth login`)
+# GitHub tools
 # ---------------------------------------------------------------------------
 
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_ORG = os.environ.get("GITHUB_ORG", "")
 
 
-def _require_github() -> None:
-    if not GITHUB_ORG:
-        raise ValueError("Missing GitHub config. Set GITHUB_ORG.")
-
-
-def _gh(*args: str, timeout: int = 30) -> str:
-    """Run a gh CLI command and return stdout, or an error string."""
-    _require_github()
-    result = subprocess.run(
-        ["gh", *args],
-        capture_output=True, text=True, timeout=timeout,
-    )
-    if result.returncode != 0:
-        return f"Error: {result.stderr.strip()}"
-    return result.stdout
+def _github_headers() -> dict:
+    return {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
 
 
 @tool
-def search_github_issues(query: str, repo: str = "") -> str:
+def search_github_issues(query: str, repo: Optional[str] = None) -> dict:
     """Search GitHub issues and pull requests for matching terms.
 
     Args:
         query: Search terms (e.g. "timeout error", "auth flow bug").
-        repo: Optional repo in 'owner/repo' format. If empty, searches the whole org.
+        repo: Optional specific repo name (e.g. "backend"). If omitted, searches the whole org.
 
-    Returns matching issues/PRs as JSON with number, title, state, labels, and URL.
+    Returns matching issues/PRs with title, state, labels, and URL.
     """
-    search_q = f"{query} org:{GITHUB_ORG}" if not repo else query
-    args = ["search", "issues", search_q, "--limit", "15",
-            "--json", "number,title,state,url,labels,createdAt,updatedAt,body,repository"]
+    search_query = query
     if repo:
-        if "/" in repo:
-            args.extend(["--repo", repo])
-        else:
-            args.extend(["--repo", f"{GITHUB_ORG}/{repo}"])
-    return _gh(*args)
+        search_query += f" repo:{GITHUB_ORG}/{repo}"
+    else:
+        search_query += f" org:{GITHUB_ORG}"
+
+    url = "https://api.github.com/search/issues"
+    params = {"q": search_query, "per_page": 15, "sort": "updated", "order": "desc"}
+    resp = requests.get(url, headers=_github_headers(), params=params, timeout=15)
+    resp.raise_for_status()
+    items = resp.json().get("items", [])
+    return {
+        "total_count": resp.json().get("total_count", 0),
+        "items": [
+            {
+                "number": i["number"],
+                "title": i["title"],
+                "state": i["state"],
+                "html_url": i["html_url"],
+                "is_pr": "pull_request" in i,
+                "labels": [l["name"] for l in i.get("labels", [])],
+                "created_at": i["created_at"],
+                "updated_at": i["updated_at"],
+                "body": (i.get("body") or "")[:500],
+            }
+            for i in items
+        ],
+    }
 
 
 @tool
-def search_github_code(query: str, repo: str = "") -> str:
+def search_github_code(query: str, repo: Optional[str] = None) -> dict:
     """Search GitHub code across the organization's repositories.
 
     Args:
         query: Code search terms (e.g. 'def handle_webhook', 'class AuthMiddleware').
-        repo: Optional repo name (e.g. 'backend') to narrow search.
+        repo: Optional specific repo name to narrow search.
 
-    Returns matching files with path, repo, and match context.
+    Returns matching files with path, repo, and code snippet.
     """
-    search_q = query
+    search_query = query
     if repo:
-        if "/" in repo:
-            search_q += f" repo:{repo}"
-        else:
-            search_q += f" repo:{GITHUB_ORG}/{repo}"
+        search_query += f" repo:{GITHUB_ORG}/{repo}"
     else:
-        search_q += f" org:{GITHUB_ORG}"
-    return _gh("search", "code", search_q, "--limit", "10",
-               "--json", "path,repository,textMatches")
+        search_query += f" org:{GITHUB_ORG}"
+
+    url = "https://api.github.com/search/code"
+    params = {"q": search_query, "per_page": 10}
+    resp = requests.get(url, headers=_github_headers(), params=params, timeout=15)
+    resp.raise_for_status()
+    items = resp.json().get("items", [])
+    return {
+        "total_count": resp.json().get("total_count", 0),
+        "files": [
+            {
+                "name": i["name"],
+                "path": i["path"],
+                "repo": i["repository"]["full_name"],
+                "html_url": i["html_url"],
+                "score": i.get("score"),
+            }
+            for i in items
+        ],
+    }
 
 
 @tool
-def get_github_releases(repo: str, limit: int = 5) -> str:
+def get_github_releases(repo: str, limit: int = 5) -> dict:
     """Get recent releases for a GitHub repository.
 
     Args:
-        repo: Repository name (e.g. 'backend'). Will be prefixed with the org.
+        repo: Repository name (e.g. "backend", "sdk-python").
         limit: Number of releases to return (default 5).
 
-    Returns release tags, names, dates, and release notes.
+    Returns release tags, names, dates, and changelogs.
     """
-    full_repo = repo if "/" in repo else f"{GITHUB_ORG}/{repo}"
-    return _gh("release", "list", "--repo", full_repo, "--limit", str(limit),
-               "--json", "tagName,name,publishedAt,body,isPrerelease,url")
+    url = f"https://api.github.com/repos/{GITHUB_ORG}/{repo}/releases"
+    params = {"per_page": limit}
+    resp = requests.get(url, headers=_github_headers(), params=params, timeout=15)
+    resp.raise_for_status()
+    releases = resp.json()
+    return {
+        "repo": f"{GITHUB_ORG}/{repo}",
+        "releases": [
+            {
+                "tag": r["tag_name"],
+                "name": r.get("name"),
+                "published_at": r.get("published_at"),
+                "body": (r.get("body") or "")[:1000],
+                "prerelease": r.get("prerelease", False),
+                "html_url": r["html_url"],
+            }
+            for r in releases
+        ],
+    }
 
 
 @tool
-def get_github_pull_request(repo: str, pr_number: int) -> str:
+def get_github_pull_request(repo: str, pr_number: int) -> dict:
     """Get details of a specific GitHub pull request.
 
     Args:
-        repo: Repository name (e.g. 'backend').
+        repo: Repository name (e.g. "backend").
         pr_number: Pull request number.
 
     Returns PR title, description, status, review state, and changed files.
     """
-    full_repo = repo if "/" in repo else f"{GITHUB_ORG}/{repo}"
-    return _gh("pr", "view", str(pr_number), "--repo", full_repo,
-               "--json", "number,title,state,url,body,createdAt,mergedAt,"
-               "headRefName,baseRefName,changedFiles,files,reviews,merged")
+    url = f"https://api.github.com/repos/{GITHUB_ORG}/{repo}/pulls/{pr_number}"
+    resp = requests.get(url, headers=_github_headers(), timeout=15)
+    resp.raise_for_status()
+    pr = resp.json()
 
+    # Get changed files
+    files_url = f"{url}/files"
+    files_resp = requests.get(files_url, headers=_github_headers(), params={"per_page": 30}, timeout=15)
+    changed_files = []
+    if files_resp.ok:
+        changed_files = [
+            {"filename": f["filename"], "status": f["status"], "additions": f["additions"], "deletions": f["deletions"]}
+            for f in files_resp.json()
+        ]
 
-@tool
-def get_github_issue(repo: str, issue_number: int) -> str:
-    """Get details of a specific GitHub issue.
-
-    Args:
-        repo: Repository name (e.g. 'backend').
-        issue_number: Issue number.
-
-    Returns issue title, body, labels, comments, and status.
-    """
-    full_repo = repo if "/" in repo else f"{GITHUB_ORG}/{repo}"
-    return _gh("issue", "view", str(issue_number), "--repo", full_repo,
-               "--json", "number,title,state,body,labels,comments,createdAt,updatedAt,url")
-
-
-@tool
-def list_github_prs(repo: str, state: str = "all", search: str = "", limit: int = 10) -> str:
-    """List pull requests for a repository, optionally filtered by search terms.
-
-    Args:
-        repo: Repository name (e.g. 'backend').
-        state: Filter by state — 'open', 'closed', 'merged', or 'all'.
-        search: Optional search terms to filter PRs.
-        limit: Maximum number of PRs to return (default 10).
-
-    Returns PRs with number, title, state, author, and URL.
-    """
-    full_repo = repo if "/" in repo else f"{GITHUB_ORG}/{repo}"
-    args = ["pr", "list", "--repo", full_repo, "--state", state,
-            "--limit", str(limit),
-            "--json", "number,title,state,url,createdAt,mergedAt,author,headRefName,labels"]
-    if search:
-        args.extend(["--search", search])
-    return _gh(*args)
+    return {
+        "number": pr["number"],
+        "title": pr["title"],
+        "state": pr["state"],
+        "merged": pr.get("merged", False),
+        "html_url": pr["html_url"],
+        "body": (pr.get("body") or "")[:2000],
+        "created_at": pr["created_at"],
+        "merged_at": pr.get("merged_at"),
+        "head_branch": pr["head"]["ref"],
+        "base_branch": pr["base"]["ref"],
+        "changed_files_count": pr.get("changed_files", 0),
+        "changed_files": changed_files[:20],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -695,12 +717,10 @@ github_agent = Agent(
     name="github_investigator",
     model=settings.llm_model,
     instructions="""\
-You are a GitHub specialist using the gh CLI. Given a technical issue description:
-1. Search for related issues and PRs (search_github_issues) that might contain fixes or discussions
-2. Search the codebase for relevant code (search_github_code) — error messages, function names, config
-3. Check recent releases (get_github_releases) to see if a fix was shipped or a regression was introduced
-4. Drill into specific PRs (get_github_pull_request) or issues (get_github_issue) for full details
-5. List recent PRs (list_github_prs) to spot recently merged changes that could be related
+You are a GitHub code specialist. Given a technical issue description:
+1. Search for related issues and PRs that might contain fixes or discussions
+2. Search the codebase for relevant code (error messages, function names, config)
+3. Check recent releases to see if a fix was shipped or if a regression was introduced
 
 Focus on:
 - Open issues with the same symptoms
@@ -709,17 +729,15 @@ Focus on:
 - Code paths that could be involved
 
 Return relevant PRs, issues, code locations, and release versions.
-All the source is in orkes-io/orkes-conductor and orkes-io/condutor-ui repositories
 """,
-    tools=[search_github_issues, search_github_code, get_github_releases,
-           get_github_pull_request, get_github_issue, list_github_prs],
+    tools=[search_github_issues, search_github_code, get_github_releases, get_github_pull_request],
 )
 
 
 # -- Main orchestrator agent --
 ORCHESTRATOR_INSTRUCTIONS = """\
 You are a Customer Engineering Support Agent. Your job is to investigate a Zendesk \
-support ticket by calling the investigator tools and relaying their findings.
+support ticket and deliver a comprehensive analysis with a prioritized solution.
 
 WORKFLOW:
 1. First, use the zendesk_investigator to fetch the ticket and find related tickets
@@ -728,21 +746,27 @@ WORKFLOW:
    - jira_investigator: Search for related engineering issues using key terms from the ticket
    - runbook_searcher: Search for applicable runbooks using technical terms from the ticket
    - github_investigator: Search for related issues, PRs, and code using technical terms from the ticket
-3. Compile ALL findings from every tool into your response
+3. Synthesize all findings into a solution
 
-CRITICAL RULES:
-- ONLY include information that was returned by the tools. Do NOT invent, assume, \
-or hallucinate any details.
-- If a tool returned no results or errored, state that explicitly \
-(e.g. "JIRA: no related issues found", "Notion: no matching runbooks").
-- Include the raw details: ticket IDs, JIRA keys, PR numbers, URLs, error messages, \
-customer names, plan tiers — exactly as returned by the tools.
-- Do NOT summarize away important details. Pass through everything the tools returned.
-- Your response must contain the findings from ALL five investigators, clearly labeled.
+PRIORITY GUIDE:
+- P0 (House on fire): Production down for enterprise customer, data loss, security breach, complete service outage
+- P1 (Critical): Major feature broken for high-tier customer, significant revenue impact, partial outage
+- P2 (High): Important feature degraded, workaround exists but painful, multiple customers affected
+- P3 (Medium): Non-critical feature issue, minor inconvenience, single customer affected, has workaround
+- P4 (Low): Enhancement request, cosmetic issue, documentation question, general inquiry
+
+PRIORITY MODIFIERS:
+- Customer on enterprise/high-revenue plan → bump priority up by 1 level
+- Multiple customers reporting same issue → bump priority up by 1 level
+- Issue has a known workaround → may lower urgency but not priority
+- Security-related → minimum P1
+
+Provide a clear, actionable solution with step-by-step instructions the CE team can follow.
+If engineering escalation is needed, explain exactly what needs to happen and why.
 """
 
-ce_investigator = Agent(
-    name="ce_investigator",
+ce_support_agent = Agent(
+    name="ce_support_agent",
     model=settings.llm_model,
     instructions=ORCHESTRATOR_INSTRUCTIONS,
     tools=[
@@ -752,109 +776,16 @@ ce_investigator = Agent(
         agent_tool(runbook_agent, description="Search Notion runbooks for resolution procedures"),
         agent_tool(github_agent, description="Search GitHub for related issues, PRs, code, and releases"),
     ],
+    output_type=TicketAnalysis,
     guardrails=[pii_guardrail],
     max_turns=15,
     temperature=0.2,
 )
 
-# -- Report writer: synthesizes all findings into a markdown report --
-REPORT_WRITER_INSTRUCTIONS = """\
-You are a report writer for the Customer Engineering team. You receive the raw \
-findings from multiple investigation agents (Zendesk, HubSpot, JIRA, Notion \
-runbooks, and GitHub) and format them into a single, clear markdown report.
-
-CRITICAL RULES:
-- ONLY use information present in the input you received. Do NOT invent, guess, \
-or assume ANY details that are not explicitly stated in the findings.
-- If a section has no data from the findings, write "No data found." for that section.
-- Include specific identifiers exactly as they appear: ticket IDs, JIRA keys, \
-PR numbers, URLs, customer names, plan tiers, error messages, dates.
-- Do NOT fabricate ticket numbers, JIRA keys, URLs, customer names, or any other specifics.
-- Do NOT speculate about root causes or solutions unless the findings explicitly support them.
-
-Your report MUST follow this structure:
-
-# Ticket Investigation Report
-
-## Ticket Overview
-- Ticket ID, subject, status, and when it was created
-- Customer name, email, company
-- Customer tier/plan and contract value (from HubSpot findings)
-
-## Priority Assessment
-Use this guide to assign priority based ONLY on the facts in the findings:
-- P0 (house on fire): Production down for enterprise customer, data loss, security breach
-- P1 (critical): Major feature broken for high-tier customer, significant revenue impact
-- P2 (high): Important feature degraded, workaround exists but painful, multiple customers affected
-- P3 (medium): Non-critical issue, minor inconvenience, has workaround
-- P4 (low): Enhancement request, cosmetic issue, documentation question
-
-Priority modifiers (apply only if the findings contain evidence):
-- Enterprise/high-revenue customer (from HubSpot) -> bump up 1 level
-- Multiple customers reporting same issue (from Zendesk search) -> bump up 1 level
-- Security-related -> minimum P1
-
-State whether engineering escalation is needed based on the evidence.
-
-## Customer Issue
-- What the customer is experiencing (from Zendesk ticket description and comments)
-- Key error messages or symptoms (quote them directly from the findings)
-- Number of similar tickets found (from Zendesk search results)
-
-## Root Cause Analysis
-- Most likely root cause based ONLY on evidence from JIRA, GitHub, and runbook findings
-- If no root cause can be determined from the findings, say so
-
-## Recommended Solution
-- Steps from matching runbooks (include runbook titles/links from Notion findings)
-- Workarounds mentioned in JIRA or GitHub findings
-- If no solution was found in the findings, say "No existing solution found — requires investigation"
-
-## Related Issues
-- JIRA tickets found (key, summary, status, assignee — from JIRA findings)
-- GitHub issues and PRs found (number, title, state, URL — from GitHub findings)
-- Similar Zendesk tickets found (ID, subject — from Zendesk search findings)
-- If none found for a system, state "None found"
-
-## Code References
-- Files, PRs, commits, or releases from GitHub findings
-- If none found, state "None found"
-
-## Next Steps
-- Numbered action items based on the findings
-- If escalation is needed, state who/what team based on JIRA assignees or GitHub PR authors
-
-Write in a professional, direct tone. Be specific. Never be vague.
-"""
-
-report_writer = Agent(
-    name="report_writer",
-    model=settings.llm_model,
-    instructions=REPORT_WRITER_INSTRUCTIONS,
-    guardrails=[pii_guardrail],
-    temperature=0.3,
-)
-
-# -- Pipeline: investigate >> write report --
-ce_support_agent = ce_investigator >> report_writer
-
 
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
-
-
-def _get_result_text(output) -> str:
-    """Extract the final text from an agent output."""
-    if isinstance(output, str):
-        return output
-    if isinstance(output, dict):
-        # Sequential pipeline wraps in {"result": "..."}
-        result = output.get("result")
-        if isinstance(result, str):
-            return result
-        return json.dumps(output, indent=2, default=str)
-    return str(output)
 
 
 def main():
@@ -881,14 +812,50 @@ def main():
                 elif event.type == "error":
                     print(f"  ERROR: {event.content}")
                 elif event.type == "done":
-                    print()
-                    print(_get_result_text(event.output))
+                    analysis = event.output
+                    _print_analysis(analysis)
         else:
             print(f"\n--- Investigating ticket #{ticket_id} ---\n")
             result = runtime.run(ce_support_agent, prompt)
-            print(_get_result_text(result.output))
-            if result.token_usage:
-                print(f"\n---\n*Tokens: {result.token_usage.total_tokens}*")
+            _print_analysis(result.output)
+            print(f"\nTokens used: {result.token_usage.total_tokens}")
+
+
+def _print_analysis(analysis: TicketAnalysis):
+    """Pretty-print the ticket analysis."""
+    print("=" * 70)
+    print(f"  TICKET ANALYSIS: #{analysis.ticket_id}")
+    print(f"  CUSTOMER: {analysis.customer_name} ({analysis.customer_tier})")
+    print(f"  PRIORITY: {analysis.priority}")
+    print(f"  ESCALATION NEEDED: {'YES' if analysis.escalation_needed else 'No'}")
+    print("=" * 70)
+
+    print(f"\nSUMMARY:\n  {analysis.summary}")
+    print(f"\nPRIORITY JUSTIFICATION:\n  {analysis.priority_justification}")
+    print(f"\nROOT CAUSE:\n  {analysis.root_cause}")
+    print(f"\nSOLUTION:\n  {analysis.solution}")
+
+    if analysis.runbook_references:
+        print("\nRUNBOOK REFERENCES:")
+        for ref in analysis.runbook_references:
+            print(f"  - {ref}")
+
+    if analysis.related_issues:
+        print("\nRELATED ISSUES:")
+        for issue in analysis.related_issues:
+            print(f"  [{issue.source}] {issue.key}: {issue.summary} ({issue.status})")
+
+    if analysis.code_references:
+        print("\nCODE REFERENCES:")
+        for ref in analysis.code_references:
+            print(f"  - {ref}")
+
+    if analysis.next_steps:
+        print("\nNEXT STEPS:")
+        for i, step in enumerate(analysis.next_steps, 1):
+            print(f"  {i}. {step}")
+
+    print()
 
 
 if __name__ == "__main__":

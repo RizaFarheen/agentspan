@@ -24,12 +24,12 @@ from agentspan.agents import AgentRuntime
 with AgentRuntime() as runtime:
     # ── Run by name (synchronous, blocks until complete) ─────────────
     print("Running doc_assistant by name...")
-    result = runtime.run("doc_assistant", "How do I reset my password?")
+    result = runtime.run("agent_doc_assistant", "How do I reset my password?")
     print(f"Output: {result.output}\n")
 
     # ── Start by name (fire-and-forget, returns handle) ──────────────
     print("Starting ops_bot by name...")
-    handle = runtime.start("ops_bot", "Check the status of the API gateway")
+    handle = runtime.start("agent_ops_bot", "Check the status of the API gateway")
     print(f"Started workflow: {handle.workflow_id}")
 
     # Wait for it to complete
@@ -40,7 +40,7 @@ with AgentRuntime() as runtime:
 
     # ── Stream by name ───────────────────────────────────────────────
     print("Streaming doc_assistant by name...")
-    for event in runtime.stream("doc_assistant", "What are the API rate limits?"):
+    for event in runtime.stream("agent_doc_assistant", "What are the API rate limits?"):
         if event.type == "token":
             print(event.token, end="", flush=True)
         elif event.type == "done":

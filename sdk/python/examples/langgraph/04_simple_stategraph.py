@@ -1,51 +1,73 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Simple query pipeline — validate → refine → answer.
+"""Simple StateGraph — custom query → process → answer pipeline.
 
 Demonstrates:
-    - Using create_agent with a processing tool to build a pipeline
-    - System prompt directing multi-step behavior (validate, refine, answer)
-    - Server-side LLM orchestration (AI_MODEL task) + Python tool worker
+    - Defining a TypedDict state schema
+    - Building a StateGraph with multiple sequential nodes
+    - Connecting nodes with add_edge
+    - Compiling and naming the graph
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain_core.tools import tool
+from typing import TypedDict
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-SYSTEM_PROMPT = (
-    "You are a knowledgeable assistant that follows a two-step process:\n"
-    "1. First, use the validate_query tool to clean and validate the user's question.\n"
-    "2. Then answer the validated, refined question clearly and concisely.\n"
-    "Always call validate_query before answering."
-)
+
+class State(TypedDict):
+    query: str
+    refined_query: str
+    answer: str
 
 
-@tool
-def validate_query(query: str) -> str:
-    """Validate and clean the user's query. Returns the cleaned query or a default prompt."""
-    cleaned = query.strip()
-    if not cleaned:
-        return "What can you help me with?"
-    # Normalize punctuation
-    if not cleaned.endswith("?") and not cleaned.endswith("."):
-        cleaned = cleaned + "?"
-    return cleaned
+def validate_query(state: State) -> State:
+    """Ensure the query is not empty and trim whitespace."""
+    query = state.get("query", "").strip()
+    if not query:
+        query = "What can you help me with?"
+    return {"query": query, "refined_query": "", "answer": ""}
 
 
-graph = create_agent(
-    llm,
-    tools=[validate_query],
-    name="query_pipeline",
-    system_prompt=SYSTEM_PROMPT,
-)
+def refine_query(state: State) -> State:
+    """Rewrite the query to be more precise using the LLM."""
+    response = llm.invoke([
+        SystemMessage(content="Rewrite the user query to be more specific and clear. Return only the rewritten query."),
+        HumanMessage(content=state["query"]),
+    ])
+    return {"refined_query": response.content.strip()}
+
+
+def generate_answer(state: State) -> State:
+    """Generate a comprehensive answer to the refined query."""
+    response = llm.invoke([
+        SystemMessage(content="You are a knowledgeable assistant. Answer the question clearly and concisely."),
+        HumanMessage(content=state["refined_query"] or state["query"]),
+    ])
+    return {"answer": response.content.strip()}
+
+
+# Build the graph
+builder = StateGraph(State)
+builder.add_node("validate", validate_query)
+builder.add_node("refine", refine_query)
+builder.add_node("answer", generate_answer)
+
+builder.add_edge(START, "validate")
+builder.add_edge("validate", "refine")
+builder.add_edge("refine", "answer")
+builder.add_edge("answer", END)
+
+graph = builder.compile(name="query_pipeline")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

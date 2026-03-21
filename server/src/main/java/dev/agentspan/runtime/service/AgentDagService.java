@@ -5,7 +5,9 @@
 
 package dev.agentspan.runtime.service;
 
+import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import com.netflix.conductor.core.exception.NotFoundException;
 import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.model.TaskModel;
@@ -14,6 +16,7 @@ import dev.agentspan.runtime.model.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -50,6 +53,25 @@ public class AgentDagService {
         }
 
         executionDAO.createTasks(List.of(task));
+
+        // Add a corresponding WorkflowTask to the definition so the DAG view renders it
+        WorkflowTask workflowTask = new WorkflowTask();
+        workflowTask.setName(req.getTaskDefName());
+        workflowTask.setTaskReferenceName(req.getReferenceTaskName());
+        workflowTask.setType(req.getType());
+        workflowTask.setInputParameters(req.getInputData() != null ? req.getInputData() : Collections.emptyMap());
+        if (req.getSubWorkflowParam() != null) {
+            SubWorkflowParams swp = new SubWorkflowParams();
+            swp.setName(req.getSubWorkflowParam().getName());
+            swp.setVersion(req.getSubWorkflowParam().getVersion());
+            workflowTask.setSubWorkflowParam(swp);
+        }
+        WorkflowDef def = workflow.getWorkflowDefinition();
+        List<WorkflowTask> defTasks = new ArrayList<>(def.getTasks());
+        defTasks.add(workflowTask);
+        def.setTasks(defTasks);
+        executionDAO.updateWorkflow(workflow);
+
         return new InjectTaskResponse(task.getTaskId());
     }
 
@@ -57,7 +79,7 @@ public class AgentDagService {
         WorkflowDef def = new WorkflowDef();
         def.setName(req.getWorkflowName());
         def.setVersion(1);
-        def.setTasks(Collections.emptyList());
+        def.setTasks(new ArrayList<>());
         def.setInputParameters(List.of("prompt"));
 
         WorkflowModel workflow = new WorkflowModel();

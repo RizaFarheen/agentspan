@@ -19,7 +19,7 @@ import statistics
 from typing import List
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -145,7 +145,7 @@ graph = create_agent(
     llm,
     tools=[describe_dataset, aggregate_by, find_top_performers, calculate_growth],
     name="data_analyst_agent",
-    system_prompt=ANALYST_SYSTEM,
+    state_modifier=ANALYST_SYSTEM,
 )
 
 if __name__ == "__main__":

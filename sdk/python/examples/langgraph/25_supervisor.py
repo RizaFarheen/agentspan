@@ -1,72 +1,103 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Supervisor — multi-agent supervisor pattern with proper sub-workflows.
+"""Supervisor — multi-agent supervisor pattern.
 
 Demonstrates:
-    - A supervisor agent that dispatches to specialist sub-agents
-    - Each specialist is a create_agent() graph compiled as a SUB_WORKFLOW
-    - Every agent (supervisor + specialists) runs as its own Conductor workflow
-    - Practical use case: research → writing → editing pipeline
+    - A supervisor LLM that decides which specialist agent to call next
+    - Routing control flow based on the supervisor's decision
+    - Collecting outputs from specialized sub-agents
+    - Practical use case: research → writing → editing pipeline with supervisor control
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
+from typing import TypedDict, List
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
+AGENTS = ["researcher", "writer", "editor"]
 
-# ── Specialist sub-agents (each compiles as a SUB_WORKFLOW) ───────────────────
 
-researcher = create_agent(
-    llm,
-    name="researcher",
-    system_prompt=(
-        "You are a researcher. When given a topic, gather key facts and insights "
-        "and return them as 3-5 concise bullet points."
-    ),
+class State(TypedDict):
+    task: str
+    research: str
+    draft: str
+    final_article: str
+    next_agent: str
+    completed: List[str]
+
+
+def supervisor(state: State) -> State:
+    """Decide which agent to call next based on what has been done."""
+    completed = state.get("completed", [])
+    if "researcher" not in completed:
+        return {"next_agent": "researcher"}
+    if "writer" not in completed:
+        return {"next_agent": "writer"}
+    if "editor" not in completed:
+        return {"next_agent": "editor"}
+    return {"next_agent": "FINISH"}
+
+
+def researcher(state: State) -> State:
+    response = llm.invoke([
+        SystemMessage(content="You are a researcher. Gather key facts and insights about the topic in 3-5 bullet points."),
+        HumanMessage(content=f"Topic: {state['task']}"),
+    ])
+    completed = list(state.get("completed", []))
+    completed.append("researcher")
+    return {"research": response.content.strip(), "completed": completed}
+
+
+def writer(state: State) -> State:
+    response = llm.invoke([
+        SystemMessage(content="You are a writer. Using the research notes, write a short article (3 paragraphs)."),
+        HumanMessage(content=f"Topic: {state['task']}\n\nResearch:\n{state['research']}"),
+    ])
+    completed = list(state.get("completed", []))
+    completed.append("writer")
+    return {"draft": response.content.strip(), "completed": completed}
+
+
+def editor(state: State) -> State:
+    response = llm.invoke([
+        SystemMessage(content="You are an editor. Improve clarity, flow, and correctness of the article. Return the polished version only."),
+        HumanMessage(content=state["draft"]),
+    ])
+    completed = list(state.get("completed", []))
+    completed.append("editor")
+    return {"final_article": response.content.strip(), "completed": completed}
+
+
+def route(state: State) -> str:
+    return state.get("next_agent", "FINISH")
+
+
+builder = StateGraph(State)
+builder.add_node("supervisor", supervisor)
+builder.add_node("researcher", researcher)
+builder.add_node("writer", writer)
+builder.add_node("editor", editor)
+
+builder.add_edge(START, "supervisor")
+builder.add_conditional_edges(
+    "supervisor",
+    route,
+    {"researcher": "researcher", "writer": "writer", "editor": "editor", "FINISH": END},
 )
+builder.add_edge("researcher", "supervisor")
+builder.add_edge("writer", "supervisor")
+builder.add_edge("editor", "supervisor")
 
-writer = create_agent(
-    llm,
-    name="writer",
-    system_prompt=(
-        "You are a writer. When given a topic and research notes, write a short "
-        "article of 3 paragraphs based on those notes."
-    ),
-)
-
-editor = create_agent(
-    llm,
-    name="editor",
-    system_prompt=(
-        "You are an editor. When given a draft article, improve its clarity, "
-        "flow, and correctness. Return the polished version only."
-    ),
-)
-
-
-# ── Supervisor agent ──────────────────────────────────────────────────────────
-
-graph = create_agent(
-    llm,
-    tools=[researcher, writer, editor],
-    name="supervisor_multiagent",
-    system_prompt=(
-        "You are a content production supervisor.\n\n"
-        "For each article request, orchestrate the pipeline in order:\n"
-        "1. Call researcher with the topic to gather facts and insights\n"
-        "2. Call writer with the topic and the research notes to create a draft\n"
-        "3. Call editor with the draft to produce the polished final article\n"
-        "4. Return the final polished article to the user\n\n"
-        "Always complete all three specialist tasks in sequence."
-    ),
-)
+graph = builder.compile(name="supervisor_multiagent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

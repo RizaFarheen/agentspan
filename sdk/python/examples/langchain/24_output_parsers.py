@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from langchain_core.output_parsers import StrOutputParser, CommaSeparatedListOutputParser, JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -128,7 +128,7 @@ graph = create_agent(
     llm,
     tools=[extract_keywords_list, clean_text_extraction, parse_product_review],
     name="output_parsers_agent",
-    system_prompt=PARSER_SYSTEM,
+    state_modifier=PARSER_SYSTEM,
 )
 
 SAMPLE_REVIEW = """

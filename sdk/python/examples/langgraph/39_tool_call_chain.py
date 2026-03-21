@@ -4,8 +4,8 @@
 """Tool Call Chain — chaining multiple tool calls in sequence.
 
 Demonstrates:
-    - An agent that calls several tools in a defined order
-    - create_agent handles the ReAct loop automatically (no manual ToolNode/tools_condition)
+    - An agent that must call several tools in a defined order
+    - Using ToolNode and tools_condition for standard LangGraph tool loop
     - State accumulation across multiple tool invocations
     - Practical use case: data enrichment pipeline (fetch → transform → validate → summarize)
 
@@ -15,14 +15,21 @@ Requirements:
 """
 
 import json
+from typing import TypedDict, Annotated
+import operator
 
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
+
+# ── Tools ─────────────────────────────────────────────────────────────────────
 
 @tool
 def fetch_company_info(company_name: str) -> str:
@@ -72,19 +79,42 @@ def generate_investment_note(company: str, age: str, peers: str) -> str:
     )
 
 
-graph = create_agent(
-    llm,
-    tools=[fetch_company_info, calculate_company_age, get_sector_peers, generate_investment_note],
-    system_prompt=(
-        "You are a financial analyst. For each company query, you MUST:\n"
-        "1. Fetch company info\n"
-        "2. Calculate company age using the founded year\n"
-        "3. Get sector peers\n"
-        "4. Generate an investment note combining all facts\n"
-        "Call the tools in this order."
-    ),
-    name="tool_call_chain_agent",
-)
+# ── Agent ─────────────────────────────────────────────────────────────────────
+
+tools = [fetch_company_info, calculate_company_age, get_sector_peers, generate_investment_note]
+llm_with_tools = llm.bind_tools(tools)
+
+
+class State(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
+
+
+def agent(state: State) -> State:
+    system = SystemMessage(
+        content=(
+            "You are a financial analyst. For each company query, you MUST:\n"
+            "1. Fetch company info\n"
+            "2. Calculate company age using the founded year\n"
+            "3. Get sector peers\n"
+            "4. Generate an investment note combining all facts\n"
+            "Call the tools in this order."
+        )
+    )
+    messages = [system] + state["messages"]
+    response = llm_with_tools.invoke(messages)
+    return {"messages": [response]}
+
+
+tool_node = ToolNode(tools)
+
+builder = StateGraph(State)
+builder.add_node("agent", agent)
+builder.add_node("tools", tool_node)
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile(name="tool_call_chain_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

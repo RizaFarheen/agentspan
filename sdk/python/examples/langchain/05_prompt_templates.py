@@ -16,7 +16,7 @@ Requirements:
 
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -87,7 +87,7 @@ graph = create_agent(
     llm,
     tools=[explain_concept, recommend_tool],
     name="prompt_template_agent",
-    system_prompt=filled_system,
+    state_modifier=filled_system,
 )
 
 if __name__ == "__main__":

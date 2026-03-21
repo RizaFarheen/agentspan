@@ -9,11 +9,10 @@ This package contains zero framework-specific code. It provides:
 - Callable extraction and worker registration
 """
 
-from agentspan.agents.frameworks.claude import ClaudeCodeAgent
 from agentspan.agents.frameworks.serializer import (
     WorkerInfo,
     detect_framework,
     serialize_agent,
 )
 
-__all__ = ["detect_framework", "serialize_agent", "WorkerInfo", "ClaudeCodeAgent"]
+__all__ = ["detect_framework", "serialize_agent", "WorkerInfo"]

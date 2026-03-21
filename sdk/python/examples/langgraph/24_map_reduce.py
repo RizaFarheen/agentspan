@@ -1,103 +1,111 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Map-Reduce — generate documents, summarize each, then reduce to a final report.
+"""Map-Reduce — fan-out to parallel workers then aggregate results.
 
 Demonstrates:
-    - Generate multiple documents about a topic as a tool
-    - Summarize each document individually as a tool
-    - Reduce all summaries into a cohesive final report as a tool
-    - The LLM orchestrates the map-reduce pipeline server-side
+    - Sending operator for fan-out (parallel list accumulation)
+    - Processing multiple items concurrently via Send API
+    - Reducing parallel results into a single final answer
+    - Practical use case: analyzing multiple documents simultaneously
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate
+import operator
+from typing import TypedDict, List, Annotated
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 
-@tool
-def generate_documents(topic: str) -> str:
-    """Generate 3 short document snippets about the topic.
+# ── State definitions ─────────────────────────────────────────────────────────
 
-    Returns the snippets as a numbered list.
+class OverallState(TypedDict):
+    topic: str
+    documents: List[str]
+    summaries: Annotated[List[str], operator.add]  # accumulate via fan-out
+    final_report: str
 
-    Args:
-        topic: The topic to generate document snippets about.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "Generate 3 short text snippets (each 2-3 sentences) about the given topic. "
-            "Format as a numbered list:\n1. ...\n2. ...\n3. ..."
-        )),
-        ("human", "Topic: {topic}"),
+
+class DocumentState(TypedDict):
+    document: str
+    topic: str
+    summaries: Annotated[List[str], operator.add]
+
+
+# ── Nodes ──────────────────────────────────────────────────────────────────────
+
+def generate_documents(state: OverallState) -> OverallState:
+    """Generate 3 short document snippets about the topic."""
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "Generate 3 short text snippets (each 2-3 sentences) about the given topic. "
+                "Format as a numbered list:\n1. ...\n2. ...\n3. ..."
+            )
+        ),
+        HumanMessage(content=f"Topic: {state['topic']}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic})
-    return response.content.strip()
+    lines = [l.strip() for l in response.content.strip().split("\n") if l.strip()]
+    docs = [l.lstrip("0123456789. ") for l in lines if l[0].isdigit()][:3]
+    return {"documents": docs or [response.content.strip()]}
 
 
-@tool
-def summarize_document(topic: str, document: str) -> str:
-    """Summarize a single document snippet in one concise sentence.
+def fan_out(state: OverallState):
+    """Send each document to a parallel worker."""
+    return [
+        Send("summarize_doc", {"document": doc, "topic": state["topic"], "summaries": []})
+        for doc in state["documents"]
+    ]
 
-    Args:
-        topic: The overall topic for context.
-        document: The document snippet to summarize.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "Summarize this text in one concise sentence."),
-        ("human", "Topic: {topic}\n\nText: {document}"),
+
+def summarize_doc(state: DocumentState) -> dict:
+    """Summarize a single document."""
+    response = llm.invoke([
+        SystemMessage(content="Summarize this text in one concise sentence."),
+        HumanMessage(content=f"Topic: {state['topic']}\n\nText: {state['document']}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic, "document": document})
-    return response.content.strip()
+    return {"summaries": [response.content.strip()]}
 
 
-@tool
-def reduce_summaries(topic: str, summaries: str) -> str:
-    """Combine multiple document summaries into a cohesive 2-3 sentence final report.
-
-    Args:
-        topic: The topic being reported on.
-        summaries: All document summaries combined (bullet points or numbered list).
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You are a report writer. Given the topic and a list of summaries, "
-            "write a cohesive 2-3 sentence final report."
-        )),
-        ("human", "Topic: {topic}\n\nSummaries:\n{summaries}"),
+def reduce_summaries(state: OverallState) -> OverallState:
+    """Combine all summaries into a final report."""
+    bullet_points = "\n".join(f"• {s}" for s in state["summaries"])
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a report writer. Given the topic and a list of summaries, "
+                "write a cohesive 2-3 sentence final report."
+            )
+        ),
+        HumanMessage(
+            content=f"Topic: {state['topic']}\n\nSummaries:\n{bullet_points}"
+        ),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic, "summaries": summaries})
-    return response.content.strip()
+    return {"final_report": response.content.strip()}
 
 
-MAP_REDUCE_SYSTEM = """You are a map-reduce research agent.
+# ── Graph ──────────────────────────────────────────────────────────────────────
 
-For each research topic:
-1. Call generate_documents to create 3 document snippets
-2. Call summarize_document once for EACH snippet (map phase)
-3. Collect all summaries and call reduce_summaries to produce the final report (reduce phase)
-4. Return the final report to the user
+builder = StateGraph(OverallState)
+builder.add_node("generate_documents", generate_documents)
+builder.add_node("summarize_doc", summarize_doc)
+builder.add_node("reduce", reduce_summaries)
 
-Make sure to summarize each document snippet individually before reducing.
-"""
+builder.add_edge(START, "generate_documents")
+builder.add_conditional_edges("generate_documents", fan_out, ["summarize_doc"])
+builder.add_edge("summarize_doc", "reduce")
+builder.add_edge("reduce", END)
 
-graph = create_agent(
-    llm,
-    tools=[generate_documents, summarize_document, reduce_summaries],
-    name="map_reduce_agent",
-    system_prompt=MAP_REDUCE_SYSTEM,
-)
+graph = builder.compile(name="map_reduce_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

@@ -31,7 +31,6 @@ def generate_cross_html_report(
     run_names: list[str],
     baseline: str | None = None,
     raw_outputs: dict[str, dict[str, str]] | None = None,
-    workflow_ids: dict[str, dict[str, str]] | None = None,
     meta: dict | None = None,
     run_meta: dict[str, dict] | None = None,
 ) -> None:
@@ -64,22 +63,11 @@ def generate_cross_html_report(
             ]
             avg_baseline_scores[rn] = sum(scores) / len(scores) if scores else 0
 
-    # Build Conductor UI base URL from any run's server_url
-    conductor_base = ""
-    for rn in run_names:
-        rm = (run_meta or {}).get(rn, {})
-        url = rm.get("server_url", "")
-        if url and not rm.get("native"):
-            conductor_base = url.rstrip("/").replace("/api", "")
-            break
-
     html = template.render(
         rows=rows,
         runs=run_names,
         baseline=baseline,
         raw_outputs=raw_outputs or {},
-        workflow_ids=workflow_ids or {},
-        conductor_base=conductor_base,
         meta=meta or {},
         run_meta=run_meta or {},
         total_examples=total_examples,

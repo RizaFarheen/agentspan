@@ -132,8 +132,6 @@ tr.avg-row td { background: var(--bg2); }
 .meta-row { font-size: 0.8rem; color: var(--text2); margin-bottom: 0.25rem; }
 .copy-btn { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid var(--border); background: var(--bg2); cursor: pointer; color: var(--text3); }
 .copy-btn:hover { background: var(--bg3); color: var(--text); }
-.wf-link { color: var(--accent); text-decoration: none; font-family: monospace; font-size: 0.78rem; }
-.wf-link:hover { text-decoration: underline; }
 
 /* Baseline comparison section in details */
 .baseline-section { margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
@@ -396,12 +394,6 @@ tr.avg-row td { background: var(--bg2); }
               </span>
               <button class="copy-btn" onclick="copyOutput(this)">Copy</button>
             </h4>
-            {% set wf_id = workflow_ids.get(row.example, {}).get(rn, '') %}
-            {% if wf_id %}
-            <div class="meta-row">
-              Workflow: {% if conductor_base %}<a href="{{ conductor_base }}/execution/{{ wf_id }}" target="_blank" class="wf-link">{{ wf_id }}</a>{% else %}{{ wf_id }}{% endif %}
-            </div>
-            {% endif %}
             <pre>{{ raw_outputs[row.example][rn] }}</pre>
           </div>
           {% endif %}

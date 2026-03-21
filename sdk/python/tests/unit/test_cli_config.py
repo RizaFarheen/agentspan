@@ -2,7 +2,6 @@
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
 """Tests for CLI command execution configuration and tool."""
-
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -86,7 +85,9 @@ class TestMakeCliTool:
     def test_shell_allowed_when_enabled(self):
         tool_fn = _make_cli_tool(allowed_commands=[], allow_shell=True)
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="hello\n", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="hello\n", stderr=""
+            )
             result = tool_fn.__wrapped__(command="echo", args=["hello"], shell=True)
             assert result["status"] == "success"
             mock_run.assert_called_once()
@@ -96,7 +97,9 @@ class TestMakeCliTool:
     def test_basic_execution(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="output\n", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="output\n", stderr=""
+            )
             result = tool_fn.__wrapped__(command="echo", args=["hello"])
             assert result == {
                 "status": "success",
@@ -114,7 +117,9 @@ class TestMakeCliTool:
     def test_nonzero_exit_code(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error msg")
+            mock_run.return_value = MagicMock(
+                returncode=1, stdout="", stderr="error msg"
+            )
             result = tool_fn.__wrapped__(command="false")
             assert result["status"] == "error"
             assert "Exit code: 1" in result["stderr"]
@@ -138,7 +143,9 @@ class TestMakeCliTool:
     def test_cwd_override(self):
         tool_fn = _make_cli_tool(allowed_commands=[], working_dir="/default")
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="", stderr=""
+            )
             # With cwd override
             tool_fn.__wrapped__(command="ls", cwd="/override")
             assert mock_run.call_args.kwargs["cwd"] == "/override"

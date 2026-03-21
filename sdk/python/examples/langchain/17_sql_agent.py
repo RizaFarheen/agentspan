@@ -17,7 +17,7 @@ Requirements:
 import sqlite3
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -142,7 +142,7 @@ graph = create_agent(
     llm,
     tools=[get_schema, generate_sql, run_sql_query],
     name="sql_agent",
-    system_prompt=SQL_SYSTEM,
+    state_modifier=SQL_SYSTEM,
 )
 
 if __name__ == "__main__":

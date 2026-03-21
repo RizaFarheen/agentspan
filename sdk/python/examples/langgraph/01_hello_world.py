@@ -4,7 +4,7 @@
 """Hello World — simplest LangGraph agent with no tools.
 
 Demonstrates:
-    - Using create_agent from agentspan.agents.langchain (returns CompiledStateGraph)
+    - Using create_agent from langchain.agents (returns CompiledStateGraph)
     - Running a graph with AgentRuntime
     - Printing the result
 
@@ -14,7 +14,7 @@ Requirements:
 """
 
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent  # modern API, returns CompiledStateGraph
+from langchain.agents import create_agent  # modern API, returns CompiledStateGraph
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)

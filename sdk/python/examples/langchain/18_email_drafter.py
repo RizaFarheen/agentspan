@@ -16,7 +16,7 @@ Requirements:
 """
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -132,7 +132,7 @@ graph = create_agent(
     llm,
     tools=[draft_email, write_follow_up, write_reply, improve_email],
     name="email_drafter_agent",
-    system_prompt=EMAIL_SYSTEM,
+    state_modifier=EMAIL_SYSTEM,
 )
 
 if __name__ == "__main__":
