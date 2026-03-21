@@ -77,6 +77,8 @@ class ToolDef:
     tool_type: str = "worker"
     config: Dict[str, Any] = field(default_factory=dict)
     guardrails: List[Any] = field(default_factory=list)
+    isolated: bool = True
+    credentials: List[Any] = field(default_factory=list)
 
 
 # ── @tool decorator ─────────────────────────────────────────────────────
@@ -94,6 +96,8 @@ def tool(
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
     guardrails: Optional[List[Any]] = None,
+    isolated: bool = True,
+    credentials: Optional[List[Any]] = None,
 ) -> Callable[[F], F]: ...
 
 
@@ -105,6 +109,8 @@ def tool(
     approval_required: bool = False,
     timeout_seconds: Optional[int] = None,
     guardrails: Optional[List[Any]] = None,
+    isolated: bool = True,
+    credentials: Optional[List[Any]] = None,
 ) -> Any:
     """Register a Python function as a Conductor agent tool.
 
@@ -148,6 +154,8 @@ def tool(
             timeout_seconds=timeout_seconds,
             tool_type="worker",
             guardrails=list(guardrails) if guardrails else [],
+            isolated=isolated,
+            credentials=list(credentials) if credentials else [],
         )
 
         @functools.wraps(fn)
