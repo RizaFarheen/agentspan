@@ -923,7 +923,8 @@ class TestDagHooks:
         mock_dag.inject_task.assert_called_once()
         inj_args = mock_dag.inject_task.call_args
         assert inj_args[0][4] == "SUB_WORKFLOW"  # task_type
-        sub_param = inj_args[1].get("sub_workflow_param") or inj_args[0][5]
+        sub_param = inj_args[1].get("sub_workflow_param")
+        assert sub_param is not None, "sub_workflow_param must be passed as keyword arg"
         assert sub_param["workflowId"] == "child-wf-1"
 
     def test_subagent_stop_completes_sub_workflow_task(self):
@@ -984,6 +985,7 @@ class TestDagHooks:
         # complete_task should be called for the sub-workflow task
         mock_dag.complete_task.assert_called_once()
         call_args = mock_dag.complete_task.call_args[0]
+        assert call_args[0] == "wf-dag-1"   # correct workflow
         assert call_args[1] == "sub-task-1"
         assert call_args[2] == {"result": "subagent result"}
 
@@ -1030,43 +1032,3 @@ class TestDagHooks:
 
         # Worker must complete, not raise
         assert task_result.status.name == "COMPLETED"
-
-    def test_post_tool_hook_failure_is_non_fatal(self):
-        """complete_task raising must not propagate — worker still completes."""
-        mock_dag = AsyncMock()
-        mock_dag.inject_task = AsyncMock(return_value="t-99")
-        mock_dag.complete_task = AsyncMock(side_effect=RuntimeError("server down"))
-
-        agent = ClaudeCodeAgent(name="test", allowed_tools=["Bash"])
-        worker = make_claude_worker(agent, "_fw_claude_test", "http://localhost", "k", "s")
-
-        async def fake_query(prompt, options, **kwargs):
-            yield MagicMock(subtype="init", session_id="sess-999", data={"session_id": "sess-999"})
-            hook_fn = options.hooks["PreToolUse"][0].hooks[0]
-            await hook_fn(
-                {"tool_name": "Bash", "tool_input": {"command": "ls"}},
-                "tool-99",
-                {},
-            )
-            post_hook = options.hooks["PostToolUse"][0].hooks[0]
-            await post_hook(
-                {"tool_response": "file.txt"},
-                "tool-99",
-                {},
-            )
-            result = MagicMock()
-            result.__class__.__name__ = "ResultMessage"
-            result.result = "done"
-            yield result
-
-        with (
-            patch("agentspan.agents.frameworks.claude.query", fake_query),
-            patch("agentspan.agents.frameworks.claude._AgentDagClient", return_value=mock_dag),
-            patch("agentspan.agents.frameworks.claude._restore_session", return_value=None),
-            patch("agentspan.agents.frameworks.claude._checkpoint_session"),
-        ):
-            task = _make_dag_task()
-            from conductor.client.http.models.task_result_status import TaskResultStatus
-
-            result = worker(task)
-            assert result.status == TaskResultStatus.COMPLETED
