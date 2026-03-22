@@ -6,11 +6,16 @@
 package dev.agentspan.runtime.controller;
 
 import dev.agentspan.runtime.model.AgentExecutionDetail;
-import dev.agentspan.runtime.model.AgentSummary;
 import dev.agentspan.runtime.model.AgentRun;
+import dev.agentspan.runtime.model.AgentSummary;
 import dev.agentspan.runtime.model.CompileResponse;
+import dev.agentspan.runtime.model.CreateTrackingWorkflowRequest;
+import dev.agentspan.runtime.model.CreateTrackingWorkflowResponse;
+import dev.agentspan.runtime.model.InjectTaskRequest;
+import dev.agentspan.runtime.model.InjectTaskResponse;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
+import dev.agentspan.runtime.service.AgentDagService;
 import dev.agentspan.runtime.service.AgentService;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -29,6 +34,7 @@ import java.util.Map;
 public class AgentController {
 
     private final AgentService agentService;
+    private final AgentDagService agentDagService;
 
     @GetMapping
     public String hello() {
@@ -174,5 +180,31 @@ public class AgentController {
     @GetMapping("/execution/{id}")
     public AgentRun getWorkflow(@PathVariable String id) {
         return agentService.getWorkflow(id);
+    }
+
+    /**
+     * Inject a display-only task into a running workflow's task list.
+     * Used by the SDK's DAG hook to record tool calls in the Conductor UI.
+     * Writes directly to ExecutionDAO — does not trigger decide().
+     */
+    @PostMapping("/{workflowId}/tasks")
+    public InjectTaskResponse injectTask(
+            @PathVariable String workflowId,
+            @RequestBody InjectTaskRequest req) {
+        return agentDagService.injectTask(workflowId, req);
+    }
+
+    /**
+     * Create a bare tracking workflow for sub-agent display.
+     * The workflow has no tasks in its definition; tasks are injected via injectTask.
+     * Stays RUNNING permanently — completion is a future enhancement.
+     *
+     * Note: Spring MVC resolves static segments before dynamic ones,
+     * so POST /api/agent/workflow does not conflict with GET /api/agent/{name}.
+     */
+    @PostMapping("/workflow")
+    public CreateTrackingWorkflowResponse createTrackingWorkflow(
+            @RequestBody CreateTrackingWorkflowRequest req) {
+        return agentDagService.createTrackingWorkflow(req);
     }
 }

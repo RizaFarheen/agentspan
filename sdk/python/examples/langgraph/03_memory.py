@@ -1,28 +1,32 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Memory — multi-turn conversation via session_id.
+"""Memory with MemorySaver — multi-turn conversation via checkpointer.
 
 Demonstrates:
+    - Attaching a MemorySaver checkpointer to create_agent
     - Using session_id to maintain conversation state across multiple turns
     - How the agent remembers context from earlier messages
-    - Agentspan runtime handles session state server-side (no local checkpointer needed)
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-# Session-based memory is handled by Agentspan's session_id parameter — no local checkpointer needed
+# MemorySaver persists conversation history in-memory between turns
+checkpointer = MemorySaver()
+
 graph = create_agent(
     llm,
     tools=[],
+    checkpointer=checkpointer,
     name="memory_agent",
 )
 

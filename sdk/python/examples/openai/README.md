@@ -7,8 +7,13 @@ The agents are defined using standard OpenAI SDK classes and decorators — the 
 ## Prerequisites
 
 ```bash
-pip install openai-agents agentspan-sdk
+uv pip install openai-agents agentspan
 ```
+
+| Package | Required | Notes |
+|---------|----------|-------|
+| `openai-agents` | Yes | `Agent`, `function_tool`, `ModelSettings`, guardrails |
+| `pydantic` | Some examples | Used for structured output (03) |
 
 Export environment variables:
 

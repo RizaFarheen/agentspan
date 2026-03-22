@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from langchain_core.output_parsers import StrOutputParser, CommaSeparatedListOutputParser, JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 

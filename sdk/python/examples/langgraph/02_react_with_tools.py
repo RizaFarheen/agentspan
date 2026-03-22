@@ -18,7 +18,7 @@ from datetime import date
 
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from agentspan.agents import AgentRuntime
 
 

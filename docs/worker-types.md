@@ -20,6 +20,7 @@ They execute locally (SDK-side) while the workflow orchestration happens server-
 | 11 | Swarm Transfer Tool | `transfer_to_{peer_name}` | Yes | `strategy == "swarm"` with sub-agents |
 | 12 | Manual Selection | `{agent_name}_process_selection` | Yes | `strategy == "manual"` with sub-agents |
 | 13 | Framework | `{worker.name}` | No | Foreign framework agents with callable workers |
+| 14 | Framework Passthrough | `{worker_name}` | No | Foreign framework agents where model/tools cannot be extracted |
 
 > **Note:** All system-level workers (#2–#12) are async with `thread_count=10`.
 > Tool workers (#1) and framework workers (#13) remain synchronous as they wrap
@@ -255,11 +256,32 @@ Processes human input to select which sub-agent to run.
 |----------------|---------------------------|
 | Task name      | `{worker.name}`           |
 | Async          | No                        |
-| Trigger        | Foreign framework agents with callable workers |
+| Trigger        | Foreign framework agents with extractable model + tools |
 | Registered by  | `_register_framework_workers()` |
 
-Bridges callable workers extracted from non-AgentSpan frameworks (e.g. CrewAI, LangGraph)
-into Conductor tasks. Uses the same `make_tool_worker()` wrapper as tool workers.
+When the serializer can extract the LLM model and tools from a foreign framework agent
+(e.g. LangGraph `create_agent` with `ChatOpenAI` + tools), each tool is registered as
+an individual Conductor task worker via `make_tool_worker()`. The server creates a proper
+multi-task workflow (AI_MODEL + SIMPLE per tool).
+
+---
+
+## 14. Framework Passthrough Worker
+
+| Field          | Value                     |
+|----------------|---------------------------|
+| Task name      | `{worker_name}`           |
+| Async          | No                        |
+| Task timeout   | 600 s                     |
+| Trigger        | Foreign framework agents where model/tools cannot be extracted |
+| Registered by  | `_register_passthrough_worker()` |
+
+Fallback for framework agents where the serializer cannot extract the model or tools
+(e.g. custom LangGraph `StateGraph` with no recognizable LLM). The entire agent runs
+as a single SIMPLE task with an extended 600s timeout. Events are pushed to the SSE
+stream via HTTP from within the worker.
+
+Source: `_passthrough_task_def()` in `runtime.py`.
 
 ---
 

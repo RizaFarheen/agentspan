@@ -14,7 +14,7 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from agentspan.agents import AgentRuntime

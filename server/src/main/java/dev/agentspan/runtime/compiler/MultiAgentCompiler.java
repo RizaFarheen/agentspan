@@ -1064,22 +1064,16 @@ public class MultiAgentCompiler {
 
         // 2. HumanTask
         String humanRef = config.getName() + "_pick_agent";
-        WorkflowTask humanTask = new WorkflowTask();
-        humanTask.setType("HUMAN");
-        humanTask.setTaskReferenceName(humanRef);
-        Map<String, Object> humanInputs = new LinkedHashMap<>();
-        humanInputs.put("__humanTaskDefinition", Map.of(
-            "assignmentCompletionStrategy", "LEAVE_OPEN",
-            "displayName", config.getName() + ": Select next agent",
-            "userFormTemplate", Map.of("version", 0)
-        ));
         Map<String, String> agentOptions = new LinkedHashMap<>();
         for (int i = 0; i < config.getAgents().size(); i++) {
             agentOptions.put(config.getAgents().get(i).getName(), String.valueOf(i));
         }
-        humanInputs.put("agent_options", agentOptions);
-        humanInputs.put("conversation", "${workflow.variables.conversation}");
-        humanTask.setInputParameters(humanInputs);
+        HumanTaskBuilder.Pipeline humanPipeline = HumanTaskBuilder
+            .create(humanRef, config.getName() + ": Select next agent")
+            .contextInput("agent_options", agentOptions)
+            .contextInput("conversation", "${workflow.variables.conversation}")
+            .build();
+        WorkflowTask humanTask = humanPipeline.getTasks().get(0);
 
         // Process selection worker
         String processRef = config.getName() + "_process_selection";

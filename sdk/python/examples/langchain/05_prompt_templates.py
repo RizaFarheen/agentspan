@@ -16,7 +16,7 @@ Requirements:
 
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 

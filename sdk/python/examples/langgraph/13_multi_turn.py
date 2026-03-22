@@ -1,12 +1,12 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Multi-Turn Conversation — session_id for continuity across turns.
+"""Multi-Turn Conversation — MemorySaver + session_id for continuity.
 
 Demonstrates:
-    - Using session_id to maintain persistent conversation history
+    - Using MemorySaver checkpointer for persistent conversation history
+    - Passing session_id to runtime.run for scoped memory
     - How different session IDs maintain separate conversation threads
-    - Agentspan runtime handles session state server-side (no local checkpointer needed)
     - A practical use case: interview preparation assistant
 
 Requirements:
@@ -14,16 +14,18 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
+from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+checkpointer = MemorySaver()
 
-# Session-based memory is handled by Agentspan's session_id parameter — no local checkpointer needed
 graph = create_agent(
     llm,
     tools=[],
+    checkpointer=checkpointer,
     system_prompt=(
         "You are an interview preparation coach. "
         "Remember what the user tells you about their background, skills, and target role. "

@@ -812,6 +812,64 @@ def search_tool(
     )
 
 
+# ── Human interaction tool ──────────────────────────────────────────────
+
+
+def human_tool(
+    name: str,
+    description: str,
+    input_schema: Optional[Dict[str, Any]] = None,
+) -> ToolDef:
+    """Create a tool that pauses execution for human input (Conductor ``HUMAN`` task).
+
+    When the LLM calls this tool, the workflow pauses and presents the LLM's
+    arguments to a human operator.  The human's response is returned as the
+    tool output and the LLM continues with the next turn.
+
+    No worker process is needed — the Conductor server handles the HUMAN task
+    directly.  The server generates the response form schema and validation
+    pipeline automatically.
+
+    Args:
+        name: Tool name (shown to the LLM).
+        description: Human-readable description for the LLM.  This also
+            appears as the prompt shown to the human operator.
+        input_schema: JSON Schema for the LLM-provided parameters.
+            If ``None``, a default schema with a ``question`` field is used.
+
+    Example::
+
+        ask_user = human_tool(
+            name="ask_user",
+            description="Ask the user a question and wait for their response.",
+        )
+
+        agent = Agent(
+            name="assistant",
+            model="openai/gpt-4o",
+            tools=[ask_user, other_tool],
+            instructions="When you need clarification, use ask_user.",
+        )
+    """
+    if input_schema is None:
+        input_schema = {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "The question or prompt to present to the human.",
+                },
+            },
+            "required": ["question"],
+        }
+    return ToolDef(
+        name=name,
+        description=description,
+        input_schema=input_schema,
+        tool_type="human",
+    )
+
+
 # ── Agent-as-tool ──────────────────────────────────────────────────────
 
 

@@ -1,96 +1,93 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Parallel Branches — create_agent with pros, cons, and summary tools.
+"""Parallel Branches — StateGraph with two concurrent paths that merge.
 
 Demonstrates:
-    - The LLM orchestrates parallel analysis by calling pros and cons tools
-    - A merge/summary tool combines both perspectives into a balanced conclusion
-    - Practical use case: pros/cons analysis for any topic
+    - Fan-out from a single node to two parallel branches
+    - Using Annotated list reducers to safely merge messages
+    - Fan-in merge node that combines results from both branches
+    - Practical use case: parallel pros/cons analysis
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate
+import operator
+from typing import Annotated, TypedDict
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 
-@tool
-def analyze_pros(topic: str) -> str:
-    """List 3 clear advantages or pros of the given topic.
+class State(TypedDict):
+    topic: str
+    pros: str
+    cons: str
+    # Annotated with operator.add so both branches can append messages safely
+    branch_outputs: Annotated[list, operator.add]
+    final_summary: str
 
-    Args:
-        topic: The topic to analyze for advantages.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "List 3 clear advantages or pros. Be concise and specific."),
-        ("human", "Topic: {topic}"),
+
+def analyze_pros(state: State) -> State:
+    """Analyze the advantages/pros of the topic."""
+    response = llm.invoke([
+        SystemMessage(content="List 3 clear advantages or pros. Be concise and specific."),
+        HumanMessage(content=f"Topic: {state['topic']}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic})
-    return f"PROS:\n{response.content}"
+    return {
+        "pros": response.content,
+        "branch_outputs": [f"PROS:\n{response.content}"],
+    }
 
 
-@tool
-def analyze_cons(topic: str) -> str:
-    """List 3 clear disadvantages or cons of the given topic.
-
-    Args:
-        topic: The topic to analyze for disadvantages.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "List 3 clear disadvantages or cons. Be concise and specific."),
-        ("human", "Topic: {topic}"),
+def analyze_cons(state: State) -> State:
+    """Analyze the disadvantages/cons of the topic."""
+    response = llm.invoke([
+        SystemMessage(content="List 3 clear disadvantages or cons. Be concise and specific."),
+        HumanMessage(content=f"Topic: {state['topic']}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic})
-    return f"CONS:\n{response.content}"
+    return {
+        "cons": response.content,
+        "branch_outputs": [f"CONS:\n{response.content}"],
+    }
 
 
-@tool
-def merge_and_summarize(topic: str, pros: str, cons: str) -> str:
-    """Combine pros and cons into a balanced conclusion with a clear recommendation.
-
-    Args:
-        topic: The topic being analyzed.
-        pros: The pros analysis text.
-        cons: The cons analysis text.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You have received a pros and cons analysis. "
-            "Write a balanced, one-paragraph conclusion with a clear recommendation."
-        )),
-        ("human", "Topic: {topic}\n\n{pros}\n\n{cons}"),
+def merge_and_summarize(state: State) -> State:
+    """Merge results from both branches and write a balanced conclusion."""
+    combined = "\n\n".join(state["branch_outputs"])
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You have received a pros and cons analysis. "
+                "Write a balanced, one-paragraph conclusion with a clear recommendation."
+            )
+        ),
+        HumanMessage(content=f"Topic: {state['topic']}\n\n{combined}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic, "pros": pros, "cons": cons})
-    return response.content
+    return {"final_summary": response.content}
 
 
-ANALYSIS_SYSTEM = """You are a balanced analysis assistant.
+builder = StateGraph(State)
+builder.add_node("pros", analyze_pros)
+builder.add_node("cons", analyze_cons)
+builder.add_node("merge", merge_and_summarize)
 
-For any topic you are asked to evaluate:
-1. Call analyze_pros to get the advantages
-2. Call analyze_cons to get the disadvantages
-3. Call merge_and_summarize with the topic, pros, and cons to produce the final balanced conclusion
+# Fan-out: both branches run in parallel from START
+builder.add_edge(START, "pros")
+builder.add_edge(START, "cons")
 
-Always complete all three steps.
-"""
+# Fan-in: both branches feed into merge
+builder.add_edge("pros", "merge")
+builder.add_edge("cons", "merge")
+builder.add_edge("merge", END)
 
-graph = create_agent(
-    llm,
-    tools=[analyze_pros, analyze_cons, merge_and_summarize],
-    name="parallel_analysis",
-    system_prompt=ANALYSIS_SYSTEM,
-)
+graph = builder.compile(name="parallel_analysis")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

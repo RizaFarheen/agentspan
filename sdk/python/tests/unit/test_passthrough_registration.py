@@ -1,7 +1,6 @@
 # sdk/python/tests/unit/test_passthrough_registration.py
 """Tests for passthrough worker registration path in runtime.py."""
-
-from unittest.mock import MagicMock, call, patch  # noqa: F401
+from unittest.mock import MagicMock, patch, call  # noqa: F401
 
 
 def _make_graph():
@@ -58,10 +57,9 @@ class TestSerializeAgentFuncPlaceholder:
         graph.name = "test_graph"
 
         with patch("agentspan.agents.frameworks.langgraph.serialize_langgraph") as mock_sl:
-            mock_sl.return_value = (
-                {"name": "test_graph"},
-                [MagicMock(name="test_graph", func=None)],
-            )
+            mock_sl.return_value = ({"name": "test_graph"}, [
+                MagicMock(name="test_graph", func=None)
+            ])
             _, workers = serialize_agent(graph)
 
         # func=None is expected here — it is a placeholder
@@ -71,8 +69,8 @@ class TestSerializeAgentFuncPlaceholder:
 class TestBuildPassthroughFunc:
     def test_build_passthrough_func_passes_auth_to_langgraph_worker(self):
         """Verifies auth_key/auth_secret (not key_id/key_secret) are passed."""
-        from agentspan.agents.runtime.config import AgentConfig
         from agentspan.agents.runtime.runtime import AgentRuntime
+        from agentspan.agents.runtime.config import AgentConfig
 
         config = AgentConfig(
             server_url="http://testserver:8080/api",

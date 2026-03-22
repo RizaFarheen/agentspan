@@ -488,4 +488,290 @@ class AgentCompilerTest {
 
         assertThatNoException().isThrownBy(() -> compiler.compile(config));
     }
+
+    // ── Graph-structure compilation tests ──────────────────────────────
+
+    @Test
+    void testCompileGraphStructureSequential() {
+        // Sequential graph: __start__ → fetch → process → __end__
+        Map<String, Object> graphStructure = Map.of(
+            "nodes", List.of(
+                Map.of("name", "fetch", "_worker_ref", "seq_graph_fetch"),
+                Map.of("name", "process", "_worker_ref", "seq_graph_process")
+            ),
+            "edges", List.of(
+                Map.of("source", "__start__", "target", "fetch"),
+                Map.of("source", "fetch", "target", "process"),
+                Map.of("source", "process", "target", "__end__")
+            ),
+            "input_key", "query"
+        );
+
+        AgentConfig config = AgentConfig.builder()
+            .name("seq_graph")
+            .metadata(Map.of("_graph_structure", graphStructure))
+            .tools(List.of(
+                ToolConfig.builder().name("seq_graph_fetch").toolType("worker").build(),
+                ToolConfig.builder().name("seq_graph_process").toolType("worker").build()
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        assertThat(wf.getName()).isEqualTo("seq_graph");
+        assertThat(wf.getTasks()).hasSize(2);
+
+        WorkflowTask first = wf.getTasks().get(0);
+        assertThat(first.getType()).isEqualTo("SIMPLE");
+        assertThat(first.getName()).isEqualTo("seq_graph_fetch");
+
+        WorkflowTask second = wf.getTasks().get(1);
+        assertThat(second.getType()).isEqualTo("SIMPLE");
+        assertThat(second.getName()).isEqualTo("seq_graph_process");
+
+        // Second task's state should reference first task's output
+        assertThat(second.getInputParameters().get("state").toString())
+            .contains("seq_graph_fetch");
+    }
+
+    @Test
+    void testCompileGraphStructureConditionalSwitch() {
+        // Graph with conditional routing: __start__ → classify → SWITCH(positive | negative)
+        Map<String, Object> graphStructure = Map.of(
+            "nodes", List.of(
+                Map.of("name", "classify", "_worker_ref", "test_classify"),
+                Map.of("name", "positive", "_worker_ref", "test_positive"),
+                Map.of("name", "negative", "_worker_ref", "test_negative")
+            ),
+            "edges", List.of(
+                Map.of("source", "__start__", "target", "classify")
+            ),
+            "conditional_edges", List.of(
+                Map.of(
+                    "source", "classify",
+                    "_router_ref", "test_classify_router",
+                    "targets", Map.of("positive", "positive", "negative", "negative")
+                )
+            )
+        );
+
+        AgentConfig config = AgentConfig.builder()
+            .name("cond_graph")
+            .model("openai/gpt-4o")
+            .metadata(Map.of("_graph_structure", graphStructure))
+            .tools(List.of(
+                ToolConfig.builder().name("test_classify").toolType("worker").build(),
+                ToolConfig.builder().name("test_positive").toolType("worker").build(),
+                ToolConfig.builder().name("test_negative").toolType("worker").build(),
+                ToolConfig.builder().name("test_classify_router").toolType("worker").build()
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        // Should contain at least: classify SIMPLE, router SIMPLE, SWITCH
+        List<String> taskTypes = wf.getTasks().stream()
+            .map(WorkflowTask::getType).toList();
+        assertThat(taskTypes).contains("SIMPLE", "SWITCH");
+
+        // Find the router task
+        WorkflowTask routerTask = wf.getTasks().stream()
+            .filter(t -> "SIMPLE".equals(t.getType()) && "test_classify_router".equals(t.getName()))
+            .findFirst().orElse(null);
+        assertThat(routerTask).isNotNull();
+
+        // Find the SWITCH task
+        WorkflowTask switchTask = wf.getTasks().stream()
+            .filter(t -> "SWITCH".equals(t.getType()))
+            .findFirst().orElseThrow();
+        assertThat(switchTask.getDecisionCases()).containsKey("positive");
+        assertThat(switchTask.getDecisionCases()).containsKey("negative");
+    }
+
+    @Test
+    void testCompileGraphStructureForkJoin() {
+        // Fan-out from START: __start__ → pros, __start__ → cons, pros → merge, cons → merge, merge → __end__
+        Map<String, Object> graphStructure = new java.util.LinkedHashMap<>();
+        graphStructure.put("nodes", List.of(
+            Map.of("name", "pros", "_worker_ref", "test_pros"),
+            Map.of("name", "cons", "_worker_ref", "test_cons"),
+            Map.of("name", "merge", "_worker_ref", "test_merge")
+        ));
+        graphStructure.put("edges", List.of(
+            Map.of("source", "__start__", "target", "pros"),
+            Map.of("source", "__start__", "target", "cons"),
+            Map.of("source", "pros", "target", "merge"),
+            Map.of("source", "cons", "target", "merge"),
+            Map.of("source", "merge", "target", "__end__")
+        ));
+        graphStructure.put("_reducers", Map.of("arguments", "add"));
+
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        metadata.put("_graph_structure", graphStructure);
+        metadata.put("_reducers", Map.of("arguments", "add"));
+
+        AgentConfig config = AgentConfig.builder()
+            .name("fork_graph")
+            .metadata(metadata)
+            .tools(List.of(
+                ToolConfig.builder().name("test_pros").toolType("worker").build(),
+                ToolConfig.builder().name("test_cons").toolType("worker").build(),
+                ToolConfig.builder().name("test_merge").toolType("worker").build()
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        List<String> taskTypes = wf.getTasks().stream()
+            .map(WorkflowTask::getType).toList();
+
+        // Should include FORK_JOIN and JOIN tasks
+        assertThat(taskTypes).contains("FORK_JOIN");
+        assertThat(taskTypes).contains("JOIN");
+
+        // Should include an INLINE merge task
+        WorkflowTask inlineMerge = wf.getTasks().stream()
+            .filter(t -> "INLINE".equals(t.getType()))
+            .findFirst().orElse(null);
+        assertThat(inlineMerge).isNotNull();
+    }
+
+    @Test
+    void testCompileGraphStructureLlmNode() {
+        // Graph with LLM node: __start__ → prepare → analyze(LLM) → __end__
+        Map<String, Object> graphStructure = Map.of(
+            "nodes", List.of(
+                Map.of("name", "prepare", "_worker_ref", "test_prepare"),
+                Map.of("name", "analyze", "_worker_ref", "test_analyze_prep",
+                    "_llm_node", true,
+                    "_llm_prep_ref", "test_analyze_prep",
+                    "_llm_finish_ref", "test_analyze_finish")
+            ),
+            "edges", List.of(
+                Map.of("source", "__start__", "target", "prepare"),
+                Map.of("source", "prepare", "target", "analyze"),
+                Map.of("source", "analyze", "target", "__end__")
+            )
+        );
+
+        AgentConfig config = AgentConfig.builder()
+            .name("llm_graph")
+            .model("openai/gpt-4o")
+            .metadata(Map.of("_graph_structure", graphStructure))
+            .tools(List.of(
+                ToolConfig.builder().name("test_prepare").toolType("worker").build(),
+                ToolConfig.builder().name("test_analyze_prep").toolType("worker").build(),
+                ToolConfig.builder().name("test_analyze_finish").toolType("worker").build()
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        List<String> taskTypes = wf.getTasks().stream()
+            .map(WorkflowTask::getType).toList();
+
+        // Should contain a SWITCH task (for _skip_llm)
+        assertThat(taskTypes).contains("SWITCH");
+
+        // Find the SWITCH task for the LLM node
+        WorkflowTask switchTask = wf.getTasks().stream()
+            .filter(t -> "SWITCH".equals(t.getType()))
+            .findFirst().orElseThrow();
+
+        // Default case should contain LLM_CHAT_COMPLETE task
+        assertThat(switchTask.getDefaultCase()).isNotEmpty();
+        boolean hasLlmTask = switchTask.getDefaultCase().stream()
+            .anyMatch(t -> "LLM_CHAT_COMPLETE".equals(t.getType()));
+        assertThat(hasLlmTask).isTrue();
+
+        // Should have an INLINE coalesce task
+        WorkflowTask coalesceTask = wf.getTasks().stream()
+            .filter(t -> "INLINE".equals(t.getType()))
+            .findFirst().orElse(null);
+        assertThat(coalesceTask).isNotNull();
+    }
+
+    @Test
+    void testCompileGraphStructureSubgraphNode() {
+        // Build a simple sub-agent config (passthrough)
+        AgentConfig subAgent = AgentConfig.builder()
+            .name("sub_graph")
+            .metadata(Map.of("_framework_passthrough", true))
+            .tools(List.of(ToolConfig.builder().name("sub_graph").toolType("worker").build()))
+            .build();
+
+        // Graph with subgraph node: __start__ → sub → __end__
+        Map<String, Object> graphStructure = Map.of(
+            "nodes", List.of(
+                Map.of("name", "sub", "_worker_ref", "test_sub_prep",
+                    "_subgraph_node", true,
+                    "_subgraph_prep_ref", "test_sub_prep",
+                    "_subgraph_finish_ref", "test_sub_finish")
+            ),
+            "edges", List.of(
+                Map.of("source", "__start__", "target", "sub"),
+                Map.of("source", "sub", "target", "__end__")
+            )
+        );
+
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        metadata.put("_graph_structure", graphStructure);
+        metadata.put("_subgraph_configs", Map.of("sub", subAgent));
+
+        AgentConfig config = AgentConfig.builder()
+            .name("sg_graph")
+            .metadata(metadata)
+            .tools(List.of(
+                ToolConfig.builder().name("test_sub_prep").toolType("worker").build(),
+                ToolConfig.builder().name("test_sub_finish").toolType("worker").build(),
+                ToolConfig.builder().name("sub_graph").toolType("worker").build()
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        List<String> taskTypes = wf.getTasks().stream()
+            .map(WorkflowTask::getType).toList();
+
+        // Should contain a SWITCH task (for _skip_subgraph)
+        assertThat(taskTypes).contains("SWITCH");
+
+        // Find the SWITCH task
+        WorkflowTask switchTask = wf.getTasks().stream()
+            .filter(t -> "SWITCH".equals(t.getType()))
+            .findFirst().orElseThrow();
+
+        // Default case should contain a SUB_WORKFLOW task
+        assertThat(switchTask.getDefaultCase()).isNotEmpty();
+        boolean hasSubWf = switchTask.getDefaultCase().stream()
+            .anyMatch(t -> "SUB_WORKFLOW".equals(t.getType()));
+        assertThat(hasSubWf).isTrue();
+
+        // Should have an INLINE coalesce task
+        WorkflowTask coalesceTask = wf.getTasks().stream()
+            .filter(t -> "INLINE".equals(t.getType()))
+            .findFirst().orElse(null);
+        assertThat(coalesceTask).isNotNull();
+    }
+
+    @Test
+    void testApplyRetryPolicyMapsAllParams() {
+        WorkflowTask task = new WorkflowTask();
+        Map<String, Object> policy = Map.of(
+            "max_attempts", 5,
+            "initial_interval", 2.5,
+            "backoff_factor", 3
+        );
+
+        AgentCompiler.applyRetryPolicy(task, policy);
+
+        // max_attempts 5 → retryCount = 5 - 1 = 4
+        assertThat(task.getRetryCount()).isEqualTo(4);
+        // initial_interval and backoff_factor are stored in _retry_meta (TaskDef-level properties)
+        @SuppressWarnings("unchecked")
+        Map<String, Object> retryMeta = (Map<String, Object>) task.getInputParameters().get("_retry_meta");
+        assertThat(retryMeta).isNotNull();
+        assertThat(retryMeta.get("retryDelaySeconds")).isEqualTo(3);
+        assertThat(retryMeta.get("backoffScaleFactor")).isEqualTo(3);
+    }
 }

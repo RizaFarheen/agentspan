@@ -1,103 +1,99 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Error Recovery — create_agent with graceful error handling in tools.
+"""Error Recovery — StateGraph with try/except in nodes for graceful degradation.
 
 Demonstrates:
-    - Catching exceptions within @tool functions for graceful degradation
-    - Returning error information as a string so the LLM can handle it
-    - The agent decides whether to process data or recover from the error
+    - Catching exceptions within StateGraph nodes
+    - Storing error information in state for downstream handling
+    - A fallback node that generates a graceful response on failure
+    - Conditional routing based on whether an error occurred
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate
+from typing import TypedDict, Literal, Optional
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 
-@tool
-def fetch_data(query: str) -> str:
-    """Attempt to fetch data for a query. May fail for certain query patterns.
+class State(TypedDict):
+    query: str
+    data: Optional[str]
+    error: Optional[str]
+    response: str
 
-    Returns fetched data on success, or an error description if the fetch fails.
-    Queries containing 'fail' or 'error' will simulate a transient failure.
 
-    Args:
-        query: The data query to fetch.
-    """
+def fetch_data(state: State) -> State:
+    """Attempt to fetch data; may fail for certain query patterns."""
+    query = state["query"]
     try:
+        # Simulate a failure for queries containing 'fail' or 'error'
         if "fail" in query.lower() or "error" in query.lower():
             raise ValueError(f"Simulated fetch failure for query: '{query}'")
-        return (
+
+        # Simulate successful data fetch
+        data = (
             f"Fetched data for '{query}': "
             "Sample dataset with 100 records, avg value 42.5, max 99, min 1."
         )
+        return {"data": data, "error": None}
+
     except Exception as exc:
-        return f"ERROR: {exc}"
+        # Capture the error in state instead of crashing the graph
+        return {"data": None, "error": str(exc)}
 
 
-@tool
-def analyze_data(data: str) -> str:
-    """Summarize fetched data in one sentence.
+def should_recover(state: State) -> Literal["process", "recover"]:
+    """Route to recovery path if an error was captured."""
+    return "recover" if state.get("error") else "process"
 
-    Args:
-        data: The fetched data string to analyze.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a data analyst. Summarize the following data in one sentence."),
-        ("human", "{data}"),
+
+def process_data(state: State) -> State:
+    """Process the fetched data with LLM analysis (happy path)."""
+    response = llm.invoke([
+        SystemMessage(content="You are a data analyst. Summarize the following data in one sentence."),
+        HumanMessage(content=state["data"]),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"data": data})
-    return response.content
+    return {"response": response.content}
 
 
-@tool
-def suggest_recovery(error_message: str, original_query: str) -> str:
-    """Generate a helpful recovery message when a data fetch has failed.
-
-    Apologizes briefly, explains what may have gone wrong, and suggests
-    2 alternative approaches.
-
-    Args:
-        error_message: The error that occurred.
-        original_query: The original query that failed.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "A data fetch error occurred. Apologize briefly, explain what may have gone wrong, "
-            "and suggest 2 alternative approaches the user could try. Be concise."
-        )),
-        ("human", "Error: {error}\nOriginal query: {query}"),
+def recover_from_error(state: State) -> State:
+    """Generate a helpful error message and suggest alternatives (recovery path)."""
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "A data fetch error occurred. Apologize briefly, explain what may have gone wrong, "
+                "and suggest 2 alternative approaches the user could try. Be concise."
+            )
+        ),
+        HumanMessage(content=f"Error: {state['error']}\nOriginal query: {state['query']}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"error": error_message, "query": original_query})
-    return f"[RECOVERED FROM ERROR]\n{response.content}"
+    return {"response": f"[RECOVERED FROM ERROR]\n{response.content}"}
 
 
-RECOVERY_SYSTEM = """You are a resilient data assistant.
+builder = StateGraph(State)
+builder.add_node("fetch", fetch_data)
+builder.add_node("process", process_data)
+builder.add_node("recover", recover_from_error)
 
-For each query:
-1. Call fetch_data to retrieve data
-2. Check the result:
-   - If the result starts with 'ERROR:' → call suggest_recovery with the error and original query
-   - Otherwise → call analyze_data to summarize the successful fetch
-3. Return the final result to the user
-"""
-
-graph = create_agent(
-    llm,
-    tools=[fetch_data, analyze_data, suggest_recovery],
-    name="error_recovery_agent",
-    system_prompt=RECOVERY_SYSTEM,
+builder.add_edge(START, "fetch")
+builder.add_conditional_edges(
+    "fetch",
+    should_recover,
+    {"process": "process", "recover": "recover"},
 )
+builder.add_edge("process", END)
+builder.add_edge("recover", END)
+
+graph = builder.compile(name="error_recovery_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

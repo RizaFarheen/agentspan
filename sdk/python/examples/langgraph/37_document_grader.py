@@ -1,10 +1,10 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Document Grader — score document relevance and generate a cited answer.
+"""Document Grader — score document relevance for a query.
 
 Demonstrates:
-    - Grading a batch of documents against a query inside tools
+    - Grading a batch of documents against a query
     - Filtering to only relevant documents
     - Generating a final answer citing sources
     - Practical use case: search result re-ranking and citation-based Q&A
@@ -14,16 +14,18 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain_core.tools import tool
+from typing import TypedDict, List
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-# Sample document corpus
+# ── Sample document corpus ────────────────────────────────────────────────────
+
 CORPUS = [
     Document(page_content="Python is a high-level, general-purpose programming language known for its readability.", metadata={"id": 1, "title": "Python Overview"}),
     Document(page_content="The Eiffel Tower is located in Paris and was built in 1889.", metadata={"id": 2, "title": "Eiffel Tower"}),
@@ -34,85 +36,79 @@ CORPUS = [
 ]
 
 
-@tool
-def grade_documents(query: str) -> str:
-    """Score all documents 1-5 for relevance to the query and return the relevant ones.
+class State(TypedDict):
+    query: str
+    documents: List[Document]
+    scores: List[dict]
+    relevant_docs: List[Document]
+    answer: str
 
-    Documents scoring 3 or above are considered relevant.
 
-    Args:
-        query: The query to grade documents against.
-    """
+def retrieve_all(state: State) -> State:
+    """In this example, start with the full corpus."""
+    return {"documents": CORPUS}
+
+
+def grade_documents(state: State) -> State:
+    """Score each document 1-5 for relevance to the query."""
+    query = state["query"]
     scores = []
-    for doc in CORPUS:
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", (
-                "Score the relevance of the document to the query from 1 (not relevant) to 5 (highly relevant). "
-                "Respond with only a single integer."
-            )),
-            ("human", "Query: {query}\n\nDocument: {content}"),
+    for doc in state["documents"]:
+        response = llm.invoke([
+            SystemMessage(
+                content=(
+                    "Score the relevance of the document to the query from 1 (not relevant) to 5 (highly relevant). "
+                    "Respond with only a single integer."
+                )
+            ),
+            HumanMessage(content=f"Query: {query}\n\nDocument: {doc.page_content}"),
         ])
-        chain = prompt | llm
-        response = chain.invoke({"query": query, "content": doc.page_content})
         try:
             score = int(response.content.strip()[0])
         except (ValueError, IndexError):
             score = 1
-        scores.append({
-            "title": doc.metadata.get("title"),
-            "score": score,
-            "content": doc.page_content,
-        })
+        scores.append({"doc_id": doc.metadata.get("id"), "title": doc.metadata.get("title"), "score": score})
 
-    relevant = [s for s in scores if s["score"] >= 3]
+    relevant = [
+        doc for doc, s in zip(state["documents"], scores) if s["score"] >= 3
+    ]
+    return {"scores": scores, "relevant_docs": relevant}
+
+
+def generate_answer(state: State) -> State:
+    relevant = state.get("relevant_docs", [])
     if not relevant:
-        return "No relevant documents found for this query."
+        return {"answer": "No relevant documents found for this query."}
 
-    lines = [f"Relevant documents for '{query}':"]
-    for s in relevant:
-        lines.append(f"\n[{s['title']}] (score: {s['score']}/5)\n{s['content']}")
-    return "\n".join(lines)
+    context_parts = []
+    for doc in relevant:
+        title = doc.metadata.get("title", "Unknown")
+        context_parts.append(f"[{title}]: {doc.page_content}")
+    context = "\n".join(context_parts)
 
-
-@tool
-def generate_cited_answer(query: str, graded_context: str) -> str:
-    """Generate a cited answer using the graded relevant documents as context.
-
-    Args:
-        query: The user's question.
-        graded_context: The graded document content from grade_documents.
-    """
-    if "No relevant documents" in graded_context:
-        return "No relevant documents were found to answer this question."
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "Answer the question using only the provided sources. "
-            "Cite the source title in brackets when using information from it."
-        )),
-        ("human", "Query: {query}\n\nSources:\n{context}"),
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "Answer the question using only the provided sources. "
+                "Cite the source title in brackets when using information from it."
+            )
+        ),
+        HumanMessage(content=f"Query: {state['query']}\n\nSources:\n{context}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"query": query, "context": graded_context})
-    return response.content.strip()
+    return {"answer": response.content.strip()}
 
 
-GRADER_SYSTEM = """You are a document-grading Q&A assistant.
+builder = StateGraph(State)
+builder.add_node("retrieve", retrieve_all)
+builder.add_node("grade", grade_documents)
+builder.add_node("generate", generate_answer)
 
-For each question:
-1. Call grade_documents to retrieve and score all documents for relevance
-2. Call generate_cited_answer with the question and graded context to produce a cited answer
-3. Return the answer to the user
+builder.add_edge(START, "retrieve")
+builder.add_edge("retrieve", "grade")
+builder.add_edge("grade", "generate")
+builder.add_edge("generate", END)
 
-Always base your answers only on the graded context, never on prior knowledge.
-"""
-
-graph = create_agent(
-    llm,
-    tools=[grade_documents, generate_cited_answer],
-    name="document_grader_agent",
-    system_prompt=GRADER_SYSTEM,
-)
+graph = builder.compile(name="document_grader_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

@@ -17,7 +17,7 @@ Requirements:
 import sqlite3
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -27,7 +27,7 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 # ── Set up an in-memory SQLite database ───────────────────────────────────────
 
 def _get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.executescript("""

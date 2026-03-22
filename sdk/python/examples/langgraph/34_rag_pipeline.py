@@ -1,31 +1,32 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""RAG Pipeline — Retrieval-Augmented Generation as tools.
+"""RAG Pipeline — Retrieval-Augmented Generation with a StateGraph.
 
 Demonstrates:
-    - A retrieve → grade → generate pipeline modelled as tools
+    - A retrieve → grade → generate pipeline
     - In-memory document store with simple keyword retrieval (no vector DB needed)
-    - Grading retrieved documents for relevance inside a tool
+    - Grading retrieved documents for relevance before generation
     - Re-querying with a rewritten question if documents are not relevant
-    - The LLM agent orchestrates the RAG flow server-side
+    - Practical use case: Q&A over a private knowledge base
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from typing import List
-from langchain_core.tools import tool
+from typing import TypedDict, List, Optional
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-# In-memory knowledge base
+# ── In-memory knowledge base ──────────────────────────────────────────────────
+
 DOCUMENTS = [
     Document(
         page_content=(
@@ -62,7 +63,7 @@ DOCUMENTS = [
 ]
 
 
-def _keyword_retrieve(query: str, top_k: int = 2) -> List[Document]:
+def keyword_retrieve(query: str, top_k: int = 2) -> List[Document]:
     """Simple keyword-based retrieval (no embeddings required for this example)."""
     query_words = set(query.lower().split())
     scored = []
@@ -71,100 +72,97 @@ def _keyword_retrieve(query: str, top_k: int = 2) -> List[Document]:
         score = len(query_words & doc_words)
         scored.append((score, doc))
     scored.sort(key=lambda x: x[0], reverse=True)
-    return [doc for score, doc in scored[:top_k] if score > 0]
+    return [doc for _, doc in scored[:top_k] if _ > 0]
 
 
-@tool
-def retrieve_documents(question: str) -> str:
-    """Retrieve the most relevant documents from the knowledge base for a question.
+# ── State and nodes ───────────────────────────────────────────────────────────
 
-    Uses keyword-based retrieval. Returns the content of matched documents.
-
-    Args:
-        question: The question to retrieve documents for.
-    """
-    docs = _keyword_retrieve(question)
-    if not docs:
-        return "No documents found for this query."
-    parts = []
-    for i, doc in enumerate(docs, 1):
-        parts.append(f"[Doc {i} — {doc.metadata.get('topic', 'unknown')}]\n{doc.page_content}")
-    return "\n\n".join(parts)
+class State(TypedDict):
+    question: str
+    rewritten_question: Optional[str]
+    documents: List[Document]
+    relevant_docs: List[Document]
+    generation: str
+    attempts: int
 
 
-@tool
-def grade_and_generate(question: str, context: str) -> str:
-    """Grade the retrieved context for relevance and generate a grounded answer.
+def retrieve(state: State) -> State:
+    query = state.get("rewritten_question") or state["question"]
+    docs = keyword_retrieve(query)
+    return {"documents": docs, "attempts": state.get("attempts", 0) + 1}
 
-    If the context is relevant, generates an answer citing the sources.
-    If not relevant, indicates that re-retrieval with a rewritten question is needed.
 
-    Args:
-        question: The user's question.
-        context: Retrieved document content to assess and use for answering.
-    """
-    # Grade relevance
-    grade_prompt = ChatPromptTemplate.from_messages([
-        ("system", "Determine if the context contains enough information to answer the question. Reply with 'yes' or 'no' only."),
-        ("human", "Question: {question}\n\nContext: {context}"),
+def grade_documents(state: State) -> State:
+    """Grade each document for relevance to the question."""
+    question = state["question"]
+    relevant = []
+    for doc in state["documents"]:
+        response = llm.invoke([
+            SystemMessage(
+                content=(
+                    "Determine if the document is relevant to the question. "
+                    "Reply with 'yes' or 'no' only."
+                )
+            ),
+            HumanMessage(content=f"Question: {question}\n\nDocument: {doc.page_content}"),
+        ])
+        if "yes" in response.content.lower():
+            relevant.append(doc)
+    return {"relevant_docs": relevant}
+
+
+def rewrite_question(state: State) -> State:
+    """Rewrite the question to improve retrieval."""
+    response = llm.invoke([
+        SystemMessage(content="Rewrite this question to be more specific for document retrieval. Return only the rewritten question."),
+        HumanMessage(content=state["question"]),
     ])
-    grade_chain = grade_prompt | llm
-    grade = grade_chain.invoke({"question": question, "context": context})
+    return {"rewritten_question": response.content.strip()}
 
-    if "no" in grade.content.lower():
-        return "INSUFFICIENT_CONTEXT: The retrieved documents do not contain enough information to answer this question."
 
-    # Generate answer
-    answer_prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You are a helpful assistant. Answer the question based on the provided context. "
-            "If the context doesn't contain enough information, say so."
-        )),
-        ("human", "Context:\n{context}\n\nQuestion: {question}"),
+def generate_answer(state: State) -> State:
+    docs = state.get("relevant_docs") or state.get("documents", [])
+    context = "\n\n".join(d.page_content for d in docs)
+    if not context:
+        context = "No relevant documents found."
+
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a helpful assistant. Answer the question based on the provided context. "
+                "If the context doesn't contain enough information, say so."
+            )
+        ),
+        HumanMessage(content=f"Context:\n{context}\n\nQuestion: {state['question']}"),
     ])
-    answer_chain = answer_prompt | llm
-    response = answer_chain.invoke({"question": question, "context": context})
-    return response.content.strip()
+    return {"generation": response.content.strip()}
 
 
-@tool
-def rewrite_question(question: str) -> str:
-    """Rewrite a question to improve document retrieval.
-
-    Use this when initial retrieval did not find sufficient context.
-
-    Args:
-        question: The original question to rewrite.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "Rewrite this question to be more specific for document retrieval. Return only the rewritten question."),
-        ("human", "{question}"),
-    ])
-    chain = prompt | llm
-    response = chain.invoke({"question": question})
-    return response.content.strip()
+def decide_to_generate(state: State) -> str:
+    if state.get("relevant_docs"):
+        return "generate"
+    if state.get("attempts", 0) >= 2:
+        return "generate"  # generate anyway after 2 attempts
+    return "rewrite"
 
 
-RAG_SYSTEM = """You are a RAG (Retrieval-Augmented Generation) assistant.
+builder = StateGraph(State)
+builder.add_node("retrieve", retrieve)
+builder.add_node("grade", grade_documents)
+builder.add_node("rewrite", rewrite_question)
+builder.add_node("generate", generate_answer)
 
-For each question:
-1. Call retrieve_documents to get relevant context
-2. Call grade_and_generate with the question and retrieved context
-   - If the result starts with 'INSUFFICIENT_CONTEXT':
-     a. Call rewrite_question to get a better query
-     b. Call retrieve_documents again with the rewritten question
-     c. Call grade_and_generate again with the new context
-3. Return the final answer to the user
-
-Never make up information — only answer based on retrieved context.
-"""
-
-graph = create_agent(
-    llm,
-    tools=[retrieve_documents, grade_and_generate, rewrite_question],
-    name="rag_pipeline",
-    system_prompt=RAG_SYSTEM,
+builder.add_edge(START, "retrieve")
+builder.add_edge("retrieve", "grade")
+builder.add_conditional_edges(
+    "grade",
+    decide_to_generate,
+    {"generate": "generate", "rewrite": "rewrite"},
 )
+builder.add_edge("rewrite", "retrieve")
+builder.add_edge("generate", END)
+
+graph = builder.compile(name="rag_pipeline")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

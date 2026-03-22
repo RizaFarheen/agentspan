@@ -76,9 +76,6 @@ GROUPS: dict[str, list[str]] = {
         "openai/09_dynamic_instructions",
         "openai/10_multi_model",
     ],
-    "ADK_HELLO": [
-        "adk/00_hello_world",
-    ],
     "ADK_EXAMPLES": [
         "adk/01_basic_agent",
         "adk/02_function_tools",
@@ -113,15 +110,6 @@ GROUPS: dict[str, list[str]] = {
         "adk/31_shared_state",
         "adk/32_nested_strategies",
     ],
-    "SMOKE_TEST": [
-        "01_basic_agent",
-        "03_structured_output",
-        "openai/01_basic_agent",
-        "openai/03_structured_output",
-        "openai/04_handoffs",
-        "adk/01_basic_agent",
-        "adk/03_structured_output",
-    ],
     "LANGGRAPH_EXAMPLES": [
         "langgraph/01_hello_world",
         "langgraph/02_react_with_tools",
@@ -144,13 +132,11 @@ GROUPS: dict[str, list[str]] = {
         "langgraph/19_document_analysis",
         "langgraph/20_planner_agent",
         "langgraph/21_subgraph",
-        "langgraph/22_human_in_the_loop",
         "langgraph/23_retry_on_error",
         "langgraph/24_map_reduce",
         "langgraph/25_supervisor",
         "langgraph/26_agent_handoff",
         "langgraph/27_persistent_memory",
-        "langgraph/28_streaming_tokens",
         "langgraph/29_tool_categories",
         "langgraph/30_code_interpreter",
         "langgraph/31_classify_and_route",
@@ -165,6 +151,15 @@ GROUPS: dict[str, list[str]] = {
         "langgraph/40_agent_as_tool",
         "langgraph/41_react_agent_basic",
         "langgraph/42_react_agent_system_prompt",
+        "langgraph/44_context_condensation",
+    ],
+    "LANGGRAPH_HITL": [
+        "langgraph/22_human_in_the_loop",
+    ],
+    "LANGGRAPH_NATIVE": [
+        "langgraph/28_streaming_tokens",
+    ],
+    "LANGGRAPH_MULTI_MODEL": [
         "langgraph/43_react_agent_multi_model",
     ],
     "LANGCHAIN_EXAMPLES": [
@@ -194,30 +189,14 @@ GROUPS: dict[str, list[str]] = {
         "langchain/24_output_parsers",
         "langchain/25_advanced_orchestration",
     ],
-    "LC_SMOKE_TEST": [
-        "langgraph/01_hello_world",
-        "langgraph/02_react_with_tools",
-        "langgraph/07_system_prompt",
-        "langgraph/41_react_agent_basic",
-        "langgraph/42_react_agent_system_prompt",
-        "langchain/01_hello_world",
-        "langchain/02_react_with_tools",
-        "langchain/08_multi_tool_agent",
-    ],
-    # create_react_agent examples — agentspan vs native comparison
-    # Examples 41 + 42 use OpenAI; 43 uses Anthropic and is in LANGGRAPH_EXAMPLES
-    "CONTEXT_STRESS_TEST": [
-        "68_context_condensation",
-        "langgraph/44_context_condensation",
-    ],
-    "REACT_AGENT_EXAMPLES": [
-        "langgraph/41_react_agent_basic",
-        "langgraph/42_react_agent_system_prompt",
-    ],
-    "REACT_AGENT_ALL": [
-        "langgraph/41_react_agent_basic",
-        "langgraph/42_react_agent_system_prompt",
-        "langgraph/43_react_agent_multi_model",
+    "SMOKE_TEST": [
+        "01_basic_agent",
+        "03_structured_output",
+        "openai/01_basic_agent",
+        "openai/03_structured_output",
+        "openai/04_handoffs",
+        "adk/01_basic_agent",
+        "adk/03_structured_output",
     ],
 }
 
@@ -226,4 +205,5 @@ HITL_STDIN: dict[str, str] = {
     "09_human_in_the_loop": "y",
     "09b_hitl_with_feedback": "a",
     "09c_hitl_streaming": "y",
+    "langgraph/22_human_in_the_loop": "approve",
 }

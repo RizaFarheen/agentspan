@@ -270,7 +270,7 @@ def fetch_domain_data(domain: str) -> dict:
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-deep_analyst = create_agent(
+_deep_analyst_graph = create_agent(
     llm,
     tools=[fetch_domain_data],
     name="deep_analyst",
@@ -301,10 +301,31 @@ deep_analyst = create_agent(
     ),
 )
 
+
+# Wrap the sub-agent as a @tool so create_agent can use it.
+# CompiledStateGraph can't be passed directly as a tool — LangChain requires
+# callables or BaseTool subclasses. The @tool wrapper invokes the sub-agent
+# and returns its text result.
+@tool
+def deep_analyst(domain: str) -> str:
+    """Run a comprehensive analysis of a technology domain using a specialist sub-agent.
+
+    The sub-agent fetches market data and writes a detailed ~600-word report
+    covering market overview, key players, breakthroughs, challenges, and outlook.
+    """
+    from langchain_core.messages import HumanMessage
+
+    result = _deep_analyst_graph.invoke(
+        {"messages": [HumanMessage(content=f"Analyse the domain: {domain}")]}
+    )
+    msgs = result.get("messages", [])
+    return msgs[-1].content if msgs else "No analysis produced."
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator: calls deep_analyst once per domain
-# deep_analyst is passed as a tool — Agentspan compiles it as a SUB_WORKFLOW
-# and its output accumulates in the orchestrator's conversation context.
+# deep_analyst is a @tool wrapping a sub-agent graph — its output accumulates
+# in the orchestrator's conversation context.
 # ---------------------------------------------------------------------------
 
 graph = create_agent(

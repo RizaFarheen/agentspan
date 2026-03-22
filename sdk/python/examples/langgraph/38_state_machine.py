@@ -1,12 +1,12 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""State Machine — order processing workflow as tools orchestrated by the agent.
+"""State Machine — order processing workflow as an explicit state machine.
 
 Demonstrates:
-    - Modelling an order processing pipeline as a sequence of tools
-    - Each tool transitions the order to the next legal state
-    - Status tracking via state in each tool's return value
+    - Modeling a real-world process as a formal state machine
+    - Each node transitions the entity to the next legal state
+    - Status tracking in state with timestamps
     - Practical use case: e-commerce order processing pipeline
 
 Requirements:
@@ -15,144 +15,131 @@ Requirements:
 """
 
 import datetime
-import json
+from typing import TypedDict, List
 
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 
-def _timestamp() -> str:
-    return datetime.datetime.utcnow().isoformat() + "Z"
+class StatusLog(TypedDict):
+    status: str
+    timestamp: str
+    note: str
 
 
-@tool
-def validate_order(order_json: str) -> str:
-    """Validate an order JSON and return status VALIDATED or VALIDATION_FAILED.
+class OrderState(TypedDict):
+    order_id: str
+    items: List[str]
+    customer: str
+    current_status: str
+    status_history: List[StatusLog]
+    shipping_address: str
+    tracking_number: str
+    summary: str
 
-    Args:
-        order_json: JSON string with order fields: order_id, items (list), customer.
-    """
-    try:
-        order = json.loads(order_json)
-    except json.JSONDecodeError:
-        return json.dumps({"status": "VALIDATION_FAILED", "note": "Invalid JSON input", "timestamp": _timestamp()})
 
-    if not order.get("items") or not order.get("customer"):
-        return json.dumps({"status": "VALIDATION_FAILED", "note": "Missing items or customer", "timestamp": _timestamp()})
-
-    return json.dumps({
-        "status": "VALIDATED",
-        "note": f"Order contains {len(order['items'])} item(s)",
-        "order_id": order.get("order_id", "UNKNOWN"),
-        "timestamp": _timestamp(),
+def _log(state: OrderState, status: str, note: str) -> dict:
+    history = list(state.get("status_history", []))
+    history.append({
+        "status": status,
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "note": note,
     })
+    return {"current_status": status, "status_history": history}
 
 
-@tool
-def process_payment(order_id: str, customer: str, items: str) -> str:
-    """Simulate payment processing for an order. Returns PAYMENT_APPROVED or PAYMENT_FAILED.
+def validate_order(state: OrderState) -> OrderState:
+    items = state.get("items", [])
+    if not items or not state.get("customer"):
+        return {**_log(state, "VALIDATION_FAILED", "Missing items or customer"), "tracking_number": ""}
+    return _log(state, "VALIDATED", f"Order contains {len(items)} item(s)")
 
-    Args:
-        order_id: The order identifier.
-        customer: The customer name.
-        items: Comma-separated list of ordered items.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "Simulate a payment approval. Respond with APPROVED or DECLINED."),
-        ("human", "Customer: {customer}, Items: {items}"),
+
+def payment_processing(state: OrderState) -> OrderState:
+    # Simulate payment check via LLM (would be a real payment gateway call)
+    response = llm.invoke([
+        SystemMessage(content="Simulate a payment approval. Respond with APPROVED or DECLINED."),
+        HumanMessage(content=f"Customer: {state['customer']}, Items: {state['items']}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"customer": customer, "items": items})
-
     if "DECLINED" in response.content.upper():
-        return json.dumps({"order_id": order_id, "status": "PAYMENT_FAILED", "note": "Payment declined", "timestamp": _timestamp()})
-    return json.dumps({"order_id": order_id, "status": "PAYMENT_APPROVED", "note": "Payment processed successfully", "timestamp": _timestamp()})
+        return _log(state, "PAYMENT_FAILED", "Payment declined")
+    return _log(state, "PAYMENT_APPROVED", "Payment processed successfully")
 
 
-@tool
-def ship_order(order_id: str, shipping_address: str) -> str:
-    """Prepare and ship an approved order. Returns tracking number and SHIPPED status.
-
-    Args:
-        order_id: The order identifier.
-        shipping_address: The delivery address.
-    """
-    tracking = f"TRK{hash(order_id) % 10_000_000:07d}"
-    return json.dumps({
-        "order_id": order_id,
-        "status": "SHIPPED",
+def prepare_shipment(state: OrderState) -> OrderState:
+    tracking = f"TRK{hash(state['order_id']) % 10_000_000:07d}"
+    return {
+        **_log(state, "PREPARING_SHIPMENT", f"Assigned tracking: {tracking}"),
         "tracking_number": tracking,
-        "note": f"Package dispatched to {shipping_address}",
-        "timestamp": _timestamp(),
-    })
+    }
 
 
-@tool
-def generate_order_summary(order_id: str, customer: str, items: str, status_history: str) -> str:
-    """Generate a human-readable order summary from the processing history.
+def ship_order(state: OrderState) -> OrderState:
+    return _log(state, "SHIPPED", f"Package dispatched to {state.get('shipping_address', 'customer address')}")
 
-    Args:
-        order_id: The order identifier.
-        customer: The customer name.
-        items: Comma-separated list of ordered items.
-        status_history: JSON array of status log entries.
-    """
-    try:
-        history = json.loads(status_history)
-        history_text = "\n".join(
-            f"  [{e.get('timestamp', '')}] {e.get('status', '')}: {e.get('note', '')}"
-            for e in history
-        )
-    except (json.JSONDecodeError, TypeError):
-        history_text = status_history
 
-    final_status = history[-1].get("status", "UNKNOWN") if isinstance(history, list) and history else "UNKNOWN"
-    tracking = next((e.get("tracking_number", "") for e in (history if isinstance(history, list) else []) if e.get("tracking_number")), "N/A")
+def deliver_order(state: OrderState) -> OrderState:
+    return _log(state, "DELIVERED", "Package delivered successfully")
 
-    return (
-        f"Order {order_id} — Final Status: {final_status}\n"
-        f"Customer: {customer}\n"
-        f"Items: {items}\n"
-        f"Tracking: {tracking}\n\n"
+
+def generate_summary(state: OrderState) -> OrderState:
+    history_text = "\n".join(
+        f"  [{e['timestamp']}] {e['status']}: {e['note']}"
+        for e in state.get("status_history", [])
+    )
+    summary = (
+        f"Order {state['order_id']} — Final Status: {state['current_status']}\n"
+        f"Customer: {state['customer']}\n"
+        f"Items: {', '.join(state.get('items', []))}\n"
+        f"Tracking: {state.get('tracking_number', 'N/A')}\n\n"
         f"Status History:\n{history_text}"
     )
+    return {"summary": summary}
 
 
-STATE_MACHINE_SYSTEM = """You are an order processing agent.
+def route_after_validation(state: OrderState) -> str:
+    return "payment" if state["current_status"] == "VALIDATED" else "done"
 
-For each order, run the full processing pipeline:
-1. Call validate_order with the order JSON
-2. If status is VALIDATED → call process_payment with order_id, customer, and items
-3. If status is PAYMENT_APPROVED → call ship_order with order_id and shipping_address
-4. Collect all status results into a history list as a JSON array string
-5. Call generate_order_summary with order_id, customer, items, and the JSON status history
-6. Return the summary to the user
 
-If validation or payment fails, still call generate_order_summary with the history up to that point.
-"""
+def route_after_payment(state: OrderState) -> str:
+    return "prepare" if state["current_status"] == "PAYMENT_APPROVED" else "done"
 
-graph = create_agent(
-    llm,
-    tools=[validate_order, process_payment, ship_order, generate_order_summary],
-    name="order_state_machine",
-    system_prompt=STATE_MACHINE_SYSTEM,
-)
+
+builder = StateGraph(OrderState)
+builder.add_node("validate", validate_order)
+builder.add_node("payment", payment_processing)
+builder.add_node("prepare", prepare_shipment)
+builder.add_node("ship", ship_order)
+builder.add_node("deliver", deliver_order)
+builder.add_node("summarize", generate_summary)
+
+builder.add_edge(START, "validate")
+builder.add_conditional_edges("validate", route_after_validation, {"payment": "payment", "done": "summarize"})
+builder.add_conditional_edges("payment", route_after_payment, {"prepare": "prepare", "done": "summarize"})
+builder.add_edge("prepare", "ship")
+builder.add_edge("ship", "deliver")
+builder.add_edge("deliver", "summarize")
+builder.add_edge("summarize", END)
+
+graph = builder.compile(name="order_state_machine")
 
 if __name__ == "__main__":
-    import json as _json
-    initial_order = _json.dumps({
+    initial_state = {
         "order_id": "ORD-2025-001",
         "items": ["Python Book", "Mechanical Keyboard", "USB-C Hub"],
         "customer": "Alice Smith",
         "shipping_address": "123 Main St, San Francisco, CA 94105",
-    })
+        "current_status": "NEW",
+        "status_history": [],
+        "tracking_number": "",
+        "summary": "",
+    }
 
     with AgentRuntime() as runtime:
-        result = runtime.run(graph, f"Process this order: {initial_order}")
+        result = runtime.run(graph, str(initial_state))
         print(f"Status: {result.status}")
         result.print_result()

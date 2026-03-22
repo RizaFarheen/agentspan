@@ -534,8 +534,6 @@ class Agent:
                 timeout=cfg.timeout,
                 working_dir=cfg.working_dir,
                 allow_shell=cfg.allow_shell,
-                guardrails=cfg.guardrails if cfg.guardrails else None,
-                agent_name=self.name,
             )
         )
 

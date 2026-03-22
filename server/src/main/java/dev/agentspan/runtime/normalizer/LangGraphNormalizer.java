@@ -17,11 +17,14 @@ import java.util.LinkedHashMap;
 /**
  * Normalizes LangGraph rawConfig into an AgentConfig.
  *
- * <p>Two serialization paths:
+ * <p>Three serialization paths:
  * <ul>
  *   <li><b>Full extraction</b> — rawConfig has {@code model} and {@code tools} with
  *       {@code _worker_ref} markers (produced by {@code agentspan.agents.langchain.create_agent}).
  *       Normalizes identically to OpenAI: AI_MODEL task + SIMPLE tasks per tool.</li>
+ *   <li><b>Graph-structure</b> — rawConfig has {@code _graph} with nodes, edges, and
+ *       conditional_edges. Each node becomes a SIMPLE task worker, edges define the
+ *       workflow structure. Model noted for observability.</li>
  *   <li><b>Passthrough</b> — rawConfig has {@code _worker_name} (custom StateGraph).
  *       The entire graph runs in a single SIMPLE task.</li>
  * </ul>
@@ -43,9 +46,14 @@ public class LangGraphNormalizer implements AgentConfigNormalizer {
         String name = getString(raw, "name", DEFAULT_NAME);
         log.info("Normalizing LangGraph agent: {}", name);
 
-        // Full extraction path: model present and no _worker_name
-        if (raw.containsKey("model") && !raw.containsKey("_worker_name")) {
+        // Full extraction path: model + tools with _worker_ref
+        if (raw.containsKey("model") && !raw.containsKey("_worker_name") && !raw.containsKey("_graph")) {
             return normalizeFullExtraction(name, raw);
+        }
+
+        // Graph-structure path: nodes + edges workflow
+        if (raw.containsKey("_graph")) {
+            return normalizeGraphStructure(name, raw);
         }
 
         // Passthrough path: custom StateGraph running in a single worker
@@ -92,6 +100,156 @@ public class LangGraphNormalizer implements AgentConfigNormalizer {
                 config.setTools(tools);
             }
         }
+
+        return config;
+    }
+
+    @SuppressWarnings("unchecked")
+    private AgentConfig normalizeGraphStructure(String name, Map<String, Object> raw) {
+        log.info("LangGraph agent '{}' using graph-structure (node/edge workflow)", name);
+
+        Map<String, Object> graph = getMap(raw, "_graph");
+        if (graph == null) {
+            log.warn("LangGraph agent '{}' has _graph key but no graph data, falling back to passthrough", name);
+            return normalizePassthrough(name, raw);
+        }
+
+        AgentConfig config = new AgentConfig();
+        config.setName(name);
+
+        // Model for observability (actual LLM calls happen inside node workers)
+        String model = getString(raw, "model", null);
+        if (model != null) {
+            config.setModel(model);
+        }
+
+        // Create worker tool for each node
+        Map<String, AgentConfig> subgraphConfigs = null;
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) graph.get("nodes");
+        if (nodes != null) {
+            List<ToolConfig> tools = new ArrayList<>();
+            for (Map<String, Object> node : nodes) {
+                // Human node: Conductor HUMAN system task, no workers needed
+                boolean isHumanNode = Boolean.TRUE.equals(node.get("_human_node"));
+                if (isHumanNode) {
+                    // No workers to register — HUMAN is a Conductor system task
+                    continue;
+                }
+
+                boolean isLlmNode = Boolean.TRUE.equals(node.get("_llm_node"));
+                boolean isSubgraphNode = Boolean.TRUE.equals(node.get("_subgraph_node"));
+
+                if (isSubgraphNode) {
+                    // Subgraph node: register prep and finish workers, normalize subgraph config
+                    String prepRef = getString(node, "_subgraph_prep_ref", "");
+                    String finishRef = getString(node, "_subgraph_finish_ref", "");
+                    if (!prepRef.isEmpty()) {
+                        tools.add(ToolConfig.builder()
+                                .name(prepRef)
+                                .description("Subgraph prep for " + getString(node, "name", ""))
+                                .toolType("worker")
+                                .build());
+                    }
+                    if (!finishRef.isEmpty()) {
+                        tools.add(ToolConfig.builder()
+                                .name(finishRef)
+                                .description("Subgraph finish for " + getString(node, "name", ""))
+                                .toolType("worker")
+                                .build());
+                    }
+                    // Recursively normalize the subgraph config and store for the compiler
+                    Map<String, Object> subConfig = getMap(node, "_subgraph_config");
+                    if (subConfig != null) {
+                        AgentConfig subAgent = normalize(subConfig);
+                        if (subgraphConfigs == null) {
+                            subgraphConfigs = new LinkedHashMap<>();
+                        }
+                        subgraphConfigs.put(getString(node, "name", ""), subAgent);
+                        log.info("LangGraph '{}': subgraph node '{}' → sub-agent '{}'",
+                                name, getString(node, "name", ""), subAgent.getName());
+                        // Also register the subgraph's workers as parent tools
+                        if (subAgent.getTools() != null) {
+                            tools.addAll(subAgent.getTools());
+                        }
+                    }
+                } else if (isLlmNode) {
+                    // LLM node: register prep and finish workers (the LLM task is built by compiler)
+                    String prepRef = getString(node, "_llm_prep_ref", "");
+                    String finishRef = getString(node, "_llm_finish_ref", "");
+                    if (!prepRef.isEmpty()) {
+                        tools.add(ToolConfig.builder()
+                                .name(prepRef)
+                                .description("LLM prep for " + getString(node, "name", ""))
+                                .toolType("worker")
+                                .build());
+                    }
+                    if (!finishRef.isEmpty()) {
+                        tools.add(ToolConfig.builder()
+                                .name(finishRef)
+                                .description("LLM finish for " + getString(node, "name", ""))
+                                .toolType("worker")
+                                .build());
+                    }
+                } else {
+                    String workerRef = getString(node, "_worker_ref", "");
+                    if (!workerRef.isEmpty()) {
+                        tools.add(ToolConfig.builder()
+                                .name(workerRef)
+                                .description(getString(node, "name", workerRef))
+                                .toolType("worker")
+                                .build());
+                    }
+                }
+            }
+            // Also add router workers from conditional edges
+            List<Map<String, Object>> conditionalEdges =
+                    (List<Map<String, Object>>) graph.get("conditional_edges");
+            if (conditionalEdges != null) {
+                for (Map<String, Object> ce : conditionalEdges) {
+                    String routerRef = getString(ce, "_router_ref", "");
+                    if (!routerRef.isEmpty()) {
+                        tools.add(ToolConfig.builder()
+                                .name(routerRef)
+                                .description("Router for " + getString(ce, "source", "unknown"))
+                                .toolType("worker")
+                                .build());
+                    }
+                }
+            }
+            config.setTools(tools);
+        }
+
+        // Store graph structure in metadata for the compiler
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("_graph_structure", graph);
+
+        // Extract reducer metadata for compiler (affects FORK_JOIN state merge)
+        Map<String, Object> reducers = getMap(graph, "_reducers");
+        if (reducers != null && !reducers.isEmpty()) {
+            metadata.put("_reducers", reducers);
+            log.info("LangGraph '{}': reducers: {}", name, reducers.keySet());
+        }
+
+        // Extract retry policies for compiler (maps to Conductor task retry settings)
+        Map<String, Object> retryPolicies = getMap(graph, "_retry_policies");
+        if (retryPolicies != null && !retryPolicies.isEmpty()) {
+            metadata.put("_retry_policies", retryPolicies);
+            log.info("LangGraph '{}': retry policies for nodes: {}", name, retryPolicies.keySet());
+        }
+
+        // Extract recursion limit (maps to DO_WHILE iteration cap)
+        Object recursionLimit = graph.get("_recursion_limit");
+        if (recursionLimit instanceof Number) {
+            metadata.put("_recursion_limit", ((Number) recursionLimit).intValue());
+        }
+
+        // Store normalized subgraph configs for the compiler
+        if (subgraphConfigs != null && !subgraphConfigs.isEmpty()) {
+            metadata.put("_subgraph_configs", subgraphConfigs);
+            log.info("LangGraph '{}': subgraph configs for nodes: {}", name, subgraphConfigs.keySet());
+        }
+
+        config.setMetadata(metadata);
 
         return config;
     }

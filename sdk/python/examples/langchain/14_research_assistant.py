@@ -18,7 +18,7 @@ import json
 from typing import List
 
 from langchain_core.tools import tool
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 

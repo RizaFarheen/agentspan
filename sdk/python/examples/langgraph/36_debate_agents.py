@@ -1,11 +1,12 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Debate Agents — two agents arguing opposing positions, judged by a third.
+"""Debate Agents — two agents arguing opposing positions.
 
 Demonstrates:
-    - Tools for PRO argument, CON argument, and judging
-    - The orchestrating LLM conducts multiple rounds of debate via tool calls
+    - Two specialized agents with opposing system prompts
+    - Alternating turns tracked in state
+    - A judge agent that evaluates the debate and declares a winner
     - Practical use case: pros/cons analysis, brainstorming, red-teaming
 
 Requirements:
@@ -13,10 +14,11 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate
+from typing import TypedDict, List
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
@@ -24,87 +26,90 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
 MAX_ROUNDS = 2
 
 
-@tool
-def argue_pro(topic: str, debate_so_far: str = "") -> str:
-    """Make a concise argument IN FAVOUR of the topic (2-3 sentences).
+class Turn(TypedDict):
+    speaker: str
+    argument: str
 
-    Args:
-        topic: The debate topic.
-        debate_so_far: Previous debate turns for context (empty for opening argument).
-    """
-    if debate_so_far:
-        prompt_text = f"Topic: {topic}\n\nDebate so far:\n{debate_so_far}\n\nNow make your argument in favour (2-3 sentences)."
+
+class State(TypedDict):
+    topic: str
+    turns: List[Turn]
+    round: int
+    verdict: str
+
+
+def agent_pro(state: State) -> State:
+    """Argues in favour of the topic."""
+    previous = "\n".join(
+        f"{t['speaker']}: {t['argument']}" for t in state.get("turns", [])
+    )
+    prompt = f"Topic: {state['topic']}"
+    if previous:
+        prompt += f"\n\nDebate so far:\n{previous}\n\nNow make your argument in favour (2-3 sentences)."
     else:
-        prompt_text = f"Topic: {topic}\n\nMake your opening argument in favour of this topic (2-3 sentences)."
+        prompt += "\n\nMake your opening argument in favour of this topic (2-3 sentences)."
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a persuasive debater arguing IN FAVOUR of the given topic. Be concise and compelling."),
-        ("human", "{text}"),
+    response = llm.invoke([
+        SystemMessage(content="You are a persuasive debater arguing IN FAVOUR of the given topic. Be concise and compelling."),
+        HumanMessage(content=prompt),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"text": prompt_text})
-    return f"PRO: {response.content.strip()}"
+    turns = list(state.get("turns", []))
+    turns.append({"speaker": "PRO", "argument": response.content.strip()})
+    return {"turns": turns}
 
 
-@tool
-def argue_con(topic: str, debate_so_far: str) -> str:
-    """Make a concise argument AGAINST the topic (2-3 sentences).
-
-    Args:
-        topic: The debate topic.
-        debate_so_far: Previous debate turns for context.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a persuasive debater arguing AGAINST the given topic. Be concise and direct."),
-        ("human", "Topic: {topic}\n\nDebate so far:\n{debate_so_far}\n\nMake your counter-argument (2-3 sentences)."),
+def agent_con(state: State) -> State:
+    """Argues against the topic."""
+    previous = "\n".join(
+        f"{t['speaker']}: {t['argument']}" for t in state.get("turns", [])
+    )
+    response = llm.invoke([
+        SystemMessage(content="You are a persuasive debater arguing AGAINST the given topic. Be concise and direct."),
+        HumanMessage(
+            content=f"Topic: {state['topic']}\n\nDebate so far:\n{previous}\n\nMake your counter-argument (2-3 sentences)."
+        ),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic, "debate_so_far": debate_so_far})
-    return f"CON: {response.content.strip()}"
+    turns = list(state.get("turns", []))
+    turns.append({"speaker": "CON", "argument": response.content.strip()})
+    return {"turns": turns, "round": state.get("round", 0) + 1}
 
 
-@tool
-def judge_debate(topic: str, transcript: str) -> str:
-    """Evaluate the full debate transcript and declare a winner with reasoning.
-
-    Returns which side (PRO or CON) made the stronger arguments and why.
-
-    Args:
-        topic: The debate topic.
-        transcript: Full debate transcript with all turns.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You are an impartial debate judge. Review the debate transcript and:\n"
-            "1. Identify which side made the stronger arguments\n"
-            "2. Declare the winner (PRO or CON) and explain why in 2-3 sentences\n"
-            "3. Note any logical fallacies or weak points"
-        )),
-        ("human", "Debate topic: {topic}\n\nTranscript:\n{transcript}"),
+def judge(state: State) -> State:
+    """Evaluate the debate and declare a winner with reasoning."""
+    transcript = "\n\n".join(
+        f"{t['speaker']}: {t['argument']}" for t in state.get("turns", [])
+    )
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are an impartial debate judge. Review the debate transcript and:\n"
+                "1. Identify which side made the stronger arguments\n"
+                "2. Declare the winner (PRO or CON) and explain why in 2-3 sentences\n"
+                "3. Note any logical fallacies or weak points"
+            )
+        ),
+        HumanMessage(content=f"Debate topic: {state['topic']}\n\nTranscript:\n{transcript}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic, "transcript": transcript})
-    return f"[JUDGE'S VERDICT]\n{response.content.strip()}"
+    return {"verdict": response.content.strip()}
 
 
-DEBATE_SYSTEM = f"""You are a debate moderator.
+def continue_or_judge(state: State) -> str:
+    if state.get("round", 0) >= MAX_ROUNDS:
+        return "judge"
+    return "con"
 
-For each debate topic, conduct {MAX_ROUNDS} rounds then judge:
-1. Call argue_pro with the topic (no debate_so_far for the opening)
-2. Call argue_con with the topic and the PRO argument as debate_so_far
-3. Repeat for {MAX_ROUNDS} total rounds (alternating PRO → CON each round)
-4. Combine all turns into a transcript and call judge_debate
-5. Present the full debate and the judge's verdict
 
-Keep track of all turns to build the transcript.
-"""
+builder = StateGraph(State)
+builder.add_node("pro", agent_pro)
+builder.add_node("con", agent_con)
+builder.add_node("judge", judge)
 
-graph = create_agent(
-    llm,
-    tools=[argue_pro, argue_con, judge_debate],
-    name="debate_agents",
-    system_prompt=DEBATE_SYSTEM,
-)
+builder.add_edge(START, "pro")
+builder.add_conditional_edges("con", continue_or_judge, {"judge": "judge", "con": "pro"})
+builder.add_edge("pro", "con")
+builder.add_edge("judge", END)
+
+graph = builder.compile(name="debate_agents")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

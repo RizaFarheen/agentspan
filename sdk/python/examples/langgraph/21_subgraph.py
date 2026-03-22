@@ -1,114 +1,123 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Subgraph — composing analysis sub-tasks as tools within a parent agent.
+"""Subgraph — composing graphs within graphs.
 
 Demonstrates:
-    - Each analysis sub-task (sentiment, keywords, summary) is a tool
-    - A report-building tool combines all sub-task outputs
-    - The LLM orchestrates the full pipeline server-side via tool calls
-    - Practical use case: document processing pipeline with nested analysis
+    - Building a nested subgraph for a specific subtask
+    - Connecting a subgraph as a node in a parent graph
+    - Passing state between parent graph and subgraph
+    - Practical use case: document processing pipeline with a nested analysis subgraph
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate
+from typing import TypedDict, List
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 
-@tool
-def analyze_sentiment(text: str) -> str:
-    """Classify the sentiment of the given text.
+# ── Subgraph ──────────────────────────────────────────────────────────────────
 
-    Returns one of: positive, negative, or neutral.
+class AnalysisState(TypedDict):
+    text: str
+    sentiment: str
+    keywords: List[str]
+    summary: str
 
-    Args:
-        text: Text to classify sentiment for.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "Classify the sentiment of the text. Return ONLY: positive, negative, or neutral."),
-        ("human", "{text}"),
+
+def analyze_sentiment(state: AnalysisState) -> AnalysisState:
+    response = llm.invoke([
+        SystemMessage(content="Classify the sentiment of the text. Return ONLY: positive, negative, or neutral."),
+        HumanMessage(content=state["text"]),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"text": text})
-    return response.content.strip().lower()
+    return {"sentiment": response.content.strip().lower()}
 
 
-@tool
-def extract_keywords(text: str) -> str:
-    """Extract 3-5 keywords from the text as a comma-separated list.
-
-    Args:
-        text: Text to extract keywords from.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "Extract 3-5 keywords from the text. Return a comma-separated list only."),
-        ("human", "{text}"),
+def extract_keywords(state: AnalysisState) -> AnalysisState:
+    response = llm.invoke([
+        SystemMessage(content="Extract 3-5 keywords from the text. Return a comma-separated list only."),
+        HumanMessage(content=state["text"]),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"text": text})
-    return response.content.strip()
+    keywords = [k.strip() for k in response.content.split(",")]
+    return {"keywords": keywords}
 
 
-@tool
-def summarize_text(text: str) -> str:
-    """Summarize the given text in one concise sentence.
-
-    Args:
-        text: Text to summarize.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "Summarize this text in one sentence."),
-        ("human", "{text}"),
+def summarize_text(state: AnalysisState) -> AnalysisState:
+    response = llm.invoke([
+        SystemMessage(content="Summarize this text in one sentence."),
+        HumanMessage(content=state["text"]),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"text": text})
-    return response.content.strip()
+    return {"summary": response.content.strip()}
 
 
-@tool
-def build_report(sentiment: str, keywords: str, summary: str) -> str:
-    """Combine analysis results into a formatted document analysis report.
+analysis_builder = StateGraph(AnalysisState)
+analysis_builder.add_node("sentiment", analyze_sentiment)
+analysis_builder.add_node("keywords", extract_keywords)
+analysis_builder.add_node("summarize", summarize_text)
+analysis_builder.add_edge(START, "sentiment")
+analysis_builder.add_edge("sentiment", "keywords")
+analysis_builder.add_edge("keywords", "summarize")
+analysis_builder.add_edge("summarize", END)
+analysis_subgraph = analysis_builder.compile()
 
-    Args:
-        sentiment: The sentiment classification result.
-        keywords: The extracted keywords (comma-separated).
-        summary: The one-sentence summary.
-    """
-    return (
+
+# ── Parent graph ──────────────────────────────────────────────────────────────
+
+class DocumentState(TypedDict):
+    document: str
+    analysis_text: str
+    sentiment: str
+    keywords: List[str]
+    summary: str
+    report: str
+
+
+def prepare(state: DocumentState) -> DocumentState:
+    """Extract the main body from the document for analysis."""
+    # For simplicity, use the whole document as the analysis text
+    return {"analysis_text": state["document"]}
+
+
+def run_analysis(state: DocumentState) -> DocumentState:
+    """Run the analysis subgraph on the extracted text."""
+    result = analysis_subgraph.invoke({"text": state["analysis_text"]})
+    return {
+        "sentiment": result.get("sentiment", ""),
+        "keywords": result.get("keywords", []),
+        "summary": result.get("summary", ""),
+    }
+
+
+def build_report(state: DocumentState) -> DocumentState:
+    keywords_str = ", ".join(state.get("keywords", []))
+    report = (
         f"Document Analysis Report\n"
         f"========================\n"
-        f"Sentiment:  {sentiment}\n"
-        f"Keywords:   {keywords}\n"
-        f"Summary:    {summary}\n"
+        f"Sentiment:  {state.get('sentiment', 'unknown')}\n"
+        f"Keywords:   {keywords_str}\n"
+        f"Summary:    {state.get('summary', '')}\n"
     )
+    return {"report": report}
 
 
-PIPELINE_SYSTEM = """You are a document analysis orchestrator.
+parent_builder = StateGraph(DocumentState)
+parent_builder.add_node("prepare", prepare)
+parent_builder.add_node("analysis", run_analysis)
+parent_builder.add_node("build_report", build_report)
+parent_builder.add_edge(START, "prepare")
+parent_builder.add_edge("prepare", "analysis")
+parent_builder.add_edge("analysis", "build_report")
+parent_builder.add_edge("build_report", END)
 
-For each document:
-1. Call analyze_sentiment with the document text
-2. Call extract_keywords with the document text
-3. Call summarize_text with the document text
-4. Call build_report with the sentiment, keywords, and summary from steps 1-3
-5. Return the report to the user
-
-Always complete all four analysis steps before building the report.
-"""
-
-graph = create_agent(
-    llm,
-    tools=[analyze_sentiment, extract_keywords, summarize_text, build_report],
-    name="document_pipeline_with_subgraph",
-    system_prompt=PIPELINE_SYSTEM,
-)
+graph = parent_builder.compile(name="document_pipeline_with_subgraph")
 
 if __name__ == "__main__":
     sample_doc = (

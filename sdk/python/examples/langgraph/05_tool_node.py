@@ -1,21 +1,27 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tool Node — create_agent with geography lookup tools.
+"""ToolNode — StateGraph with ToolNode + tools_condition for ReAct loop.
 
 Demonstrates:
-    - Defining lookup tools with @tool decorator
-    - create_agent handles the ReAct loop automatically (no manual ToolNode/tools_condition needed)
-    - Agent calls multiple tools to answer a multi-part question
+    - Manually building a ReAct loop with StateGraph
+    - Using ToolNode to execute tool calls returned by the LLM
+    - Using tools_condition to route between tool execution and END
+    - Annotated list reducer for message accumulation
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
+import operator
+from typing import Annotated, TypedDict
+
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode, tools_condition
 from agentspan.agents import AgentRuntime
 
 
@@ -51,13 +57,33 @@ def lookup_population(country: str) -> str:
     return populations.get(country.lower(), f"Population data for {country} is not available.")
 
 
+tools = [lookup_capital, lookup_population]
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+llm_with_tools = llm.bind_tools(tools)
 
-graph = create_agent(
-    llm,
-    tools=[lookup_capital, lookup_population],
-    name="tool_node_agent",
-)
+
+class State(TypedDict):
+    messages: Annotated[list[BaseMessage], operator.add]
+
+
+def call_model(state: State) -> State:
+    """Call the LLM; it may emit tool calls or a final answer."""
+    system = SystemMessage(content="You are a helpful geography assistant. Use tools to look up facts.")
+    response = llm_with_tools.invoke([system] + state["messages"])
+    return {"messages": [response]}
+
+
+tool_node = ToolNode(tools)
+
+builder = StateGraph(State)
+builder.add_node("agent", call_model)
+builder.add_node("tools", tool_node)
+
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile(name="tool_node_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

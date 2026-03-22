@@ -35,17 +35,14 @@ def detect_framework(agent_obj: Any) -> Optional[str]:
     """Detect the agent framework from the object's type name and module.
 
     Returns the framework identifier (e.g. ``"openai"``, ``"google_adk"``,
-    ``"langgraph"``, ``"langchain"``) or ``None`` for native Conductor Agents.
+    ``"langgraph"``, ``"langchain"``, ``"google_adk"``) or ``None`` for native
+    Conductor Agents.
     """
     # Native Agent — no normalization needed
     from agentspan.agents.agent import Agent
 
     if isinstance(agent_obj, Agent):
         return None
-
-    # Precise type-name check for ClaudeCodeAgent
-    if type(agent_obj).__name__ == "ClaudeCodeAgent":
-        return "claude"
 
     # Precise type-name check for LangGraph (avoid fragile module prefix matching
     # since langgraph uses internal Pregel/CompiledStateGraph class names)
@@ -76,6 +73,8 @@ class WorkerInfo:
     description: str
     input_schema: Dict[str, Any]
     func: Callable[..., Any]
+    _pre_wrapped: bool = False  # True if func is already a Task→TaskResult worker
+    _extra: Optional[Dict[str, Any]] = None  # Extra metadata (e.g. llm_var_name for LLM intercept)
 
 
 # ── Generic serializer ───────────────────────────────────────────────
@@ -103,11 +102,6 @@ def serialize_agent(agent_obj: Any) -> Tuple[Dict[str, Any], List[WorkerInfo]]:
         from agentspan.agents.frameworks.langchain import serialize_langchain
 
         return serialize_langchain(agent_obj)
-
-    if framework == "claude":
-        from agentspan.agents.frameworks.claude import serialize_claude
-
-        return serialize_claude(agent_obj)
 
     workers: List[WorkerInfo] = []
     seen: Set[int] = set()  # Prevent infinite recursion on circular refs

@@ -49,7 +49,7 @@ class ToolRegistry:
 
         from agentspan.agents.tool import MEDIA_TOOL_TYPES, RAG_TOOL_TYPES
 
-        server_side_types = {"http", "mcp"} | MEDIA_TOOL_TYPES | RAG_TOOL_TYPES
+        server_side_types = {"http", "mcp", "human"} | MEDIA_TOOL_TYPES | RAG_TOOL_TYPES
         for td in tool_defs:
             if td.tool_type in server_side_types and td.func is None:
                 _tool_type_registry[td.name] = {"type": td.tool_type, "config": td.config}

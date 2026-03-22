@@ -7,8 +7,13 @@ The agents are defined using standard ADK classes — the Conductor runtime auto
 ## Prerequisites
 
 ```bash
-pip install google-adk agentspan-sdk
+uv pip install google-adk agentspan
 ```
+
+| Package | Required | Notes |
+|---------|----------|-------|
+| `google-adk` | Yes | `Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, planners |
+| `pydantic` | Some examples | Used for structured output (03) |
 
 Export environment variables:
 

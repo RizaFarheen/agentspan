@@ -17,7 +17,7 @@ Requirements:
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langchain.agents import create_agent
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)

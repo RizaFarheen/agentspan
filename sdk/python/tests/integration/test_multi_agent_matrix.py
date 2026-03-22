@@ -40,7 +40,7 @@ pytestmark = pytest.mark.integration
 
 M = os.environ.get("AGENT_LLM_MODEL", "openai/gpt-4o-mini")
 
-TIMEOUT = 600  # seconds to wait for all workflows
+TIMEOUT = 300  # seconds to wait for all workflows
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -141,8 +141,7 @@ def _build_handoff_basic():
         instructions="You handle technical questions. Answer concisely.")
     return Agent(name="support_t1", model=M,
         instructions="Route to billing_t1 for payment/billing, technical_t1 for tech issues.",
-        agents=[billing, technical], strategy=Strategy.HANDOFF,
-)
+        agents=[billing, technical], strategy=Strategy.HANDOFF)
 
 
 def _build_sequential_basic():
@@ -152,9 +151,7 @@ def _build_sequential_basic():
         instructions="Write a short paragraph from the research facts.")
     editor = Agent(name="editor_t1", model=M,
         instructions="Polish the paragraph. Output the final version.")
-    return Agent(name="seq_t1", model=M,
-        agents=[researcher, writer, editor], strategy=Strategy.SEQUENTIAL,
-)
+    return researcher >> writer >> editor
 
 
 def _build_parallel_basic():
@@ -163,8 +160,7 @@ def _build_parallel_basic():
     risk = Agent(name="risk_t1", model=M,
         instructions="Analyze from a risk perspective. 2-3 sentences.")
     return Agent(name="analysis_t1", model=M,
-        agents=[market, risk], strategy=Strategy.PARALLEL,
-)
+        agents=[market, risk], strategy=Strategy.PARALLEL)
 
 
 def _build_router_basic():
@@ -177,8 +173,7 @@ def _build_router_basic():
     return Agent(name="team_t1", model=M,
         instructions="Route to planner_t1 for design, coder_t1 for coding, reviewer_t1 for review.",
         agents=[planner, coder, reviewer],
-        strategy=Strategy.ROUTER, router=planner,
-)
+        strategy=Strategy.ROUTER, router=planner)
 
 
 def _build_round_robin_basic():
@@ -188,8 +183,7 @@ def _build_round_robin_basic():
         instructions="Argue AGAINST the topic. 2-3 sentences.")
     return Agent(name="debate_t1", model=M,
         agents=[optimist, skeptic],
-        strategy=Strategy.ROUND_ROBIN, max_turns=4,
-)
+        strategy=Strategy.ROUND_ROBIN, max_turns=4)
 
 
 def _build_random_basic():
@@ -201,8 +195,7 @@ def _build_random_basic():
         instructions="Identify risks and issues. 2-3 sentences.")
     return Agent(name="brainstorm_t1", model=M,
         agents=[creative, practical, critical],
-        strategy=Strategy.RANDOM, max_turns=3,
-)
+        strategy=Strategy.RANDOM, max_turns=3)
 
 
 def _build_swarm_basic():
@@ -221,7 +214,7 @@ def _build_swarm_basic():
             OnTextMention(text="technical", target="tech_t1"),
         ],
         max_turns=3,
-)
+        timeout_seconds=120)
 
 
 # ── Tier 2: Strategies + Tools ───────────────────────────────────────
@@ -235,8 +228,7 @@ def _build_handoff_tools():
         tools=[lookup_order])
     return Agent(name="support_t2", model=M,
         instructions="Route to billing_t2 for billing, technical_t2 for tech.",
-        agents=[billing, technical], strategy=Strategy.HANDOFF,
-)
+        agents=[billing, technical], strategy=Strategy.HANDOFF)
 
 
 def _build_sequential_tools():
@@ -246,9 +238,7 @@ def _build_sequential_tools():
     analyst = Agent(name="analyst_t2", model=M,
         instructions="Analyze data using analyze_data tool. Report findings.",
         tools=[analyze_data])
-    return Agent(name="collector_t2_analyst_t2", model=M,
-        agents=[collector, analyst], strategy=Strategy.SEQUENTIAL,
-)
+    return collector >> analyst
 
 
 def _build_parallel_tools():
@@ -260,7 +250,7 @@ def _build_parallel_tools():
         tools=[lookup_order])
     return Agent(name="parallel_tools_t2", model=M,
         agents=[balance_checker, order_checker], strategy=Strategy.PARALLEL,
-)
+        timeout_seconds=120)
 
 
 def _build_swarm_tools():
@@ -278,7 +268,7 @@ def _build_swarm_tools():
             OnTextMention(text="technical", target="tech_t2"),
         ],
         max_turns=3,
-)
+        timeout_seconds=120)
 
 
 # ── Tier 3: Strategy Features ────────────────────────────────────────
@@ -299,8 +289,7 @@ def _build_handoff_transitions():
             "collector_t3": ["analyst_t3"],
             "analyst_t3": ["reporter_t3"],
             "reporter_t3": ["pipeline_t3"],
-        },
-)
+        })
 
 
 def _build_sequential_gate():
@@ -312,9 +301,7 @@ def _build_sequential_gate():
         gate=TextGate("NO_ISSUES"))
     fixer = Agent(name="fixer_t3", model=M,
         instructions="Fix the problem described in the input.")
-    return Agent(name="gate_t3", model=M,
-        agents=[checker, fixer], strategy=Strategy.SEQUENTIAL,
-)
+    return checker >> fixer
 
 
 def _build_round_robin_max_turns():
@@ -324,8 +311,7 @@ def _build_round_robin_max_turns():
         instructions="Argue why dogs are better. 1-2 sentences.")
     return Agent(name="debate_t3", model=M,
         agents=[cat_fan, dog_fan],
-        strategy=Strategy.ROUND_ROBIN, max_turns=2,
-)
+        strategy=Strategy.ROUND_ROBIN, max_turns=2)
 
 
 # ── Tier 4: Nested/Composite ─────────────────────────────────────────
@@ -339,9 +325,7 @@ def _build_seq_then_parallel():
         agents=[market, risk], strategy=Strategy.PARALLEL)
     summarizer = Agent(name="summarizer_t4a", model=M,
         instructions="Synthesize the analysis into a 1-paragraph executive summary.")
-    return Agent(name="seq_par_t4a", model=M,
-        agents=[parallel_phase, summarizer], strategy=Strategy.SEQUENTIAL,
-)
+    return parallel_phase >> summarizer
 
 
 def _build_seq_then_swarm():
@@ -362,10 +346,8 @@ def _build_seq_then_swarm():
             OnTextMention(text="HANDOFF_TO_CODER", target="coder_t4b"),
         ],
         max_turns=4,
-)
-    return Agent(name="seq_swarm_t4b", model=M,
-        agents=[fetcher, swarm_stage], strategy=Strategy.SEQUENTIAL,
-)
+        timeout_seconds=120)
+    return fetcher >> swarm_stage
 
 
 def _build_handoff_to_parallel():
@@ -382,8 +364,7 @@ def _build_handoff_to_parallel():
             "Route to quick_check_t4 for simple checks, "
             "deep_analysis_t4 for deep analysis requests."
         ),
-        agents=[quick_check, deep_analysis], strategy=Strategy.HANDOFF,
-)
+        agents=[quick_check, deep_analysis], strategy=Strategy.HANDOFF)
 
 
 def _build_router_to_sequential():
@@ -402,8 +383,7 @@ def _build_router_to_sequential():
         ))
     return Agent(name="routed_t4d", model=M,
         agents=[quick_answer, pipeline],
-        strategy=Strategy.ROUTER, router=router_agent,
-)
+        strategy=Strategy.ROUTER, router=router_agent)
 
 
 def _build_swarm_hierarchical():
@@ -432,7 +412,7 @@ def _build_swarm_hierarchical():
             OnTextMention(text="marketing", target="mkt_team_t4"),
         ],
         max_turns=3,
-)
+        timeout_seconds=120)
 
 
 def _build_parallel_tools_pipeline():
@@ -444,12 +424,10 @@ def _build_parallel_tools_pipeline():
         tools=[lookup_order])
     par = Agent(name="par_t4e", model=M,
         agents=[bal, ord_agent], strategy=Strategy.PARALLEL,
-)
+        timeout_seconds=120)
     summ = Agent(name="summ_t4e", model=M,
         instructions="Summarize the account balance and order status into one paragraph.")
-    return Agent(name="par_summ_t4e", model=M,
-        agents=[par, summ], strategy=Strategy.SEQUENTIAL,
-)
+    return par >> summ
 
 
 # ── Tier 5: Special Patterns ─────────────────────────────────────────
@@ -463,8 +441,7 @@ def _build_agent_tool_basic():
             "Use the researcher_t5 tool to research topics and "
             "calculate tool for math. Synthesize findings."
         ),
-        tools=[agent_tool(researcher), calculate],
-)
+        tools=[agent_tool(researcher), calculate])
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -493,15 +470,17 @@ SPECS: List[Spec] = [
     # ── Tier 2: Strategies + Tools ──
     # Tool results flow through to output — verify tool data appears in response
     Spec(8,  "handoff_tools",         _build_handoff_tools(),
-         "Check the balance on account ACC-100.", ["COMPLETED"]),
+         "Check the balance on account ACC-100.", ["COMPLETED"], contains="5,432"),
     Spec(9,  "sequential_tools",      _build_sequential_tools(),
-         "Collect data from sales and analyze trends.", ["COMPLETED"]),
+         "Collect data from sales and analyze trends.", ["COMPLETED"],
+         contains="upward"),
     Spec(10, "parallel_tools",        _build_parallel_tools(),
          "Check account ACC-200 and look up order ORD-300.", ["COMPLETED"],
          expect_sub_results=True,
          expect_sub_result_agents=["balance_checker_t2", "order_checker_t2"]),
     Spec(11, "swarm_tools",           _build_swarm_tools(),
-         "I need a refund, check my account ACC-500.", ["COMPLETED"]),
+         "I need a refund, check my account ACC-500.", ["COMPLETED"],
+         contains="5,432"),
 
     # ── Tier 3: Strategy Features ──
     Spec(12, "handoff_transitions",   _build_handoff_transitions(),
@@ -527,7 +506,8 @@ SPECS: List[Spec] = [
 
     # ── Tier 5: Special Patterns ──
     Spec(21, "agent_tool_basic",      _build_agent_tool_basic(),
-         "Research Python and calculate 2+2.", ["COMPLETED"]),
+         "Research Python and calculate 2+2.", ["COMPLETED"],
+         contains="4"),
 ]
 
 
@@ -582,13 +562,6 @@ def _fetch_agent_result(handle, runtime, status) -> Optional[AgentResult]:
 @pytest.fixture(scope="module")
 def matrix_results(runtime):
     """Fire all 21 workflows concurrently and poll until all complete."""
-    # Phase 0: pre-register ALL workers before any workflow starts.
-    # This ensures every worker is in the global _decorated_functions registry
-    # when TaskHandler is created, avoiding incremental fork() deadlocks on macOS.
-    for spec in SPECS:
-        runtime.prepare(spec.agent)
-    print(f"  Pre-registered workers for all {len(SPECS)} agents.")
-
     # Phase 1: start all workflows
     handles = []
     for spec in SPECS:

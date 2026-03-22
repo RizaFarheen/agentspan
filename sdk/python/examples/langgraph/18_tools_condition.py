@@ -1,21 +1,26 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Tools Condition — create_agent with weather and timezone tools.
+"""tools_condition — StateGraph using prebuilt tools_condition for ReAct routing.
 
 Demonstrates:
-    - Using create_agent with multiple lookup tools
-    - create_agent handles the ReAct loop automatically (no manual tools_condition needed)
-    - Practical use case: a weather and timezone information agent
+    - Building a ReAct loop using tools_condition from langgraph.prebuilt
+    - tools_condition returns "tools" if the last message has tool_calls, else END
+    - Practical use: a weather and timezone information agent
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
+import operator
+from typing import Annotated, TypedDict
+
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode, tools_condition
 from agentspan.agents import AgentRuntime
 
 
@@ -53,13 +58,31 @@ def get_timezone(city: str) -> str:
     return timezone_db.get(city.lower(), f"Timezone data unavailable for {city}.")
 
 
+tools = [get_weather, get_timezone]
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+llm_with_tools = llm.bind_tools(tools)
 
-graph = create_agent(
-    llm,
-    tools=[get_weather, get_timezone],
-    name="weather_timezone_agent",
-)
+
+class State(TypedDict):
+    messages: Annotated[list[BaseMessage], operator.add]
+
+
+def agent(state: State) -> State:
+    """Invoke the LLM; it decides whether to call tools or finalize."""
+    response = llm_with_tools.invoke(state["messages"])
+    return {"messages": [response]}
+
+
+# tools_condition: if the last message has tool_calls → "tools", else → END
+builder = StateGraph(State)
+builder.add_node("agent", agent)
+builder.add_node("tools", ToolNode(tools))
+
+builder.add_edge(START, "agent")
+builder.add_conditional_edges("agent", tools_condition)
+builder.add_edge("tools", "agent")
+
+graph = builder.compile(name="weather_timezone_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

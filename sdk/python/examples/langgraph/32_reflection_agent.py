@@ -1,11 +1,12 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Reflection Agent — self-critique and iterative improvement via tools.
+"""Reflection Agent — self-critique and iterative improvement.
 
 Demonstrates:
-    - A generate → reflect → improve loop modelled as tools
-    - The agent decides when to stop based on the critic's verdict
+    - A generate → reflect → improve loop
+    - Stopping when the critic judges the output acceptable or after max rounds
+    - How to track iteration count in state
     - Practical use case: essay generation with quality self-improvement
 
 Requirements:
@@ -13,10 +14,11 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate
+from typing import TypedDict
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
@@ -24,80 +26,77 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
 MAX_ITERATIONS = 3
 
 
-@tool
-def generate_draft(topic: str, critique: str = "") -> str:
-    """Write or improve a paragraph about a topic.
+class State(TypedDict):
+    topic: str
+    draft: str
+    critique: str
+    iterations: int
+    final_output: str
 
-    If critique is provided, improve the previous draft based on it.
-    If critique is empty, write an initial draft.
 
-    Args:
-        topic: The topic to write about.
-        critique: Previous critique to incorporate (empty for first draft).
-    """
-    if not critique:
-        prompt_text = f"Write a concise, well-structured paragraph about: {topic}"
+def generate(state: State) -> State:
+    """Generate or improve an essay based on previous critique."""
+    iterations = state.get("iterations", 0)
+    if iterations == 0:
+        prompt = f"Write a concise, well-structured paragraph about: {state['topic']}"
     else:
-        prompt_text = (
-            f"Improve this paragraph about '{topic}' based on the critique below.\n\n"
-            f"Critique:\n{critique}\n\n"
+        prompt = (
+            f"Improve this paragraph about '{state['topic']}' based on the critique below.\n\n"
+            f"Current draft:\n{state['draft']}\n\n"
+            f"Critique:\n{state['critique']}\n\n"
             "Return only the improved paragraph."
         )
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a skilled writer. Produce clear, engaging prose."),
-        ("human", "{text}"),
+    response = llm.invoke([
+        SystemMessage(content="You are a skilled writer. Produce clear, engaging prose."),
+        HumanMessage(content=prompt),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"text": prompt_text})
-    return response.content.strip()
+    return {"draft": response.content.strip(), "iterations": iterations + 1}
 
 
-@tool
-def reflect_on_draft(topic: str, draft: str) -> str:
-    """Critique a paragraph for quality and return feedback.
-
-    Returns feedback starting with 'APPROVE' if the paragraph is excellent,
-    or 'REVISE' followed by specific improvements needed.
-
-    Args:
-        topic: The topic of the paragraph.
-        draft: The paragraph to critique.
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", (
-            "You are a rigorous editor. Critique the paragraph on:\n"
-            "1. Clarity\n2. Accuracy\n3. Engagement\n4. Conciseness\n\n"
-            "If the paragraph is already excellent, start your response with 'APPROVE'. "
-            "Otherwise start with 'REVISE' and list specific improvements."
-        )),
-        ("human", "Topic: {topic}\n\nParagraph:\n{draft}"),
+def reflect(state: State) -> State:
+    """Critique the current draft for quality."""
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a rigorous editor. Critique the paragraph on:\n"
+                "1. Clarity\n2. Accuracy\n3. Engagement\n4. Conciseness\n\n"
+                "If the paragraph is already excellent, start your response with 'APPROVE'. "
+                "Otherwise start with 'REVISE' and list specific improvements."
+            )
+        ),
+        HumanMessage(content=f"Topic: {state['topic']}\n\nParagraph:\n{state['draft']}"),
     ])
-    chain = prompt | llm
-    response = chain.invoke({"topic": topic, "draft": draft})
-    return response.content.strip()
+    return {"critique": response.content.strip()}
 
 
-REFLECTION_SYSTEM = f"""You are a self-improving writing agent.
+def should_continue(state: State) -> str:
+    if state.get("iterations", 0) >= MAX_ITERATIONS:
+        return "done"
+    critique = state.get("critique", "")
+    if critique.upper().startswith("APPROVE"):
+        return "done"
+    return "improve"
 
-For each writing request:
-1. Call generate_draft with the topic (no critique for the first draft)
-2. Call reflect_on_draft to get feedback on the draft
-3. If the critique starts with 'REVISE' and you have done fewer than {MAX_ITERATIONS} iterations:
-   - Call generate_draft again with the topic AND the critique to improve it
-   - Call reflect_on_draft again on the new draft
-   - Repeat until you get 'APPROVE' or reach {MAX_ITERATIONS} total drafts
-4. Return the final draft as your answer
 
-Track the number of iterations — stop after {MAX_ITERATIONS} total drafts even if not approved.
-"""
+def finalize(state: State) -> State:
+    return {"final_output": state["draft"]}
 
-graph = create_agent(
-    llm,
-    tools=[generate_draft, reflect_on_draft],
-    name="reflection_agent",
-    system_prompt=REFLECTION_SYSTEM,
+
+builder = StateGraph(State)
+builder.add_node("generate", generate)
+builder.add_node("reflect", reflect)
+builder.add_node("finalize", finalize)
+
+builder.add_edge(START, "generate")
+builder.add_edge("generate", "reflect")
+builder.add_conditional_edges(
+    "reflect",
+    should_continue,
+    {"improve": "generate", "done": "finalize"},
 )
+builder.add_edge("finalize", END)
+
+graph = builder.compile(name="reflection_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:

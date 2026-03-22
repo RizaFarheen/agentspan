@@ -1,21 +1,23 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""QA Agent — create_agent with retrieval and answer tools.
+"""QA Agent — StateGraph that retrieves context then generates an answer.
 
 Demonstrates:
-    - Two-stage pipeline: retrieve context then generate answer, modelled as tools
+    - Two-stage pipeline: retrieve context, then generate answer
     - Mocked retrieval step that returns relevant passages
-    - Grounded answer generation using retrieved context inside a tool
+    - Grounded answer generation using retrieved context
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:8080/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain_core.tools import tool
+from typing import TypedDict
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from agentspan.agents.langchain import create_agent
+from langgraph.graph import StateGraph, START, END
 from agentspan.agents import AgentRuntime
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -40,42 +42,52 @@ _DOCS = {
 }
 
 
-@tool
-def retrieve_context(question: str) -> str:
-    """Retrieve relevant context passages for a question from the knowledge base.
+class State(TypedDict):
+    question: str
+    context: str
+    answer: str
 
-    Args:
-        question: The question to retrieve context for.
-    """
-    question_lower = question.lower()
+
+def retrieve_context(state: State) -> State:
+    """Retrieve relevant context passages for the question (mocked retrieval)."""
+    question_lower = state["question"].lower()
     passages = []
     for topic, docs in _DOCS.items():
         if topic in question_lower:
             passages.extend(docs)
     if not passages:
-        # Fallback: return first passage from each topic
+        # Fallback: return all docs as context
         for docs in _DOCS.values():
             passages.extend(docs[:1])
     context = "\n".join(f"• {p}" for p in passages)
-    return f"Retrieved context:\n{context}"
+    return {"context": context}
 
 
-QA_SYSTEM = """You are a knowledgeable assistant that answers questions using a knowledge base.
+def generate_answer(state: State) -> State:
+    """Generate an answer grounded in the retrieved context."""
+    response = llm.invoke([
+        SystemMessage(
+            content=(
+                "You are a knowledgeable assistant. Answer the question using ONLY "
+                "the provided context. If the context does not contain enough information, "
+                "say so clearly. Be concise and accurate.\n\n"
+                f"Context:\n{state['context']}"
+            )
+        ),
+        HumanMessage(content=state["question"]),
+    ])
+    return {"answer": response.content}
 
-For each question:
-1. Call retrieve_context to get relevant passages
-2. Answer the question using ONLY the retrieved context
-3. If the context does not contain enough information, say so clearly
 
-Always cite the context you are drawing from and be concise and accurate.
-"""
+builder = StateGraph(State)
+builder.add_node("retrieve", retrieve_context)
+builder.add_node("generate", generate_answer)
 
-graph = create_agent(
-    llm,
-    tools=[retrieve_context],
-    name="qa_agent",
-    system_prompt=QA_SYSTEM,
-)
+builder.add_edge(START, "retrieve")
+builder.add_edge("retrieve", "generate")
+builder.add_edge("generate", END)
+
+graph = builder.compile(name="qa_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
