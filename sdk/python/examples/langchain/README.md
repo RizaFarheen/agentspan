@@ -4,6 +4,19 @@
 
 > **Note:** Modern LangChain (v1.2+) uses `create_agent()` which returns a `CompiledStateGraph` detected by Agentspan as the `langgraph` framework. The distinction between these examples and the `langgraph/` examples is in the LangChain components used (prompt templates, output parsers, LCEL chains, structured output).
 
+## Prerequisites
+
+```bash
+uv pip install langchain langchain-core langchain-openai agentspan
+```
+
+| Package | Required | Notes |
+|---------|----------|-------|
+| `langchain` | Yes | Core framework, includes `create_agent` |
+| `langchain-core` | Yes | Tools, prompts, output parsers, messages |
+| `langchain-openai` | Yes | `ChatOpenAI` LLM provider |
+| `pydantic` | Some examples | Used for structured output (03, 04, 24, 25) |
+
 ## Quick Start
 
 ```bash
@@ -24,7 +37,7 @@ uv run python examples/langchain/01_hello_world.py
 | 02 | `02_react_with_tools.py` | ReAct agent with multiple `@tool` functions |
 | 03 | `03_custom_tools.py` | Typed tool schemas with Pydantic + `StructuredTool` |
 | 04 | `04_structured_output.py` | `with_structured_output()` + Pydantic schemas |
-| 05 | `05_prompt_templates.py` | `ChatPromptTemplate` and `state_modifier` |
+| 05 | `05_prompt_templates.py` | `ChatPromptTemplate` and `system_prompt` |
 
 ### Conversation & Memory (06–08)
 

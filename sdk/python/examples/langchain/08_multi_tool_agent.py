@@ -38,7 +38,7 @@ def get_local_time(city: str) -> str:
     }
     key = city.lower().strip()
     tz_label, offset = timezones.get(key, ("UTC", 0))
-    utc_now = datetime.datetime.utcnow()
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
     local_time = utc_now + datetime.timedelta(hours=offset)
     return f"{city.title()}: {local_time.strftime('%H:%M')} ({tz_label})"
 

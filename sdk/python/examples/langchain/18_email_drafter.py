@@ -132,7 +132,7 @@ graph = create_agent(
     llm,
     tools=[draft_email, write_follow_up, write_reply, improve_email],
     name="email_drafter_agent",
-    state_modifier=EMAIL_SYSTEM,
+    system_prompt=EMAIL_SYSTEM,
 )
 
 if __name__ == "__main__":

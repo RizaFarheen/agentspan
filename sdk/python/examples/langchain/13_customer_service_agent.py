@@ -121,7 +121,7 @@ graph = create_agent(
     llm,
     tools=[lookup_order, check_return_policy, get_shipping_info, escalate_to_human],
     name="customer_service_agent",
-    state_modifier=CS_SYSTEM,
+    system_prompt=CS_SYSTEM,
 )
 
 if __name__ == "__main__":

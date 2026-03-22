@@ -394,151 +394,21 @@ public class GuardrailCompiler {
     private List<WorkflowTask> compileHumanCase(
             GuardrailConfig guard, String agentName, String contentRef, String outPath, String s, String agentModel) {
 
-        List<WorkflowTask> humanCaseTasks = new ArrayList<>();
         String humanRef = agentName + "_guardrail_human" + s;
-
-        // --- HumanTask ---
-        WorkflowTask humanTask = new WorkflowTask();
-        humanTask.setType("HUMAN");
-        humanTask.setTaskReferenceName(humanRef);
-
-        Map<String, Object> humanInputs = new LinkedHashMap<>();
-        humanInputs.put("__humanTaskDefinition", Map.of(
-            "assignmentCompletionStrategy", "LEAVE_OPEN",
-            "displayName", agentName + " Guardrail Review",
-            "userFormTemplate", Map.of("version", 0)
-        ));
-        humanInputs.put("guardrail_message", "${" + outPath + ".message}");
-        humanInputs.put("guardrail_name", "${" + outPath + ".guardrail_name}");
-        humanInputs.put("llm_output", contentRef);
-        humanInputs.put("response_schema", Map.of(
-                "type", "object",
-                "required", List.of("approved"),
-                "properties", Map.of(
-                        "approved", Map.of(
-                                "type", "boolean",
-                                "title", "Approved",
-                                "description", "Approve or reject the LLM output"
-                        ),
-                        "edited_output", Map.of(
-                                "type", "string",
-                                "title", "Edited Output",
-                                "description", "Provide corrected output if editing"
-                        ),
-                        "reason", Map.of(
-                                "type", "string",
-                                "title", "Reason",
-                                "description", "Reason for rejection"
-                        )
-                )
-        ));
-        humanInputs.put("response_ui_schema", Map.of(
-                "ui:order", List.of("approved", "edited_output", "reason"),
-                "approved", Map.of("ui:widget", "radio"),
-                "edited_output", Map.of("ui:widget", "textarea"),
-                "reason", Map.of("ui:widget", "textarea")
-        ));
-        humanTask.setInputParameters(humanInputs);
-        humanCaseTasks.add(humanTask);
-
-        // --- Validate InlineTask: parse & coerce simple cases ---
-        String validateRef = agentName + "_guardrail_human_validate" + s;
-        WorkflowTask validateTask = new WorkflowTask();
-        validateTask.setTaskReferenceName(validateRef);
-        validateTask.setType("INLINE");
-
-        Map<String, Object> validateInputs = new LinkedHashMap<>();
-        validateInputs.put("evaluatorType", "graaljs");
-        validateInputs.put("expression", JavaScriptBuilder.humanValidateScript());
-        validateInputs.put("human_output", "${" + humanRef + ".output}");
-        validateTask.setInputParameters(validateInputs);
-        humanCaseTasks.add(validateTask);
-
-        // --- SwitchTask: route based on needs_normalize ---
-        String normalizeSwitchRef = agentName + "_guardrail_normalize_switch" + s;
-        WorkflowTask normalizeSwitch = new WorkflowTask();
-        normalizeSwitch.setType("SWITCH");
-        normalizeSwitch.setTaskReferenceName(normalizeSwitchRef);
-        normalizeSwitch.setEvaluatorType("graaljs");
-        normalizeSwitch.setExpression(
-                "$.needs_normalize == true ? 'needs_normalize' : 'skip'");
-
-        Map<String, Object> normalizeSwitchInputs = new LinkedHashMap<>();
-        normalizeSwitchInputs.put("needs_normalize",
-                "${" + validateRef + ".output.result.needs_normalize}");
-        normalizeSwitch.setInputParameters(normalizeSwitchInputs);
-
-        Map<String, List<WorkflowTask>> normalizeCases = new LinkedHashMap<>();
-
-        // "needs_normalize" case: LlmChatComplete normalizer
-        String normalizerRef = agentName + "_guardrail_normalizer" + s;
-
-        // Use the agent's model (from guard config or fallback)
-        // For the human case normalizer, we need a model. Use the guard's model if available,
-        // otherwise this would need to be passed in. For now, we use a reasonable approach:
-        // the guard config may not have a model for non-LLM guardrails, so we build the
-        // normalizer task with input parameters that can be overridden.
-        WorkflowTask normalizerTask = new WorkflowTask();
-        normalizerTask.setName("LLM_CHAT_COMPLETE");
-        normalizerTask.setTaskReferenceName(normalizerRef);
-        normalizerTask.setType("LLM_CHAT_COMPLETE");
-
-        String normalizerSystemPrompt = "Convert the human's response into a JSON object:\n"
-                + "{\"approved\": <boolean>, \"edited_output\": <string or null>, \"reason\": <string or null>}\n\n"
-                + "Rules:\n"
-                + "- approved=true for: approve, yes, ok, LGTM, looks good, go ahead, etc.\n"
-                + "- approved=false for: reject, no, deny, not approved, etc.\n"
-                + "- If they provide corrected content, put it in edited_output.\n"
-                + "- If they give a reason for rejection, put it in reason.\n"
-                + "- If input is already valid JSON with these fields, return as-is.\n"
-                + "Output ONLY the JSON object.";
-
-        Map<String, Object> normalizerInputs = new LinkedHashMap<>();
-        // Use guard's model if available, otherwise fall back to agent's model
         String modelToUse = guard.getModel() != null ? guard.getModel() : agentModel;
-        if (modelToUse != null) {
-            ModelParser.ParsedModel parsed = ModelParser.parse(modelToUse);
-            normalizerInputs.put("llmProvider", parsed.getProvider());
-            normalizerInputs.put("model", parsed.getModel());
-        }
-        normalizerInputs.put("messages", List.of(
-                Map.of("role", "system", "message", normalizerSystemPrompt),
-                Map.of("role", "user", "message",
-                        "${" + validateRef + ".output.result.raw_text}")
-        ));
-        normalizerInputs.put("temperature", 0);
-        normalizerInputs.put("jsonOutput", true);
-        normalizerTask.setInputParameters(normalizerInputs);
 
-        normalizeCases.put("needs_normalize", List.of(normalizerTask));
+        HumanTaskBuilder.Pipeline pipeline = HumanTaskBuilder
+            .create(humanRef, agentName + " Guardrail Review")
+            .responseSchema(HumanTaskBuilder.guardrailResponseSchema())
+            .responseUiSchema(HumanTaskBuilder.guardrailResponseUiSchema())
+            .contextInput("guardrail_message", "${" + outPath + ".message}")
+            .contextInput("guardrail_name", "${" + outPath + ".guardrail_name}")
+            .contextInput("llm_output", contentRef)
+            .guardrailValidation(modelToUse, contentRef)
+            .build();
 
-        // default (skip): no-op
-        WorkflowTask normalizeNoop = new WorkflowTask();
-        normalizeNoop.setType("SET_VARIABLE");
-        normalizeNoop.setTaskReferenceName(agentName + "_guardrail_normalize_noop" + s);
-
-        Map<String, Object> normalizeNoopInputs = new LinkedHashMap<>();
-        normalizeNoopInputs.put("_normalize_skipped", true);
-        normalizeNoop.setInputParameters(normalizeNoopInputs);
-
-        normalizeSwitch.setDecisionCases(normalizeCases);
-        normalizeSwitch.setDefaultCase(List.of(normalizeNoop));
-        humanCaseTasks.add(normalizeSwitch);
-
-        // --- Process InlineTask: merge validated/normalized ---
-        String humanProcessRef = agentName + "_guardrail_human_process" + s;
-        WorkflowTask humanProcessTask = new WorkflowTask();
-        humanProcessTask.setTaskReferenceName(humanProcessRef);
-        humanProcessTask.setType("INLINE");
-
-        Map<String, Object> processInputs = new LinkedHashMap<>();
-        processInputs.put("evaluatorType", "graaljs");
-        processInputs.put("expression", JavaScriptBuilder.humanProcessScript());
-        processInputs.put("validated", "${" + validateRef + ".output.result}");
-        processInputs.put("normalized", "${" + normalizerRef + ".output.result}");
-        processInputs.put("llm_output", contentRef);
-        humanProcessTask.setInputParameters(processInputs);
-        humanCaseTasks.add(humanProcessTask);
+        List<WorkflowTask> humanCaseTasks = new ArrayList<>(pipeline.getTasks());
+        String outputRef = pipeline.getOutputRef();
 
         // --- Inner SwitchTask: approve/edit/reject ---
         WorkflowTask innerSwitch = new WorkflowTask();
@@ -546,11 +416,8 @@ public class GuardrailCompiler {
         innerSwitch.setTaskReferenceName(agentName + "_guardrail_human_action" + s);
         innerSwitch.setEvaluatorType("value-param");
         innerSwitch.setExpression("switchCaseValue");
-
-        Map<String, Object> innerSwitchInputs = new LinkedHashMap<>();
-        innerSwitchInputs.put("switchCaseValue",
-                "${" + humanProcessRef + ".output.result.action}");
-        innerSwitch.setInputParameters(innerSwitchInputs);
+        innerSwitch.setInputParameters(Map.of("switchCaseValue",
+                "${" + outputRef + ".action}"));
 
         Map<String, List<WorkflowTask>> innerCases = new LinkedHashMap<>();
 
@@ -558,23 +425,15 @@ public class GuardrailCompiler {
         WorkflowTask approveNoop = new WorkflowTask();
         approveNoop.setType("SET_VARIABLE");
         approveNoop.setTaskReferenceName(agentName + "_guardrail_human_approve" + s);
-
-        Map<String, Object> approveInputs = new LinkedHashMap<>();
-        approveInputs.put("_human_approved", true);
-        approveNoop.setInputParameters(approveInputs);
-
+        approveNoop.setInputParameters(Map.of("_human_approved", true));
         innerCases.put("approve", List.of(approveNoop));
 
         // "edit" case: pass through edited content
         WorkflowTask editNoop = new WorkflowTask();
         editNoop.setType("SET_VARIABLE");
         editNoop.setTaskReferenceName(agentName + "_guardrail_human_edit" + s);
-
-        Map<String, Object> editInputs = new LinkedHashMap<>();
-        editInputs.put("_human_edited_output",
-                "${" + humanProcessRef + ".output.result.result}");
-        editNoop.setInputParameters(editInputs);
-
+        editNoop.setInputParameters(Map.of("_human_edited_output",
+                "${" + outputRef + ".result}"));
         innerCases.put("edit", List.of(editNoop));
 
         innerSwitch.setDecisionCases(innerCases);
@@ -583,13 +442,9 @@ public class GuardrailCompiler {
         WorkflowTask rejectTerminate = new WorkflowTask();
         rejectTerminate.setType("TERMINATE");
         rejectTerminate.setTaskReferenceName(agentName + "_guardrail_human_reject" + s);
-
-        Map<String, Object> rejectInputs = new LinkedHashMap<>();
-        rejectInputs.put("terminationStatus", "FAILED");
-        rejectInputs.put("terminationReason",
-                "${" + humanProcessRef + ".output.result.reason}");
-        rejectTerminate.setInputParameters(rejectInputs);
-
+        rejectTerminate.setInputParameters(Map.of(
+            "terminationStatus", "FAILED",
+            "terminationReason", "${" + outputRef + ".reason}"));
         innerSwitch.setDefaultCase(List.of(rejectTerminate));
         humanCaseTasks.add(innerSwitch);
 

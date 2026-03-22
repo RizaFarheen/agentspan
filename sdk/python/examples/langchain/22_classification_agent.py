@@ -112,7 +112,7 @@ graph = create_agent(
     llm,
     tools=[classify_department, classify_priority, classify_issue_type, suggest_response_template],
     name="classification_agent",
-    state_modifier=CLASSIFIER_SYSTEM,
+    system_prompt=CLASSIFIER_SYSTEM,
 )
 
 SAMPLE_TICKETS = [

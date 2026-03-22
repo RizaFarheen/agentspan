@@ -4,7 +4,78 @@ Runnable examples demonstrating every feature of the Conductor Agents SDK.
 
 ## Getting Started
 
-### 1. Configure your environment
+### 1. Install dependencies
+
+The core examples (numbered files in this directory) only need the `agentspan` SDK:
+
+```bash
+uv pip install agentspan
+```
+
+Framework-specific examples require additional packages. Install only what you need:
+
+#### LangChain examples (`langchain/`)
+
+```bash
+uv pip install langchain langchain-core langchain-openai
+```
+
+| Package | Required | Notes |
+|---------|----------|-------|
+| `langchain` | Yes | Core framework, includes `create_agent` |
+| `langchain-core` | Yes | Tools, prompts, output parsers, messages |
+| `langchain-openai` | Yes | `ChatOpenAI` LLM provider |
+| `pydantic` | Some examples | Used for structured output (03, 04, 24, 25) |
+
+#### LangGraph examples (`langgraph/`)
+
+```bash
+uv pip install langgraph langchain-core langchain-openai
+```
+
+| Package | Required | Notes |
+|---------|----------|-------|
+| `langgraph` | Yes | `StateGraph`, `create_react_agent`, prebuilt nodes |
+| `langchain-core` | Yes | Messages, tools, documents |
+| `langchain-openai` | Yes | `ChatOpenAI` LLM provider |
+| `langchain-anthropic` | Optional | Only for `43_react_agent_multi_model.py` (requires `ANTHROPIC_API_KEY`) |
+| `pydantic` | Some examples | Used for structured output (08) |
+
+#### OpenAI Agents SDK examples (`openai/`)
+
+```bash
+uv pip install openai-agents
+```
+
+| Package | Required | Notes |
+|---------|----------|-------|
+| `openai-agents` | Yes | `Agent`, `function_tool`, `ModelSettings`, guardrails |
+| `pydantic` | Some examples | Used for structured output (03) |
+
+Requires `OPENAI_API_KEY` environment variable.
+
+#### Google ADK examples (`adk/`)
+
+```bash
+uv pip install google-adk
+```
+
+| Package | Required | Notes |
+|---------|----------|-------|
+| `google-adk` | Yes | `Agent`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, planners |
+| `pydantic` | Some examples | Used for structured output (03) |
+
+Requires `GOOGLE_GEMINI_API_KEY` environment variable.
+
+#### Install everything
+
+To install all framework dependencies at once:
+
+```bash
+uv pip install langchain langchain-core langchain-openai langgraph openai-agents google-adk
+```
+
+### 2. Configure your environment
 
 Export environment variables:
 
@@ -15,17 +86,17 @@ export AGENTSPAN_SERVER_URL=http://localhost:8080/api
 # export AGENTSPAN_AUTH_SECRET=<secret>
 ```
 
-#### 1.1. Choose a model
+#### 2.1. Choose a model
 
 The `AGENTSPAN_LLM_MODEL` variable uses the `provider/model-name` format. Examples:
 
-| Provider | Model string |
-|----------|-------------|
-| OpenAI | `openai/gpt-4o-mini` (default) |
-| Anthropic | `anthropic/claude-sonnet-4-20250514` |
-| Google Gemini | `google_gemini/gemini-2.0-flash` |
-| AWS Bedrock | `aws_bedrock/...` |
-| Azure OpenAI | `azure_openai/...` |
+| Provider | Model string | API key env var |
+|----------|-------------|-----------------|
+| OpenAI | `openai/gpt-4o-mini` (default) | `OPENAI_API_KEY` |
+| Anthropic | `anthropic/claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
+| Google Gemini | `google_gemini/gemini-2.0-flash` | `GOOGLE_GEMINI_API_KEY` |
+| AWS Bedrock | `aws_bedrock/...` | AWS credentials |
+| Azure OpenAI | `azure_openai/...` | Azure credentials |
 
 All supported providers: `openai`, `anthropic`, `google_gemini`, `google_vertex_ai`,
 `azure_openai`, `aws_bedrock`, `cohere`, `mistral`, `groq`, `perplexity`,
@@ -34,11 +105,16 @@ All supported providers: `openai`, `anthropic`, `google_gemini`, `google_vertex_
 ### 3. Run an example
 
 ```bash
+# Core SDK examples
 python examples/01_basic_agent.py
 python examples/15_agent_discussion.py
-```
 
-Some examples have additional dependencies noted in their headers.
+# Framework-specific examples
+python examples/langchain/01_hello_world.py
+python examples/langgraph/01_hello_world.py
+python examples/openai/01_basic_agent.py
+python examples/adk/01_basic_agent.py
+```
 
 ---
 

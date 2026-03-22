@@ -167,7 +167,7 @@ graph = create_agent(
     llm,
     tools=[analyze_market_data, generate_financial_metrics, assess_risks, compile_report],
     name="advanced_orchestration_agent",
-    state_modifier=ORCHESTRATOR_SYSTEM,
+    system_prompt=ORCHESTRATOR_SYSTEM,
 )
 
 if __name__ == "__main__":

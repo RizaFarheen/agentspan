@@ -39,8 +39,21 @@ class State(TypedDict):
     response: str
 
 
+def _call_summarize_llm(conversation_text: str) -> str:
+    """Call the LLM to summarize conversation text."""
+    response = llm.invoke([
+        SystemMessage(content="Summarize the following conversation in 2-3 sentences, preserving key facts."),
+        HumanMessage(content=conversation_text),
+    ])
+    return response.content.strip()
+
+
 def maybe_summarize(state: State) -> State:
-    """Summarize old history when it exceeds the threshold."""
+    """Summarize old history when it exceeds the threshold.
+
+    The LLM call is in a helper so this node compiles as a regular SIMPLE
+    task — it only calls the LLM conditionally (when history is long).
+    """
     history = state.get("history", [])
     if len(history) <= SUMMARY_THRESHOLD:
         return {}
@@ -51,11 +64,7 @@ def maybe_summarize(state: State) -> State:
     conversation_text = "\n".join(
         f"{m['role'].capitalize()}: {m['content']}" for m in old_messages
     )
-    response = llm.invoke([
-        SystemMessage(content="Summarize the following conversation in 2-3 sentences, preserving key facts."),
-        HumanMessage(content=conversation_text),
-    ])
-    new_summary = response.content.strip()
+    new_summary = _call_summarize_llm(conversation_text)
 
     if state.get("summary"):
         new_summary = f"{state['summary']}\n\n{new_summary}"
@@ -97,7 +106,9 @@ builder.add_edge("respond", END)
 graph = builder.compile(name="conversation_manager")
 
 if __name__ == "__main__":
-    # Simulate a multi-turn conversation
+    # Each turn runs as a separate Conductor workflow execution.
+    # The graph (summarize → respond) is compiled into a Conductor workflow
+    # with LLM calls intercepted via prep/LLM_CHAT_COMPLETE/finish tasks.
     turns = [
         "Hi! I'm learning Python. Where should I start?",
         "What's the difference between a list and a tuple?",
@@ -106,14 +117,9 @@ if __name__ == "__main__":
         "What is a decorator in Python?",
     ]
 
-    history: list = []
-    summary = ""
-
-    for turn in turns:
-        state = {"new_message": turn, "history": history, "summary": summary}
-        result = graph.invoke(state)
-        history = result["history"]
-        summary = result.get("summary", summary)
-        response = result["response"]
-        print(f"You: {turn}")
-        print(f"Bot: {response}\n")
+    with AgentRuntime() as runtime:
+        for turn in turns:
+            result = runtime.run(graph, turn, session_id="user-session-001")
+            print(f"You: {turn}")
+            result.print_result()
+            print()

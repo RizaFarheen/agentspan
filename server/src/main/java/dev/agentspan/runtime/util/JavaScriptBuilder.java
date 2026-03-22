@@ -167,7 +167,8 @@ public class JavaScriptBuilder {
      */
     public static String enrichToolsScript(String httpConfigJson, String mcpConfigJson,
                                               String mediaConfigJson, String agentToolConfigJson,
-                                              String ragConfigJson, String cliConfigJson) {
+                                              String ragConfigJson, String cliConfigJson,
+                                              String humanConfigJson) {
         return iife(
             "  var httpCfg = " + httpConfigJson + ";" +
             "  var mcpCfg = " + mcpConfigJson + ";" +
@@ -175,6 +176,7 @@ public class JavaScriptBuilder {
             "  var agentToolCfg = " + agentToolConfigJson + ";" +
             "  var ragCfg = " + ragConfigJson + ";" +
             "  var cliCfg = " + cliConfigJson + ";" +
+            "  var humanCfg = " + humanConfigJson + ";" +
             "  var agentState = $.agentState || {};" +
             "  var tcs = $.toolCalls || [];" +
             "  var result = [];" +
@@ -233,6 +235,23 @@ public class JavaScriptBuilder {
             "      var inp = tc.inputParameters || {};" +
             "      for (var k in inp) { merged[k] = inp[k]; }" +
             "      t.inputParameters = merged;" +
+            "    } else if (humanCfg[n]) {" +
+            "      t.type = 'HUMAN';" +
+            "      t.name = n;" +
+            "      var hDef = {assignmentCompletionStrategy: 'LEAVE_OPEN'," +
+            "                  displayName: humanCfg[n].displayName || n," +
+            "                  userFormTemplate: {version: 0}};" +
+            "      var hInputs = {__humanTaskDefinition: hDef};" +
+            "      hInputs.response_schema = {type: 'object', properties: {" +
+            "        response: {type: 'string', title: 'Response'," +
+            "                   description: 'Provide your response'}}};" +
+            "      hInputs.response_ui_schema = {'ui:order': ['response']," +
+            "        response: {'ui:widget': 'textarea'}};" +
+            "      var inp = tc.inputParameters || {};" +
+            "      for (var k in inp) { hInputs[k] = inp[k]; }" +
+            "      if (humanCfg[n].description) hInputs._description = humanCfg[n].description;" +
+            "      t.inputParameters = hInputs;" +
+            "      t.optional = false;" +
             "    }" +
             "    if (t.type === 'SIMPLE') {" +
             "      t.inputParameters._agent_state = agentState;" +
@@ -473,13 +492,15 @@ public class JavaScriptBuilder {
      * HTTP and media configs are still baked in since they're known at compile time.</p>
      */
     public static String enrichToolsScriptDynamic(String httpConfigJson, String mediaConfigJson,
-                                                     String agentToolConfigJson, String ragConfigJson) {
+                                                     String agentToolConfigJson, String ragConfigJson,
+                                                     String humanConfigJson) {
         return iife(
             "  var httpCfg = " + httpConfigJson + ";" +
             "  var mcpCfg = $.mcpConfig || {};" +
             "  var mediaCfg = " + mediaConfigJson + ";" +
             "  var agentToolCfg = " + agentToolConfigJson + ";" +
             "  var ragCfg = " + ragConfigJson + ";" +
+            "  var humanCfg = " + humanConfigJson + ";" +
             "  var agentState = $.agentState || {};" +
             "  var tcs = $.toolCalls || [];" +
             "  var result = [];" +
@@ -538,6 +559,23 @@ public class JavaScriptBuilder {
             "      var inp = tc.inputParameters || {};" +
             "      for (var k in inp) { merged[k] = inp[k]; }" +
             "      t.inputParameters = merged;" +
+            "    } else if (humanCfg[n]) {" +
+            "      t.type = 'HUMAN';" +
+            "      t.name = n;" +
+            "      var hDef = {assignmentCompletionStrategy: 'LEAVE_OPEN'," +
+            "                  displayName: humanCfg[n].displayName || n," +
+            "                  userFormTemplate: {version: 0}};" +
+            "      var hInputs = {__humanTaskDefinition: hDef};" +
+            "      hInputs.response_schema = {type: 'object', properties: {" +
+            "        response: {type: 'string', title: 'Response'," +
+            "                   description: 'Provide your response'}}};" +
+            "      hInputs.response_ui_schema = {'ui:order': ['response']," +
+            "        response: {'ui:widget': 'textarea'}};" +
+            "      var inp = tc.inputParameters || {};" +
+            "      for (var k in inp) { hInputs[k] = inp[k]; }" +
+            "      if (humanCfg[n].description) hInputs._description = humanCfg[n].description;" +
+            "      t.inputParameters = hInputs;" +
+            "      t.optional = false;" +
             "    }" +
             "    if (t.type === 'SIMPLE') { t.inputParameters._agent_state = agentState; }" +
             "    result.push(t);" +
@@ -617,6 +655,68 @@ public class JavaScriptBuilder {
             "  if (reason) msg += ' Reason: ' + reason + '.';" +
             "  if (parts.length > 0) msg += ' Additional context: ' + parts.join(', ') + '.';" +
             "  return msg;"
+        );
+    }
+
+    /**
+     * Validate human output for graph-node HUMAN tasks.
+     *
+     * <p>Extracts key-value fields from the human output. If the output is already
+     * a structured JSON object, captures all fields (except internal ones like
+     * {@code __humanTaskDefinition}). If it's a string, flags for LLM normalization.
+     */
+    public static String graphNodeValidateScript() {
+        return iife(
+            "  var raw = $.human_output;" +
+            "  if (!raw) return {needs_normalize: true, raw_text: '', fields: {}};" +
+            "  var raw_text;" +
+            "  if (typeof raw === 'string') { raw_text = raw; }" +
+            "  else if (typeof raw.result === 'string') { raw_text = raw.result; }" +
+            "  else { var p = []; for (var k in raw) { if (k !== '__humanTaskDefinition' && k !== 'response_schema'" +
+            "      && k !== 'response_ui_schema' && k !== '_prompt' && k !== 'state')" +
+            "      p.push(k + ': ' + JSON.stringify(raw[k])); }" +
+            "    raw_text = p.join(', '); }" +
+            // Check if raw is a structured object with user-provided fields
+            "  if (typeof raw === 'object') {" +
+            "    var fields = {}; var hasFields = false;" +
+            "    for (var k in raw) {" +
+            "      if (k === '__humanTaskDefinition' || k === 'response_schema'" +
+            "          || k === 'response_ui_schema' || k === '_prompt' || k === 'state') continue;" +
+            "      fields[k] = raw[k]; hasFields = true;" +
+            "    }" +
+            "    if (hasFields) {" +
+            "      return {needs_normalize: false, fields: fields, raw_text: raw_text};" +
+            "    }" +
+            "  }" +
+            "  return {needs_normalize: true, raw_text: raw_text, fields: {}};"
+        );
+    }
+
+    /**
+     * Merge validated/normalized human output into graph state.
+     *
+     * <p>Takes the validated fields (or LLM-normalized JSON), merges them
+     * into the previous graph state, and returns the updated state.
+     */
+    public static String graphNodeProcessScript() {
+        return iife(
+            "  var validated = $.validated;" +
+            "  var normalized = $.normalized;" +
+            "  var state = $.previousState || {};" +
+            "  var fields;" +
+            "  if (validated && !validated.needs_normalize) {" +
+            "    fields = validated.fields || {};" +
+            "  } else if (normalized) {" +
+            // normalized is LLM output — parse if string
+            "    if (typeof normalized === 'string') {" +
+            "      try { fields = JSON.parse(normalized); } catch(e) { fields = {}; }" +
+            "    } else { fields = normalized; }" +
+            "  } else { fields = {}; }" +
+            // Merge fields into state
+            "  for (var k in fields) {" +
+            "    if (k !== '__humanTaskDefinition') state[k] = fields[k];" +
+            "  }" +
+            "  return {state: state, result: JSON.stringify(state)};"
         );
     }
 

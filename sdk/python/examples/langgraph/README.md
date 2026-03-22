@@ -2,6 +2,20 @@
 
 40 examples demonstrating LangGraph integration with Agentspan, from hello-world to advanced multi-agent systems.
 
+## Prerequisites
+
+```bash
+uv pip install langgraph langchain-core langchain-openai agentspan
+```
+
+| Package | Required | Notes |
+|---------|----------|-------|
+| `langgraph` | Yes | `StateGraph`, `create_react_agent`, `ToolNode`, `tools_condition` |
+| `langchain-core` | Yes | Messages, tools, documents |
+| `langchain-openai` | Yes | `ChatOpenAI` LLM provider |
+| `langchain-anthropic` | Optional | Only for `43_react_agent_multi_model.py` (requires `ANTHROPIC_API_KEY`) |
+| `pydantic` | Some examples | Used for structured output (08) |
+
 ## Quick Start
 
 ```bash
@@ -29,7 +43,7 @@ uv run python examples/langgraph/01_hello_world.py
 | # | File | Topic |
 |---|------|-------|
 | 06 | `06_conditional_routing.py` | Conditional edges with routing functions |
-| 07 | `07_system_prompt.py` | Custom system prompt via `state_modifier` |
+| 07 | `07_system_prompt.py` | Custom system prompt via `prompt` parameter |
 | 08 | `08_structured_output.py` | Structured/JSON output with `with_structured_output` |
 | 09 | `09_math_agent.py` | Math tools (calculator, statistics) |
 | 10 | `10_research_agent.py` | Multi-step research pipeline |

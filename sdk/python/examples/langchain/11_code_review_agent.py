@@ -115,7 +115,7 @@ graph = create_agent(
     llm,
     tools=[check_syntax, check_complexity, check_naming_conventions, check_docstrings],
     name="code_review_agent",
-    state_modifier=CODE_REVIEWER_SYSTEM,
+    system_prompt=CODE_REVIEWER_SYSTEM,
 )
 
 SAMPLE_CODE = '''

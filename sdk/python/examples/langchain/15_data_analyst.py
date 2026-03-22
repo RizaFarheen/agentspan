@@ -145,7 +145,7 @@ graph = create_agent(
     llm,
     tools=[describe_dataset, aggregate_by, find_top_performers, calculate_growth],
     name="data_analyst_agent",
-    state_modifier=ANALYST_SYSTEM,
+    system_prompt=ANALYST_SYSTEM,
 )
 
 if __name__ == "__main__":

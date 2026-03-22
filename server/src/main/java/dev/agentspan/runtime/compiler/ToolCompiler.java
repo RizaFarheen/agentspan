@@ -62,6 +62,7 @@ public class ToolCompiler {
             Map.entry("http", "HTTP"),
             Map.entry("mcp", "CALL_MCP_TOOL"),
             Map.entry("agent_tool", "SUB_WORKFLOW"),
+            Map.entry("human", "HUMAN"),
             Map.entry("generate_image", "GENERATE_IMAGE"),
             Map.entry("generate_audio", "GENERATE_AUDIO"),
             Map.entry("generate_video", "GENERATE_VIDEO"),
@@ -227,11 +228,12 @@ public class ToolCompiler {
         Map<String, Object> agentToolConfig = new LinkedHashMap<>();
         Map<String, Object> ragConfig = new LinkedHashMap<>();
         Map<String, Object> cliConfig = new LinkedHashMap<>();
+        Map<String, Object> humanConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             Set<String> serverSideTypes = Set.of("http", "mcp", "agent_tool", "cli",
                     "generate_image", "generate_audio", "generate_video", "generate_pdf",
-                    "rag_index", "rag_search");
+                    "rag_index", "rag_search", "human");
 
             for (ToolConfig tool : tools) {
                 String toolType = tool.getToolType() != null ? tool.getToolType() : "worker";
@@ -283,6 +285,11 @@ public class ToolCompiler {
                     ragEntry.put("taskType", taskType);
                     ragEntry.put("defaults", cfgCopy);
                     ragConfig.put(tool.getName(), ragEntry);
+                } else if ("human".equals(toolType)) {
+                    Map<String, Object> humanEntry = new LinkedHashMap<>();
+                    humanEntry.put("displayName", agentName + " — " + tool.getName());
+                    humanEntry.put("description", tool.getDescription());
+                    humanConfig.put(tool.getName(), humanEntry);
                 }
             }
         }
@@ -293,8 +300,9 @@ public class ToolCompiler {
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
         String cliJson = JavaScriptBuilder.toJson(cliConfig);
+        String humanJson = JavaScriptBuilder.toJson(humanConfig);
 
-        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson);
+        String script = JavaScriptBuilder.enrichToolsScript(httpJson, mcpJson, mediaJson, agentToolJson, ragJson, cliJson, humanJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -833,6 +841,7 @@ public class ToolCompiler {
         Map<String, Object> mediaConfig = new LinkedHashMap<>();
         Map<String, Object> agentToolConfig = new LinkedHashMap<>();
         Map<String, Object> ragConfig = new LinkedHashMap<>();
+        Map<String, Object> humanConfig = new LinkedHashMap<>();
 
         if (tools != null) {
             for (ToolConfig tool : tools) {
@@ -870,6 +879,11 @@ public class ToolCompiler {
                     ragEntry.put("taskType", taskType);
                     ragEntry.put("defaults", cfgCopy);
                     ragConfig.put(tool.getName(), ragEntry);
+                } else if ("human".equals(toolType)) {
+                    Map<String, Object> humanEntry = new LinkedHashMap<>();
+                    humanEntry.put("displayName", agentName + " — " + tool.getName());
+                    humanEntry.put("description", tool.getDescription());
+                    humanConfig.put(tool.getName(), humanEntry);
                 }
                 // MCP config comes from runtime — skip here
             }
@@ -879,7 +893,8 @@ public class ToolCompiler {
         String mediaJson = JavaScriptBuilder.toJson(mediaConfig);
         String agentToolJson = JavaScriptBuilder.toJson(agentToolConfig);
         String ragJson = JavaScriptBuilder.toJson(ragConfig);
-        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson);
+        String humanJson = JavaScriptBuilder.toJson(humanConfig);
+        String script = JavaScriptBuilder.enrichToolsScriptDynamic(httpJson, mediaJson, agentToolJson, ragJson, humanJson);
 
         String enrichRef = agentName + "_" + p + "enrich_tools";
 
@@ -966,93 +981,24 @@ public class ToolCompiler {
     private List<WorkflowTask> buildApprovalCaseTasksDynamic(String agentName, String llmRef,
                                                                String model, List<ToolConfig> tools,
                                                                String mcpConfigRef) {
-        // This mirrors buildToolCallWithApproval's needs_approval case
-        // but uses buildForkChainDynamic for the fork chains
-        List<WorkflowTask> tasks = new ArrayList<>();
-
         String humanRef = agentName + "_approval_human";
-        WorkflowTask humanTask = new WorkflowTask();
-        humanTask.setType("HUMAN");
-        humanTask.setTaskReferenceName(humanRef);
-        Map<String, Object> humanInputs = new LinkedHashMap<>();
-        humanInputs.put("__humanTaskDefinition", Map.of(
-            "assignmentCompletionStrategy", "LEAVE_OPEN",
-            "displayName", agentName + " Tool Approval",
-            "userFormTemplate", Map.of("version", 0)
-        ));
-        humanInputs.put("tool_calls", "${" + llmRef + ".output.toolCalls}");
-        humanTask.setInputParameters(humanInputs);
-        tasks.add(humanTask);
+        HumanTaskBuilder.Pipeline pipeline = HumanTaskBuilder
+            .create(humanRef, agentName + " Tool Approval")
+            .contextInput("tool_calls", "${" + llmRef + ".output.toolCalls}")
+            .approvalValidation(model)
+            .build();
 
-        String validateRef = agentName + "_approval_validate";
-        WorkflowTask validateTask = new WorkflowTask();
-        validateTask.setTaskReferenceName(validateRef);
-        validateTask.setType("INLINE");
-        Map<String, Object> validateInputs = new LinkedHashMap<>();
-        validateInputs.put("evaluatorType", "graaljs");
-        validateInputs.put("expression", JavaScriptBuilder.approvalValidateScript());
-        validateInputs.put("human_output", "${" + humanRef + ".output}");
-        validateTask.setInputParameters(validateInputs);
-        tasks.add(validateTask);
+        List<WorkflowTask> tasks = new ArrayList<>(pipeline.getTasks());
 
-        // Normalize switch
-        WorkflowTask normalizeSwitch = new WorkflowTask();
-        normalizeSwitch.setType("SWITCH");
-        normalizeSwitch.setTaskReferenceName(agentName + "_approval_normalize_switch");
-        normalizeSwitch.setEvaluatorType("graaljs");
-        normalizeSwitch.setExpression("$.needs_normalize == true ? 'needs_normalize' : 'skip'");
-        normalizeSwitch.setInputParameters(Map.of("needs_normalize",
-            "${" + validateRef + ".output.result.needs_normalize}"));
-
-        String normalizerRef = agentName + "_approval_normalizer";
-        WorkflowTask normalizerTask = new WorkflowTask();
-        normalizerTask.setName("LLM_CHAT_COMPLETE");
-        normalizerTask.setTaskReferenceName(normalizerRef);
-        normalizerTask.setType("LLM_CHAT_COMPLETE");
-        Map<String, Object> normalizerInputs = new LinkedHashMap<>();
-        if (model != null && !model.isEmpty()) {
-            ModelParser.ParsedModel parsed = ModelParser.parse(model);
-            normalizerInputs.put("llmProvider", parsed.getProvider());
-            normalizerInputs.put("model", parsed.getModel());
-        }
-        normalizerInputs.put("messages", List.of(
-            Map.of("role", "system", "message",
-                "Convert the human's response into a JSON object:\n"
-                + "{\"approved\": <boolean>, \"reason\": <string or null>}\n\n"
-                + "Output ONLY the JSON object."),
-            Map.of("role", "user", "message", "${" + validateRef + ".output.result.raw_text}")
-        ));
-        normalizerInputs.put("temperature", 0);
-        normalizerInputs.put("jsonOutput", true);
-        normalizerTask.setInputParameters(normalizerInputs);
-
-        normalizeSwitch.setDecisionCases(Map.of("needs_normalize", List.of(normalizerTask)));
-        WorkflowTask noop = new WorkflowTask();
-        noop.setType("SET_VARIABLE");
-        noop.setTaskReferenceName(agentName + "_approval_normalize_noop");
-        noop.setInputParameters(Map.of("_normalize_skipped", true));
-        normalizeSwitch.setDefaultCase(List.of(noop));
-        tasks.add(normalizeSwitch);
-
-        String approvalCheckRef = agentName + "_approval_check";
-        WorkflowTask approvalCheckTask = new WorkflowTask();
-        approvalCheckTask.setTaskReferenceName(approvalCheckRef);
-        approvalCheckTask.setType("INLINE");
-        Map<String, Object> checkResultInputs = new LinkedHashMap<>();
-        checkResultInputs.put("evaluatorType", "graaljs");
-        checkResultInputs.put("expression", JavaScriptBuilder.approvalCheckScript());
-        checkResultInputs.put("validated", "${" + validateRef + ".output.result}");
-        checkResultInputs.put("normalized", "${" + normalizerRef + ".output.result}");
-        approvalCheckTask.setInputParameters(checkResultInputs);
-        tasks.add(approvalCheckTask);
-
+        // Approval routing SWITCH (approve → execute tools, reject → terminate)
+        String outputRef = pipeline.getOutputRef();
         WorkflowTask approvalRoute = new WorkflowTask();
         approvalRoute.setType("SWITCH");
         approvalRoute.setTaskReferenceName(agentName + "_approval_route");
         approvalRoute.setEvaluatorType("graaljs");
         approvalRoute.setExpression("$.approved == true ? 'approved' : 'rejected'");
         approvalRoute.setInputParameters(Map.of("approved",
-            "${" + approvalCheckRef + ".output.result.approved}"));
+            "${" + outputRef + ".approved}"));
 
         List<WorkflowTask> approvedChain = buildForkChainDynamic(agentName, llmRef, tools, "approved", mcpConfigRef);
         approvalRoute.setDecisionCases(Map.of("approved", approvedChain));
@@ -1061,15 +1007,15 @@ public class ToolCompiler {
         setRejectionOutput.setType("SET_VARIABLE");
         setRejectionOutput.setTaskReferenceName(agentName + "_approval_reject_output");
         setRejectionOutput.setInputParameters(Map.of(
-            "rejectedToolCall", "${" + approvalCheckRef + ".output.result.rejected_tool}",
-            "rejectionReason", "${" + approvalCheckRef + ".output.result.reason}",
+            "rejectedToolCall", "${" + outputRef + ".rejected_tool}",
+            "rejectionReason", "${" + outputRef + ".reason}",
             "finishReason", "rejected"));
 
         WorkflowTask rejectTerminate = new WorkflowTask();
         rejectTerminate.setType("TERMINATE");
         rejectTerminate.setTaskReferenceName(agentName + "_approval_reject");
         rejectTerminate.setInputParameters(Map.of(
-            "terminationReason", "${" + approvalCheckRef + ".output.result.reason}",
+            "terminationReason", "${" + outputRef + ".reason}",
             "terminationStatus", "COMPLETED"));
         approvalRoute.setDefaultCase(List.of(setRejectionOutput, rejectTerminate));
         tasks.add(approvalRoute);
@@ -1269,121 +1215,17 @@ public class ToolCompiler {
         Map<String, List<WorkflowTask>> gateCases = new LinkedHashMap<>();
 
         // ── "needs_approval" case ──
-        List<WorkflowTask> approvalCaseTasks = new ArrayList<>();
-
-        // HumanTask
         String humanRef = agentName + "_approval_human";
-        WorkflowTask humanTask = new WorkflowTask();
-        humanTask.setType("HUMAN");
-        humanTask.setTaskReferenceName(humanRef);
-        Map<String, Object> humanInputs = new LinkedHashMap<>();
-        humanInputs.put("__humanTaskDefinition", Map.of(
-            "assignmentCompletionStrategy", "LEAVE_OPEN",
-            "displayName", agentName + " Tool Approval",
-            "userFormTemplate", Map.of("version", 0)
-        ));
-        humanInputs.put("response_schema", Map.of(
-            "type", "object",
-            "required", List.of("approved"),
-            "properties", Map.of(
-                "approved", Map.of(
-                    "type", "boolean",
-                    "title", "Approved",
-                    "description", "Approve or reject the tool execution"
-                ),
-                "reason", Map.of(
-                    "type", "string",
-                    "title", "Reason",
-                    "description", "Reason for rejection"
-                )
-            )
-        ));
-        humanInputs.put("response_ui_schema", Map.of(
-            "ui:order", List.of("approved", "reason"),
-            "approved", Map.of("ui:widget", "radio"),
-            "reason", Map.of("ui:widget", "textarea")
-        ));
-        humanInputs.put("tool_calls", "${" + llmRef + ".output.toolCalls}");
-        humanTask.setInputParameters(humanInputs);
-        approvalCaseTasks.add(humanTask);
+        HumanTaskBuilder.Pipeline pipeline = HumanTaskBuilder
+            .create(humanRef, agentName + " Tool Approval")
+            .responseSchema(HumanTaskBuilder.approvalResponseSchema())
+            .responseUiSchema(HumanTaskBuilder.approvalResponseUiSchema())
+            .contextInput("tool_calls", "${" + llmRef + ".output.toolCalls}")
+            .approvalValidation(model)
+            .build();
 
-        // Validate InlineTask
-        String validateRef = agentName + "_approval_validate";
-        WorkflowTask validateTask = new WorkflowTask();
-        validateTask.setTaskReferenceName(validateRef);
-        validateTask.setType("INLINE");
-        Map<String, Object> validateInputs = new LinkedHashMap<>();
-        validateInputs.put("evaluatorType", "graaljs");
-        validateInputs.put("expression", JavaScriptBuilder.approvalValidateScript());
-        validateInputs.put("human_output", "${" + humanRef + ".output}");
-        validateTask.setInputParameters(validateInputs);
-        approvalCaseTasks.add(validateTask);
-
-        // Normalize SwitchTask
-        String normalizeSwitchRef = agentName + "_approval_normalize_switch";
-        WorkflowTask normalizeSwitch = new WorkflowTask();
-        normalizeSwitch.setType("SWITCH");
-        normalizeSwitch.setTaskReferenceName(normalizeSwitchRef);
-        normalizeSwitch.setEvaluatorType("graaljs");
-        normalizeSwitch.setExpression("$.needs_normalize == true ? 'needs_normalize' : 'skip'");
-        Map<String, Object> normalizeSwitchInputs = new LinkedHashMap<>();
-        normalizeSwitchInputs.put("needs_normalize",
-            "${" + validateRef + ".output.result.needs_normalize}");
-        normalizeSwitch.setInputParameters(normalizeSwitchInputs);
-
-        // needs_normalize case: LLM normalizer
-        String normalizerRef = agentName + "_approval_normalizer";
-        WorkflowTask normalizerTask = new WorkflowTask();
-        normalizerTask.setName("LLM_CHAT_COMPLETE");
-        normalizerTask.setTaskReferenceName(normalizerRef);
-        normalizerTask.setType("LLM_CHAT_COMPLETE");
-        Map<String, Object> normalizerInputs = new LinkedHashMap<>();
-        if (model != null && !model.isEmpty()) {
-            ModelParser.ParsedModel parsed = ModelParser.parse(model);
-            normalizerInputs.put("llmProvider", parsed.getProvider());
-            normalizerInputs.put("model", parsed.getModel());
-        }
-        normalizerInputs.put("messages", List.of(
-            Map.of("role", "system", "message",
-                "Convert the human's response into a JSON object:\n"
-                + "{\"approved\": <boolean>, \"reason\": <string or null>}\n\n"
-                + "Rules:\n"
-                + "- approved=true for: approve, yes, ok, LGTM, looks good, go ahead, etc.\n"
-                + "- approved=false for: reject, no, deny, not approved, etc.\n"
-                + "- If they give a reason, put it in reason.\n"
-                + "- If input is already valid JSON with these fields, return as-is.\n"
-                + "Output ONLY the JSON object."),
-            Map.of("role", "user", "message",
-                "${" + validateRef + ".output.result.raw_text}")
-        ));
-        normalizerInputs.put("temperature", 0);
-        normalizerInputs.put("jsonOutput", true);
-        normalizerTask.setInputParameters(normalizerInputs);
-
-        Map<String, List<WorkflowTask>> normalizeCases = new LinkedHashMap<>();
-        normalizeCases.put("needs_normalize", List.of(normalizerTask));
-        normalizeSwitch.setDecisionCases(normalizeCases);
-
-        // default: no-op
-        WorkflowTask normalizeNoop = new WorkflowTask();
-        normalizeNoop.setType("SET_VARIABLE");
-        normalizeNoop.setTaskReferenceName(agentName + "_approval_normalize_noop");
-        normalizeNoop.setInputParameters(Map.of("_normalize_skipped", true));
-        normalizeSwitch.setDefaultCase(List.of(normalizeNoop));
-        approvalCaseTasks.add(normalizeSwitch);
-
-        // Approval check InlineTask
-        String approvalCheckRef = agentName + "_approval_check";
-        WorkflowTask approvalCheckTask = new WorkflowTask();
-        approvalCheckTask.setTaskReferenceName(approvalCheckRef);
-        approvalCheckTask.setType("INLINE");
-        Map<String, Object> checkResultInputs = new LinkedHashMap<>();
-        checkResultInputs.put("evaluatorType", "graaljs");
-        checkResultInputs.put("expression", JavaScriptBuilder.approvalCheckScript());
-        checkResultInputs.put("validated", "${" + validateRef + ".output.result}");
-        checkResultInputs.put("normalized", "${" + normalizerRef + ".output.result}");
-        approvalCheckTask.setInputParameters(checkResultInputs);
-        approvalCaseTasks.add(approvalCheckTask);
+        List<WorkflowTask> approvalCaseTasks = new ArrayList<>(pipeline.getTasks());
+        String outputRef = pipeline.getOutputRef();
 
         // Approval routing SwitchTask
         WorkflowTask approvalRoute = new WorkflowTask();
@@ -1391,15 +1233,13 @@ public class ToolCompiler {
         approvalRoute.setTaskReferenceName(agentName + "_approval_route");
         approvalRoute.setEvaluatorType("graaljs");
         approvalRoute.setExpression("$.approved == true ? 'approved' : 'rejected'");
-        Map<String, Object> routeInputs = new LinkedHashMap<>();
-        routeInputs.put("approved", "${" + approvalCheckRef + ".output.result.approved}");
-        approvalRoute.setInputParameters(routeInputs);
+        approvalRoute.setInputParameters(Map.of("approved",
+            "${" + outputRef + ".approved}"));
 
         // "approved" case: store human feedback, then execute tools
         List<WorkflowTask> approvedTasks = new ArrayList<>();
 
         // Format and store custom data from human response in workflow variable.
-        // The INLINE task converts the extra fields into a readable message for the LLM.
         String formatFeedbackRef = agentName + "_approval_format_feedback";
         WorkflowTask formatFeedback = new WorkflowTask();
         formatFeedback.setTaskReferenceName(formatFeedbackRef);
@@ -1407,8 +1247,8 @@ public class ToolCompiler {
         Map<String, Object> formatInputs = new LinkedHashMap<>();
         formatInputs.put("evaluatorType", "graaljs");
         formatInputs.put("expression", JavaScriptBuilder.formatHumanFeedbackScript());
-        formatInputs.put("extra", "${" + approvalCheckRef + ".output.result.extra}");
-        formatInputs.put("reason", "${" + approvalCheckRef + ".output.result.reason}");
+        formatInputs.put("extra", "${" + outputRef + ".extra}");
+        formatInputs.put("reason", "${" + outputRef + ".reason}");
         formatFeedback.setInputParameters(formatInputs);
         approvedTasks.add(formatFeedback);
 
@@ -1429,17 +1269,16 @@ public class ToolCompiler {
         setRejectionOutput2.setType("SET_VARIABLE");
         setRejectionOutput2.setTaskReferenceName(agentName + "_approval_reject_output");
         setRejectionOutput2.setInputParameters(Map.of(
-            "rejectedToolCall", "${" + approvalCheckRef + ".output.result.rejected_tool}",
-            "rejectionReason", "${" + approvalCheckRef + ".output.result.reason}",
+            "rejectedToolCall", "${" + outputRef + ".rejected_tool}",
+            "rejectionReason", "${" + outputRef + ".reason}",
             "finishReason", "rejected"));
 
         WorkflowTask rejectTerminate = new WorkflowTask();
         rejectTerminate.setType("TERMINATE");
         rejectTerminate.setTaskReferenceName(agentName + "_approval_reject");
-        Map<String, Object> rejectInputs = new LinkedHashMap<>();
-        rejectInputs.put("terminationReason", "${" + approvalCheckRef + ".output.result.reason}");
-        rejectInputs.put("terminationStatus", "COMPLETED");
-        rejectTerminate.setInputParameters(rejectInputs);
+        rejectTerminate.setInputParameters(Map.of(
+            "terminationReason", "${" + outputRef + ".reason}",
+            "terminationStatus", "COMPLETED"));
         approvalRoute.setDefaultCase(List.of(setRejectionOutput2, rejectTerminate));
         approvalCaseTasks.add(approvalRoute);
 

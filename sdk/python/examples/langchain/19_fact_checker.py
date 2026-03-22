@@ -159,7 +159,7 @@ graph = create_agent(
     llm,
     tools=[look_up_fact, check_multiple_claims, assess_claim_plausibility],
     name="fact_checker_agent",
-    state_modifier=FACT_CHECKER_SYSTEM,
+    system_prompt=FACT_CHECKER_SYSTEM,
 )
 
 if __name__ == "__main__":

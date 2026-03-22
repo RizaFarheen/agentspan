@@ -27,7 +27,7 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 # ── Set up an in-memory SQLite database ───────────────────────────────────────
 
 def _get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.executescript("""
@@ -142,7 +142,7 @@ graph = create_agent(
     llm,
     tools=[get_schema, generate_sql, run_sql_query],
     name="sql_agent",
-    state_modifier=SQL_SYSTEM,
+    system_prompt=SQL_SYSTEM,
 )
 
 if __name__ == "__main__":

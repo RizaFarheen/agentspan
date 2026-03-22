@@ -2303,13 +2303,16 @@ class AgentRuntime:
             len(workers),
         )
 
-        # Register workers.
-        # Passthrough path: single worker with func=None (whole graph runs in one task).
-        # Full extraction path: individual tool workers with real callables (like OpenAI/ADK).
+        # Register workers — three paths:
+        # 1. Passthrough: single worker with func=None (whole graph runs in one task)
+        # 2. Graph-structure: pre-wrapped node/router workers (_pre_wrapped=True)
+        # 3. Full extraction: individual tool workers with raw callables
         if workers and workers[0].func is None:
             worker = workers[0]
             worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
             self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
         else:
             self._register_framework_workers(workers)
 
@@ -2380,6 +2383,8 @@ class AgentRuntime:
             worker = workers[0]
             worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
             self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
         else:
             self._register_framework_workers(workers)
 
@@ -2505,6 +2510,85 @@ class AgentRuntime:
                     self._worker_manager.start()
                     self._workers_started = True
                 elif is_new:
+                    self._worker_manager.start()
+
+    def _register_graph_workers(self, raw_config: dict, workers: list) -> None:
+        """Register pre-wrapped graph-structure workers (node + router workers).
+
+        Unlike _register_framework_workers, this does NOT call make_tool_worker —
+        the workers are pre-wrapped Task→TaskResult functions built by
+        make_node_worker / make_router_worker in langgraph.py.
+
+        Uses _default_task_def (120s) since each node is a quick task, not a
+        long-running passthrough.
+        """
+        if not workers:
+            return
+
+        from agentspan.agents.frameworks.langgraph import (
+            make_llm_finish_worker,
+            make_llm_prep_worker,
+            make_node_worker,
+            make_router_worker,
+            make_subgraph_finish_worker,
+            make_subgraph_prep_worker,
+        )
+        from conductor.client.worker.worker_task import worker_task
+
+        graph_info = raw_config.get("_graph", {})
+        router_refs = {
+            ce["_router_ref"]
+            for ce in graph_info.get("conditional_edges", [])
+            if "_router_ref" in ce
+        }
+
+        for w in workers:
+            extra = w._extra or {}
+            llm_role = extra.get("llm_role")
+            llm_var_name = extra.get("llm_var_name")
+
+            subgraph_role = extra.get("subgraph_role")
+            subgraph_var_name = extra.get("subgraph_var_name")
+
+            if subgraph_role == "prep" and subgraph_var_name:
+                wrapped = make_subgraph_prep_worker(w.func, w.name, subgraph_var_name)
+            elif subgraph_role == "finish" and subgraph_var_name:
+                wrapped = make_subgraph_finish_worker(w.func, w.name, subgraph_var_name)
+            elif llm_role == "prep" and llm_var_name:
+                wrapped = make_llm_prep_worker(w.func, w.name, llm_var_name)
+            elif llm_role == "finish" and llm_var_name:
+                wrapped = make_llm_finish_worker(w.func, w.name, llm_var_name)
+            elif w.name in router_refs:
+                is_dynamic = extra.get("is_dynamic_fanout", False)
+                wrapped = make_router_worker(
+                    w.func, w.name, is_dynamic_fanout=is_dynamic
+                )
+            else:
+                wrapped = make_node_worker(w.func, w.name)
+
+            worker_task(
+                task_definition_name=w.name,
+                task_def=_default_task_def(w.name),
+                register_task_def=True,
+                overwrite_task_def=True,
+            )(wrapped)
+            logger.debug("Registered graph worker '%s' (llm_role=%s)", w.name, llm_role)
+
+        if self._config.auto_start_workers:
+            with self._worker_start_lock:
+                new_names = {w.name for w in workers}
+                new_workers = new_names - self._registered_tool_names
+                if new_workers:
+                    logger.info(
+                        "New graph workers detected (%s), starting workers",
+                        ", ".join(sorted(new_workers)),
+                    )
+                    self._registered_tool_names.update(new_names)
+                if not self._workers_started:
+                    logger.debug("Starting workers for graph-structure agent")
+                    self._worker_manager.start()
+                    self._workers_started = True
+                elif new_workers:
                     self._worker_manager.start()
 
     def _build_passthrough_func(self, agent_obj: Any, framework: str, name: str) -> Any:
@@ -3717,6 +3801,8 @@ class AgentRuntime:
             worker = workers[0]
             worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
             self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
         else:
             self._register_framework_workers(workers)
 
@@ -3805,6 +3891,8 @@ class AgentRuntime:
             worker = workers[0]
             worker.func = self._build_passthrough_func(agent_obj, framework, worker.name)
             self._register_passthrough_worker(worker)
+        elif "_graph" in raw_config:
+            self._register_graph_workers(raw_config, workers)
         else:
             self._register_framework_workers(workers)
 

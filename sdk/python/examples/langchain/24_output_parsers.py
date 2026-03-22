@@ -128,7 +128,7 @@ graph = create_agent(
     llm,
     tools=[extract_keywords_list, clean_text_extraction, parse_product_review],
     name="output_parsers_agent",
-    state_modifier=PARSER_SYSTEM,
+    system_prompt=PARSER_SYSTEM,
 )
 
 SAMPLE_REVIEW = """

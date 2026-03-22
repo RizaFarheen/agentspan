@@ -73,6 +73,8 @@ class WorkerInfo:
     description: str
     input_schema: Dict[str, Any]
     func: Callable[..., Any]
+    _pre_wrapped: bool = False  # True if func is already a Task→TaskResult worker
+    _extra: Optional[Dict[str, Any]] = None  # Extra metadata (e.g. llm_var_name for LLM intercept)
 
 
 # ── Generic serializer ───────────────────────────────────────────────

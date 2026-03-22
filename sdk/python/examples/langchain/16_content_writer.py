@@ -125,7 +125,7 @@ graph = create_agent(
     llm,
     tools=[generate_blog_post, generate_social_post, generate_email_subject_lines, check_readability],
     name="content_writer_agent",
-    state_modifier=WRITER_SYSTEM,
+    system_prompt=WRITER_SYSTEM,
 )
 
 if __name__ == "__main__":

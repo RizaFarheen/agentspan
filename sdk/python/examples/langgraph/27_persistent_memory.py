@@ -52,26 +52,20 @@ checkpointer = MemorySaver()
 graph = builder.compile(name="persistent_memory_chatbot", checkpointer=checkpointer)
 
 if __name__ == "__main__":
-    # Two separate users each have isolated history tracked by thread_id
-    alice_thread = {"configurable": {"thread_id": "alice"}}
-    bob_thread = {"configurable": {"thread_id": "bob"}}
+    # Each turn runs as a Conductor workflow. The graph (chat node with LLM)
+    # is compiled into prep/LLM_CHAT_COMPLETE/finish tasks.
+    # session_id provides per-user isolation on the server side.
+    with AgentRuntime() as runtime:
+        print("=== Alice's conversation ===")
+        for msg in ["Hi, my name is Alice!", "What's my name?", "What did I just tell you?"]:
+            result = runtime.run(graph, msg, session_id="alice")
+            print(f"Alice: {msg}")
+            result.print_result()
+            print()
 
-    print("=== Alice's conversation ===")
-    for msg in ["Hi, my name is Alice!", "What's my name?", "What did I just tell you?"]:
-        result = graph.invoke(
-            {"messages": [{"role": "user", "content": msg}]},
-            alice_thread,
-        )
-        last = result["messages"][-1]["content"]
-        print(f"Alice: {msg}")
-        print(f"Bot:   {last}\n")
-
-    print("=== Bob's conversation (separate memory) ===")
-    for msg in ["I'm Bob. I love hiking.", "What hobby did I mention?"]:
-        result = graph.invoke(
-            {"messages": [{"role": "user", "content": msg}]},
-            bob_thread,
-        )
-        last = result["messages"][-1]["content"]
-        print(f"Bob:  {msg}")
-        print(f"Bot:  {last}\n")
+        print("=== Bob's conversation (separate session) ===")
+        for msg in ["I'm Bob. I love hiking.", "What hobby did I mention?"]:
+            result = runtime.run(graph, msg, session_id="bob")
+            print(f"Bob:  {msg}")
+            result.print_result()
+            print()

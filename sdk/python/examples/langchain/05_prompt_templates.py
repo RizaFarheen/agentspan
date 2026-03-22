@@ -87,7 +87,7 @@ graph = create_agent(
     llm,
     tools=[explain_concept, recommend_tool],
     name="prompt_template_agent",
-    state_modifier=filled_system,
+    system_prompt=filled_system,
 )
 
 if __name__ == "__main__":

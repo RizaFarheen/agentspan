@@ -122,7 +122,7 @@ graph = create_agent(
     llm,
     tools=[detect_language, translate_text, back_translate_check, cultural_adaptation],
     name="translation_agent",
-    state_modifier=TRANSLATION_SYSTEM,
+    system_prompt=TRANSLATION_SYSTEM,
 )
 
 if __name__ == "__main__":

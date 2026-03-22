@@ -137,7 +137,7 @@ graph = create_agent(
     llm,
     tools=[search_papers, get_field_statistics, summarize_paper, format_citations],
     name="research_assistant_agent",
-    state_modifier=RESEARCH_SYSTEM,
+    system_prompt=RESEARCH_SYSTEM,
 )
 
 if __name__ == "__main__":

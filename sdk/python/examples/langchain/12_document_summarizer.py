@@ -82,7 +82,7 @@ graph = create_agent(
     llm,
     tools=[brief_summary, bullet_summary, extract_action_items, extract_decisions],
     name="document_summarizer_agent",
-    state_modifier=SUMMARIZER_SYSTEM,
+    system_prompt=SUMMARIZER_SYSTEM,
 )
 
 MEETING_NOTES = """

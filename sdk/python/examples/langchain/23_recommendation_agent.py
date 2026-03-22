@@ -145,7 +145,7 @@ graph = create_agent(
     llm,
     tools=[get_book_recommendations, get_course_recommendations, explain_recommendation],
     name="recommendation_agent",
-    state_modifier=RECOMMENDER_SYSTEM,
+    system_prompt=RECOMMENDER_SYSTEM,
 )
 
 if __name__ == "__main__":

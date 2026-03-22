@@ -126,7 +126,7 @@ graph = create_agent(
     llm,
     tools=[classify_sentiment, aspect_sentiment, extract_key_phrases, batch_sentiment_summary],
     name="sentiment_analysis_agent",
-    state_modifier=SENTIMENT_SYSTEM,
+    system_prompt=SENTIMENT_SYSTEM,
 )
 
 SAMPLE_REVIEW = (
