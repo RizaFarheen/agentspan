@@ -10,6 +10,7 @@ def _patch_runtime():
     from agentspan.agents.runtime.runtime import AgentRuntime
     from validation.native.openai_runner import run_openai_native, run_openai_native_async
     from validation.native.langgraph_runner import run_langgraph_native, run_langchain_native
+    from validation.native.adk_runner import run_adk_native
 
     def _init_noop(self, **kwargs):
         pass
@@ -23,6 +24,8 @@ def _patch_runtime():
             return run_langgraph_native(agent, str(prompt), session_id=session_id)
         if fw == "langchain":
             return run_langchain_native(agent, str(prompt), session_id=session_id)
+        if fw == "google_adk":
+            return run_adk_native(agent, str(prompt))
         raise ValueError(f"Native mode unsupported for framework: {fw!r}")
 
     async def _run_native_async(self, agent, prompt="", **kwargs):
@@ -35,6 +38,9 @@ def _patch_runtime():
             import asyncio
             runner = run_langgraph_native if fw == "langgraph" else run_langchain_native
             return await asyncio.to_thread(runner, agent, str(prompt), session_id=session_id)
+        if fw == "google_adk":
+            import asyncio
+            return await asyncio.to_thread(run_adk_native, agent, str(prompt))
         raise ValueError(f"Native mode unsupported for framework: {fw!r}")
 
     def _noop(self, *args, **kwargs):
