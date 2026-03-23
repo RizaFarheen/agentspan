@@ -203,6 +203,16 @@ public class AgentService {
             try {
                 long timeoutSeconds = config.getTimeoutSeconds() > 0 ? config.getTimeoutSeconds() : 0;
                 List<String> declaredNames = extractDeclaredCredentials(config);
+                // Also include credentials from the start request payload
+                // (used by framework agents and run(credentials=[...]) calls)
+                Object inputCreds = input.get("credentials");
+                if (inputCreds instanceof List<?> credList) {
+                    for (Object c : credList) {
+                        if (c instanceof String s && !declaredNames.contains(s)) {
+                            declaredNames.add(s);
+                        }
+                    }
+                }
                 User currentUser = RequestContextHolder.get()
                     .map(ctx -> ctx.getUser())
                     .orElse(null);

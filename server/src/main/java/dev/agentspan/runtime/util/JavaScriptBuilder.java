@@ -198,6 +198,7 @@ public class JavaScriptBuilder {
             "        contentType: httpCfg[n].contentType || 'application/json'," +
             "        connectionTimeOut: 30000," +
             "        readTimeOut: 30000}};" +
+            "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
             "    } else if (mcpCfg[n]) {" +
             "      t.type = 'CALL_MCP_TOOL';" +
             "      t.name = 'call_mcp_tool';" +
@@ -206,6 +207,7 @@ public class JavaScriptBuilder {
             "        method: n," +
             "        arguments: tc.inputParameters || {}," +
             "        headers: mcpCfg[n].headers || {}};" +
+            "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
             "    } else if (agentToolCfg[n]) {" +
             "      t.type = 'SUB_WORKFLOW';" +
             "      t.name = agentToolCfg[n].workflowName;" +
@@ -524,6 +526,7 @@ public class JavaScriptBuilder {
             "        contentType: httpCfg[n].contentType || 'application/json'," +
             "        connectionTimeOut: 30000," +
             "        readTimeOut: 30000}};" +
+            "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
             "    } else if (mcpCfg[n]) {" +
             "      t.type = 'CALL_MCP_TOOL';" +
             "      t.name = 'call_mcp_tool';" +
@@ -532,6 +535,7 @@ public class JavaScriptBuilder {
             "        method: n," +
             "        arguments: tc.inputParameters || {}," +
             "        headers: mcpCfg[n].headers || {}};" +
+            "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
             "    } else if (agentToolCfg[n]) {" +
             "      t.type = 'SUB_WORKFLOW';" +
             "      t.name = agentToolCfg[n].workflowName;" +

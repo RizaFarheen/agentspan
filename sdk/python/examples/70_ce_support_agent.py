@@ -513,6 +513,8 @@ def search_github_code(query: str, repo: Optional[str] = None) -> dict:
     url = "https://api.github.com/search/code"
     params = {"q": search_query, "per_page": 10}
     resp = requests.get(url, headers=headers, params=params, timeout=15)
+    if resp.status_code == 403:
+        return {"error": "GitHub code search requires a token with 'repo' scope. Got 403 Forbidden.", "total_count": 0, "files": []}
     resp.raise_for_status()
     items = resp.json().get("items", [])
     return {

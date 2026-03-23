@@ -12,6 +12,7 @@ import inspect
 import json
 import logging
 import os
+import threading
 
 logger = logging.getLogger("agentspan.agents.dispatch")
 
@@ -182,6 +183,11 @@ _tool_def_registry = {}
 # Server-side tool registry: tool_name -> {"type": "http"|"mcp", "config": {...}}
 _tool_type_registry = {}
 
+# Workflow-level credential names: workflow_instance_id -> [credential_names]
+# Fallback for framework-extracted tools that have no tool_def.
+_workflow_credentials = {}
+_workflow_credentials_lock = threading.Lock()
+
 # MCP server configs: [{"server_url": ..., "headers": ...}]
 _mcp_servers = []
 
@@ -345,6 +351,10 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             # 3. _tool_def attribute on tool_func (works everywhere)
             _td = _tool_def_registry.get(tool_name) or tool_def
             credential_names = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
+            # Fallback: workflow-level credentials (for framework-extracted tools)
+            if not credential_names and task.workflow_instance_id:
+                with _workflow_credentials_lock:
+                    credential_names = list(_workflow_credentials.get(task.workflow_instance_id, []))
             resolved_credentials = {}
             logger.debug("Credential dispatch: tool=%s cred_names=%s td=%s", tool_name, credential_names, _td is not None)
             if credential_names:

@@ -1096,6 +1096,36 @@ E2E tests run against a live Agentspan server at `AGENTSPAN_SERVER_URL` (default
 
 All unit and e2e tests must pass.
 
+### Credential Support by Tool Type
+
+| Tool Type | Declaration | Resolution |
+|-----------|------------|------------|
+| `@tool` (worker) | `@tool(credentials=[...])` | SDK resolves via server, injects into env |
+| `http_tool()` | `http_tool(credentials=[...])` | `${NAME}` in headers resolved server-side |
+| `mcp_tool()` | `mcp_tool(credentials=[...])` | Same as http_tool |
+| `agent_tool()` | Inherited from sub-agent | Token forwarded to sub-workflows |
+| CLI tools | `Agent(credentials=[...])` | Auto-propagated to run_command tool |
+| Code execution | `Agent(credentials=[...])` | Auto-propagated to execute_code tool |
+| Framework passthrough | `run(agent, credentials=[...])` | Resolved and injected before graph invocation |
+| External workers | `@tool(external=True, credentials=[...])` | Use `resolve_credentials()` helper |
+| Media/RAG tools | None needed | Server resolves LLM/VectorDB keys internally |
+| LLMGuardrail | None needed | Server resolves LLM keys internally |
+
+### External Worker Credential Resolution
+
+External workers receive the execution token in `task.input_data["__agentspan_ctx__"]`.
+Use the `resolve_credentials` helper:
+
+```python
+from agentspan.agents import resolve_credentials
+
+@worker_task(task_definition_name="my_tool")
+def my_external_tool(task):
+    creds = resolve_credentials(task.input_data, ["GITHUB_TOKEN"])
+    token = creds["GITHUB_TOKEN"]
+    # ... use token ...
+```
+
 ### Example Validation
 
 All runnable examples must execute successfully against a live Conductor server (`http://localhost:8080/api`, no auth).
