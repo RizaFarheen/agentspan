@@ -32,9 +32,9 @@ class CredentialFile:
 class CredentialNotFoundError(AgentspanError):
     """One or more required credentials could not be resolved.
 
-    Raised when a credential is absent from both the credential service
-    and ``os.environ`` (or when ``strict_mode=True`` and it is absent
-    from the service regardless of env fallback).
+    Raised when a declared credential is not found in the credential store.
+    There is no env var fallback for declared credentials — store them with
+    ``agentspan credentials set --name <NAME>``.
     """
 
     def __init__(self, missing_names: List[str]) -> None:
@@ -71,13 +71,12 @@ class CredentialRateLimitError(AgentspanError):
 
 
 class CredentialServiceError(AgentspanError):
-    """Credential service returned a 5xx error.
+    """Credential service returned a 5xx error or is unreachable.
 
-    In strict_mode, always fatal. In non-strict, caller may choose to
-    fall through to env var with a warning.
+    Always fatal — no env var fallback.
 
     Attributes:
-        status_code: The HTTP status code (e.g. 503).
+        status_code: The HTTP status code (e.g. 503), or 0 for network errors.
     """
 
     def __init__(self, status_code: int, detail: str = "") -> None:

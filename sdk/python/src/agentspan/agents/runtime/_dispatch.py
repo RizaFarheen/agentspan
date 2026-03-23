@@ -350,22 +350,23 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             # 2. Closure variable tool_def (works with fork)
             # 3. _tool_def attribute on tool_func (works everywhere)
             _td = _tool_def_registry.get(tool_name) or tool_def
-            credential_names = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
+            raw_credentials = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
+            # Normalize: CredentialFile → env_var string, keep strings as-is
+            from agentspan.agents.runtime.credentials.types import CredentialFile
+            credential_names = [
+                c.env_var if isinstance(c, CredentialFile) else c
+                for c in raw_credentials
+                if isinstance(c, (str, CredentialFile))
+            ]
             # Fallback: workflow-level credentials (for framework-extracted tools)
             if not credential_names and task.workflow_instance_id:
                 with _workflow_credentials_lock:
                     credential_names = list(_workflow_credentials.get(task.workflow_instance_id, []))
             resolved_credentials = {}
-            logger.debug("Credential dispatch: tool=%s cred_names=%s td=%s", tool_name, credential_names, _td is not None)
             if credential_names:
                 token = _extract_execution_token(task)
-                logger.debug("Credential token extracted: %s (input_keys=%s, wf_input=%s)",
-                    token[:20] + "..." if token and len(token) > 20 else token,
-                    list((task.input_data or {}).keys()),
-                    type(getattr(task, 'workflow_input', None)))
                 fetcher = _get_credential_fetcher()
                 resolved_credentials = fetcher.fetch(token, credential_names)
-                logger.debug("Credential resolved: %s", list(resolved_credentials.keys()))
 
             # Map task input to function kwargs
             sig = inspect.signature(tool_func)
@@ -384,8 +385,8 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
 
             # ── Credential injection ──────────────────────────────────────
             # Inject credentials into os.environ for the tool to read.
-            # The Conductor worker is already a separate process, so this
-            # doesn't pollute the parent. Clean up after execution.
+            # Conductor workers default to thread_count=1, so concurrent
+            # credential injection is not a risk. Clean up in finally block.
             _injected_env_keys = []
             if resolved_credentials:
                 for k, v in resolved_credentials.items():

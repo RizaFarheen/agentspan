@@ -89,9 +89,6 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     @Autowired(required = false)
     private AgentStreamRegistry streamRegistry;
 
-    @Autowired(required = false)
-    private UserAwareAIModelProvider userAwareAIModelProvider;
-
     public AgentChatCompleteTaskMapper() {
         super(ChatCompletion.NAME);
         this.recentExchangesToKeep = 5; // default; overridden by @Value in Spring context
