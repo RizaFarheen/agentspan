@@ -35,6 +35,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.*;
+
 import lombok.RequiredArgsConstructor;
 
 import java.nio.charset.StandardCharsets;
@@ -531,7 +533,17 @@ public class AgentService {
      * Extract credential names declared in tool configs (for execution token bounding).
      */
     private List<String> extractDeclaredCredentials(AgentConfig config) {
-        List<String> names = new ArrayList<>();
+        Set<String> names = new LinkedHashSet<>();
+        collectCredentialsRecursive(config, names);
+        return new ArrayList<>(names);
+    }
+
+    private void collectCredentialsRecursive(AgentConfig config, Set<String> names) {
+        // Agent-level credentials
+        if (config.getCredentials() != null) {
+            names.addAll(config.getCredentials());
+        }
+        // Tool-level credentials
         if (config.getTools() != null) {
             for (ToolConfig tool : config.getTools()) {
                 if (tool.getConfig() != null && tool.getConfig().get("credentials") instanceof List<?> creds) {
@@ -539,9 +551,27 @@ public class AgentService {
                         if (c instanceof String s) names.add(s);
                     }
                 }
+                // Recurse into agent_tool nested agents
+                if ("agent_tool".equals(tool.getToolType()) && tool.getConfig() != null) {
+                    Object nested = tool.getConfig().get("agentConfig");
+                    if (nested instanceof Map<?, ?> nestedMap) {
+                        try {
+                            AgentConfig nestedConfig = new com.fasterxml.jackson.databind.ObjectMapper()
+                                .convertValue(nestedMap, AgentConfig.class);
+                            collectCredentialsRecursive(nestedConfig, names);
+                        } catch (Exception e) {
+                            // Skip if can't parse nested config
+                        }
+                    }
+                }
             }
         }
-        return names;
+        // Recurse into sub-agents (multi-agent strategies)
+        if (config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                collectCredentialsRecursive(sub, names);
+            }
+        }
     }
 
     /**

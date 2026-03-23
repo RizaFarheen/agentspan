@@ -163,6 +163,7 @@ def tool(
             return fn(*args, **kwargs)
 
         wrapper._tool_def = tool_def  # type: ignore[attr-defined]
+        fn._tool_def = tool_def  # type: ignore[attr-defined]  # Also on raw fn for pickling
         return wrapper  # type: ignore[return-value]
 
     if func is not None:

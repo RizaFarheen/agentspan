@@ -703,7 +703,7 @@ class AgentRuntime:
         for t in agent.tools:
             try:
                 td = get_tool_def(t)
-                if td.tool_type == "worker":
+                if td.tool_type in ("worker", "cli"):
                     names.add(td.name)
                 elif td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                     nested_agent = td.config["agent"]
@@ -1650,7 +1650,7 @@ class AgentRuntime:
                 td = get_tool_def(t)
             except TypeError:
                 continue
-            if td.tool_type == "worker":
+            if td.tool_type in ("worker", "cli"):
                 return True
             if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                 nested_agent = td.config["agent"]

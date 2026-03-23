@@ -1070,13 +1070,31 @@ result = runtime.run(agent, "Hello")
 
 All changes must be validated before merging.
 
+### Testing Rules
+
+1. **No mocks for integration boundaries.** Tests that verify how components interact (credential resolution, token extraction, subprocess isolation, DB operations) MUST use real implementations, not mocks. Mocks hide bugs at layer boundaries — the exact place bugs live.
+
+2. **E2E tests are mandatory for new features.** Any feature that spans multiple components (SDK → server → DB, or SDK → subprocess → env) MUST have an e2e test in `tests/e2e/` that exercises the real path against a running server.
+
+3. **Unit tests are for pure logic only.** Use unit tests for data transformations, schema generation, parsing, and other functions with no external dependencies. If your test needs `patch()` or `MagicMock`, it's probably testing the wrong thing — write an integration test instead.
+
+4. **Server-side tests use `@SpringBootTest` with real DB.** No mocking `CredentialStoreProvider`, `UserRepository`, or JDBC templates. Use the test profile's in-memory SQLite DB.
+
 ### Unit Tests
 
 ```bash
 python3 -m pytest tests/unit/ -v
 ```
 
-All unit tests must pass.
+### E2E Tests (require running server)
+
+```bash
+python3 -m pytest tests/e2e/ -v
+```
+
+E2E tests run against a live Agentspan server at `AGENTSPAN_SERVER_URL` (default `http://localhost:8080`).
+
+All unit and e2e tests must pass.
 
 ### Example Validation
 

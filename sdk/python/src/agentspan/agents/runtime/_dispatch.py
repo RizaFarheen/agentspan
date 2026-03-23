@@ -11,6 +11,7 @@ for parameter type resolution.
 import inspect
 import json
 import logging
+import os
 
 logger = logging.getLogger("agentspan.agents.dispatch")
 
@@ -127,19 +128,25 @@ def _get_credential_fetcher():
     return _credential_fetcher
 
 
-def _extract_execution_token(task) -> None:
-    """Extract __agentspan_ctx__ execution token from a Conductor task.
+def _extract_execution_token(task) -> str | None:
+    """Extract __agentspan_ctx__.execution_token from a Conductor task.
 
     Checks task.input_data first (most common), then task.workflow_input.
     Returns None if not present.
     """
     # input_data is the primary source (set by Conductor enrichment scripts)
-    token = (task.input_data or {}).get("__agentspan_ctx__")
-    if token:
-        return token
+    ctx = (task.input_data or {}).get("__agentspan_ctx__")
+    if isinstance(ctx, dict):
+        return ctx.get("execution_token") or None
+    if isinstance(ctx, str) and ctx:
+        return ctx
     # Fallback: check workflow_input (set at workflow start)
-    token = (getattr(task, "workflow_input", None) or {}).get("__agentspan_ctx__")
-    return token or None
+    ctx = (getattr(task, "workflow_input", None) or {}).get("__agentspan_ctx__")
+    if isinstance(ctx, dict):
+        return ctx.get("execution_token") or None
+    if isinstance(ctx, str) and ctx:
+        return ctx
+    return None
 
 
 def _get_credential_names_from_tool(tool_func) -> list:
@@ -166,6 +173,11 @@ def _is_isolated(tool_func) -> bool:
 
 # Module-level registry: task_name -> {tool_name: tool_func}
 _tool_registry = {}
+
+# Module-level ToolDef registry: tool_name -> ToolDef
+# Used to pass credential/isolation metadata to tool_worker without closures
+# (closures are not picklable across spawn-mode multiprocessing boundaries).
+_tool_def_registry = {}
 
 # Server-side tool registry: tool_name -> {"type": "http"|"mcp", "config": {...}}
 _tool_type_registry = {}
@@ -208,7 +220,7 @@ def _needs_context(func):
         return False
 
 
-def make_tool_worker(tool_func, tool_name, guardrails=None):
+def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
     """Create a Conductor worker wrapper for a @tool function.
 
     The wrapper accepts a ``Task`` object so it can extract metadata
@@ -220,6 +232,10 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
     - Pre-execution guardrails check the input parameters.
     - Post-execution guardrails check the tool result.
     """
+    # Store tool_def in module-level registry so it's accessible across
+    # spawn-mode multiprocessing boundaries (closures are not picklable).
+    if tool_def is not None:
+        _tool_def_registry[tool_name] = tool_def
     # Resolve PEP 563 string annotations (from __future__ import annotations)
     # to real types so downstream code can use isinstance().
     import typing
@@ -312,13 +328,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
         return result
 
     def tool_worker(task: Task) -> TaskResult:
-        """Worker wrapper that receives a Task object from Conductor.
-
-        The Conductor Python SDK detects the ``Task`` type annotation and
-        passes the full Task object instead of unpacking input_data as kwargs.
-        This ensures we always receive ``_agent_state`` and other injected
-        fields that aren't part of the original tool function's signature.
-        """
+        """Worker wrapper that receives a Task object from Conductor."""
         task_result = TaskResult(
             task_id=task.task_id,
             workflow_instance_id=task.workflow_instance_id,
@@ -329,12 +339,23 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
             agent_state = task.input_data.pop("_agent_state", None) or {}
 
             # ── Credential fetching ───────────────────────────────────────
-            credential_names = _get_credential_names_from_tool(tool_func)
+            # Look up tool_def from multiple sources:
+            # 1. Module-level registry (works with fork, not spawn)
+            # 2. Closure variable tool_def (works with fork)
+            # 3. _tool_def attribute on tool_func (works everywhere)
+            _td = _tool_def_registry.get(tool_name) or tool_def
+            credential_names = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
             resolved_credentials = {}
+            logger.debug("Credential dispatch: tool=%s cred_names=%s td=%s", tool_name, credential_names, _td is not None)
             if credential_names:
                 token = _extract_execution_token(task)
+                logger.debug("Credential token extracted: %s (input_keys=%s, wf_input=%s)",
+                    token[:20] + "..." if token and len(token) > 20 else token,
+                    list((task.input_data or {}).keys()),
+                    type(getattr(task, 'workflow_input', None)))
                 fetcher = _get_credential_fetcher()
                 resolved_credentials = fetcher.fetch(token, credential_names)
+                logger.debug("Credential resolved: %s", list(resolved_credentials.keys()))
 
             # Map task input to function kwargs
             sig = inspect.signature(tool_func)
@@ -351,56 +372,37 @@ def make_tool_worker(tool_func, tool_name, guardrails=None):
                 else:
                     fn_kwargs[param_name] = None
 
-            # ── Execution routing: isolated vs non-isolated ───────────────
-            if credential_names and _is_isolated(tool_func):
-                # Isolated path: run in subprocess with credentials injected
-                from agentspan.agents.runtime.credentials.isolator import SubprocessIsolator
-                from agentspan.agents.runtime.credentials.types import CredentialFile
+            # ── Credential injection ──────────────────────────────────────
+            # Inject credentials into os.environ for the tool to read.
+            # The Conductor worker is already a separate process, so this
+            # doesn't pollute the parent. Clean up after execution.
+            _injected_env_keys = []
+            if resolved_credentials:
+                for k, v in resolved_credentials.items():
+                    if isinstance(v, str):
+                        os.environ[k] = v
+                        _injected_env_keys.append(k)
 
-                tool_def_credentials = _get_credential_names_from_tool(tool_func)
-                isolator_creds = {}
-                for cred_spec in tool_def_credentials:
-                    if isinstance(cred_spec, str):
-                        if cred_spec in resolved_credentials:
-                            isolator_creds[cred_spec] = resolved_credentials[cred_spec]
-                    elif isinstance(cred_spec, CredentialFile):
-                        content = resolved_credentials.get(cred_spec.env_var, "")
-                        isolator_creds[cred_spec.env_var] = CredentialFile(
-                            env_var=cred_spec.env_var,
-                            relative_path=cred_spec.relative_path,
-                            content=content,
-                        )
-
-                isolator = SubprocessIsolator()
-                wf_id = task.workflow_instance_id or ""
-
-                def _subprocess_wrapper(**kwargs):
-                    return _execute(kwargs, wf_id=wf_id, agent_state=agent_state)
-
-                result = isolator.run(
-                    _subprocess_wrapper,
-                    args=(),
-                    kwargs=fn_kwargs,
-                    credentials=isolator_creds,
-                )
-            else:
-                # Non-isolated path (or no credentials): set context var, run directly
+                # Also set credential context for non-isolated tools using get_credential()
                 from agentspan.agents.runtime.credentials.accessor import (
                     clear_credential_context,
                     set_credential_context,
                 )
+                set_credential_context(resolved_credentials)
 
+            try:
+                result = _execute(
+                    fn_kwargs,
+                    wf_id=task.workflow_instance_id or "",
+                    agent_state=agent_state,
+                )
+            finally:
+                # Clean up injected env vars
+                for k in _injected_env_keys:
+                    os.environ.pop(k, None)
                 if resolved_credentials:
-                    set_credential_context(resolved_credentials)
-                try:
-                    result = _execute(
-                        fn_kwargs,
-                        wf_id=task.workflow_instance_id or "",
-                        agent_state=agent_state,
-                    )
-                finally:
-                    if resolved_credentials:
-                        clear_credential_context()
+                    from agentspan.agents.runtime.credentials.accessor import clear_credential_context
+                    clear_credential_context()
 
             if isinstance(result, dict):
                 task_result.output_data = result

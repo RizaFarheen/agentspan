@@ -4,93 +4,105 @@
  */
 package dev.agentspan.runtime.controller;
 
-import dev.agentspan.runtime.auth.*;
-import dev.agentspan.runtime.credentials.*;
-import dev.agentspan.runtime.model.credentials.*;
-import org.junit.jupiter.api.AfterEach;
+import org.conductoross.conductor.AgentRuntime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.List;
-import java.util.Map;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
-@ExtendWith(MockitoExtension.class)
+/**
+ * Integration test for CredentialController — real server, real DB, no mocks.
+ * Uses MockMvc for HTTP layer but all services are real Spring beans.
+ */
+@SpringBootTest(classes = AgentRuntime.class)
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
 class CredentialControllerTest {
 
-    @Mock private CredentialStoreProvider storeProvider;
-    @Mock private CredentialBindingService bindingService;
-    @Mock private CredentialResolutionService resolutionService;
-    @Mock private ExecutionTokenService tokenService;
+    @Autowired
+    private MockMvc mvc;
 
-    @InjectMocks
-    private CredentialController controller;
-
-    private static final User TEST_USER = new User("u-1", "Alice", null, "alice");
+    private static final String CRED_NAME = "_CONTROLLER_TEST_KEY";
 
     @BeforeEach
-    void setUp() {
-        RequestContext ctx = RequestContext.builder()
-            .requestId("r-1").user(TEST_USER)
-            .createdAt(java.time.Instant.now()).build();
-        RequestContextHolder.set(ctx);
-    }
-
-    @AfterEach
-    void tearDown() {
-        RequestContextHolder.clear();
+    void cleanUp() throws Exception {
+        // Delete test credential if it exists
+        mvc.perform(delete("/api/credentials/" + CRED_NAME));
     }
 
     @Test
-    void listCredentials_delegatesToStoreProvider() {
-        CredentialMeta meta = CredentialMeta.builder()
-            .name("GITHUB_TOKEN").partial("ghp_...k2mn").build();
-        when(storeProvider.list("u-1")).thenReturn(List.of(meta));
+    void createAndListCredential() throws Exception {
+        // Create
+        mvc.perform(post("/api/credentials")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"test-secret\"}"))
+            .andExpect(status().isCreated());
 
-        ResponseEntity<?> response = controller.listCredentials();
-
-        assertThat(response.getStatusCode().value()).isEqualTo(200);
-        assertThat(response.getBody()).isInstanceOf(List.class);
+        // List — should contain our credential
+        mvc.perform(get("/api/credentials"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')]").exists())
+            .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')].partial").value("test...cret"));
     }
 
     @Test
-    void createCredential_callsStoreSet() {
-        ResponseEntity<?> response = controller.createCredential(
-            Map.of("name", "MY_KEY", "value", "secret-value"));
+    void deleteCredential_returns204() throws Exception {
+        // Create first
+        mvc.perform(post("/api/credentials")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"to-delete\"}"))
+            .andExpect(status().isCreated());
 
-        verify(storeProvider).set("u-1", "MY_KEY", "secret-value");
-        assertThat(response.getStatusCode().value()).isEqualTo(201);
+        // Delete
+        mvc.perform(delete("/api/credentials/" + CRED_NAME))
+            .andExpect(status().isNoContent());
+
+        // Verify gone — list should not contain it
+        mvc.perform(get("/api/credentials"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')]").doesNotExist());
     }
 
     @Test
-    void deleteCredential_callsStoreDelete() {
-        ResponseEntity<?> response = controller.deleteCredential("MY_KEY");
+    void updateCredential_changesValue() throws Exception {
+        // Create
+        mvc.perform(post("/api/credentials")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"original-value-here\"}"))
+            .andExpect(status().isCreated());
 
-        verify(storeProvider).delete("u-1", "MY_KEY");
-        assertThat(response.getStatusCode().value()).isEqualTo(204);
+        // Update
+        mvc.perform(put("/api/credentials/" + CRED_NAME)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"value\":\"updated-value-here\"}"))
+            .andExpect(status().isOk());
+
+        // Verify partial changed
+        mvc.perform(get("/api/credentials"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')].partial").value("upda...here"));
     }
 
     @Test
-    void setBinding_callsBindingService() {
-        ResponseEntity<?> response = controller.setBinding("GITHUB_TOKEN",
-            Map.of("store_name", "my-prod-key"));
-
-        verify(bindingService).setBinding("u-1", "GITHUB_TOKEN", "my-prod-key");
-        assertThat(response.getStatusCode().value()).isEqualTo(200);
+    void resolve_withoutToken_returns401() throws Exception {
+        mvc.perform(post("/api/credentials/resolve")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"names\":[\"GITHUB_TOKEN\"]}"))
+            .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void deleteBinding_callsBindingService() {
-        ResponseEntity<?> response = controller.deleteBinding("GITHUB_TOKEN");
-
-        verify(bindingService).deleteBinding("u-1", "GITHUB_TOKEN");
-        assertThat(response.getStatusCode().value()).isEqualTo(204);
+    void resolve_withInvalidToken_returns401() throws Exception {
+        mvc.perform(post("/api/credentials/resolve")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"garbage-token\",\"names\":[\"GITHUB_TOKEN\"]}"))
+            .andExpect(status().isUnauthorized());
     }
 }

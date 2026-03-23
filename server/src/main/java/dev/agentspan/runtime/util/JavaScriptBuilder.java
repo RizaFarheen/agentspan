@@ -214,6 +214,7 @@ public class JavaScriptBuilder {
             "        prompt: (tc.inputParameters && tc.inputParameters.request)" +
             "                || JSON.stringify(tc.inputParameters)," +
             "        session_id: $.session_id || ''};" +
+            "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
             "      if (agentToolCfg[n].retryCount !== undefined) t.retryCount = agentToolCfg[n].retryCount;" +
             "      if (agentToolCfg[n].retryDelaySeconds !== undefined) t.retryDelaySeconds = agentToolCfg[n].retryDelaySeconds;" +
             "      if (agentToolCfg[n].optional !== undefined) t.optional = agentToolCfg[n].optional;" +
@@ -255,6 +256,7 @@ public class JavaScriptBuilder {
             "    }" +
             "    if (t.type === 'SIMPLE') {" +
             "      t.inputParameters._agent_state = agentState;" +
+            "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
             "      if (cliCfg[n]) { t.inputParameters._allowed_commands = cliCfg[n].allowedCommands; }" +
             "    }" +
             "    result.push(t);" +
@@ -538,6 +540,7 @@ public class JavaScriptBuilder {
             "        prompt: (tc.inputParameters && tc.inputParameters.request)" +
             "                || JSON.stringify(tc.inputParameters)," +
             "        session_id: $.session_id || ''};" +
+            "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
             "      if (agentToolCfg[n].retryCount !== undefined) t.retryCount = agentToolCfg[n].retryCount;" +
             "      if (agentToolCfg[n].retryDelaySeconds !== undefined) t.retryDelaySeconds = agentToolCfg[n].retryDelaySeconds;" +
             "      if (agentToolCfg[n].optional !== undefined) t.optional = agentToolCfg[n].optional;" +
@@ -577,7 +580,10 @@ public class JavaScriptBuilder {
             "      t.inputParameters = hInputs;" +
             "      t.optional = false;" +
             "    }" +
-            "    if (t.type === 'SIMPLE') { t.inputParameters._agent_state = agentState; }" +
+            "    if (t.type === 'SIMPLE') {" +
+            "      t.inputParameters._agent_state = agentState;" +
+            "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
+            "    }" +
             "    result.push(t);" +
             "  }" +
             "  return {dynamicTasks: result};"

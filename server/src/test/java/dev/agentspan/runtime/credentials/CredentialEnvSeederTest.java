@@ -4,103 +4,129 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import org.conductoross.conductor.AgentRuntime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.boot.DefaultApplicationArguments;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.util.Map;
+import java.util.function.Function;
 
 import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.*;
 
-@ExtendWith(MockitoExtension.class)
+/**
+ * Integration test for CredentialEnvSeeder — uses real DB, no mocks.
+ * The test profile provides AGENTSPAN_MASTER_KEY and a real SQLite DB.
+ */
+@SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@ActiveProfiles("test")
 class CredentialEnvSeederTest {
 
-    @Mock
+    @Autowired
     private CredentialStoreProvider storeProvider;
 
-    /** Build a seeder with a fixed env map and store=built-in. */
-    private CredentialEnvSeeder seeder(Map<String, String> env) {
-        CredentialEnvSeeder s = new CredentialEnvSeeder(storeProvider, env::get);
-        ReflectionTestUtils.setField(s, "credentialsStore", "built-in");
-        return s;
-    }
+    @Autowired
+    @Qualifier("credentialJdbc")
+    private NamedParameterJdbcTemplate jdbc;
 
-    // ── Happy path ────────────────────────────────────────────────────
-
-    @Test
-    void createsCredentialWhenEnvVarSetAndNotInStore() throws Exception {
-        when(storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY")).thenReturn(null);
-
-        seeder(Map.of("ANTHROPIC_API_KEY", "sk-ant-test")).run(new DefaultApplicationArguments());
-
-        verify(storeProvider).set(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY", "sk-ant-test");
+    @BeforeEach
+    void cleanUp() {
+        // Remove test credentials from previous runs
+        jdbc.update("DELETE FROM credentials_store WHERE user_id = :uid AND name LIKE '_TEST_%'",
+            Map.of("uid", ANONYMOUS_USER_ID));
     }
 
     @Test
-    void skipsCredentialWhenAlreadyInStore() throws Exception {
-        when(storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY")).thenReturn("existing");
+    void seeder_storesCredentialFromEnv_inRealDb() throws Exception {
+        // Simulate env with a test key
+        Function<String, String> fakeEnv = name ->
+            "_TEST_ANTHROPIC_KEY".equals(name) ? "sk-test-value" : null;
 
-        seeder(Map.of("ANTHROPIC_API_KEY", "sk-ant-new")).run(new DefaultApplicationArguments());
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, fakeEnv);
+        // Override known vars for this test
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
 
-        verify(storeProvider, never()).set(any(), eq("ANTHROPIC_API_KEY"), any());
+        // The seeder won't find _TEST_ANTHROPIC_KEY in KNOWN_ENV_VARS,
+        // so let's test with a real known var by injecting via the env lookup
+        Function<String, String> envWithAnthropicKey = name ->
+            "ANTHROPIC_API_KEY".equals(name) ? "sk-test-seeded-value" : null;
+
+        CredentialEnvSeeder realSeeder = new CredentialEnvSeeder(storeProvider, envWithAnthropicKey);
+        field.set(realSeeder, "built-in");
+
+        // Delete existing credential first so seeder can create it
+        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+
+        realSeeder.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        // Verify credential was stored in real DB
+        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        assertThat(value).isEqualTo("sk-test-seeded-value");
     }
 
     @Test
-    void seedsMultipleEnvVarsInOnePass() throws Exception {
-        when(storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY")).thenReturn(null);
-        when(storeProvider.get(ANONYMOUS_USER_ID, "OPENAI_API_KEY")).thenReturn(null);
+    void seeder_skipsExistingCredential_inRealDb() throws Exception {
+        // Store a credential first
+        storeProvider.set(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY", "original-value");
 
-        seeder(Map.of("ANTHROPIC_API_KEY", "sk-ant", "OPENAI_API_KEY", "sk-oai"))
-                .run(new DefaultApplicationArguments());
+        // Try to seed with a different value
+        Function<String, String> envLookup = name ->
+            "ANTHROPIC_API_KEY".equals(name) ? "new-value-should-not-overwrite" : null;
 
-        verify(storeProvider).set(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY", "sk-ant");
-        verify(storeProvider).set(ANONYMOUS_USER_ID, "OPENAI_API_KEY", "sk-oai");
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        seeder.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        // Value should still be the original
+        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        assertThat(value).isEqualTo("original-value");
     }
 
-    // ── Env var absent / blank ────────────────────────────────────────
-
     @Test
-    void ignoresUnsetEnvVars() throws Exception {
-        seeder(Map.of()).run(new DefaultApplicationArguments());
+    void seeder_ignoresBlankEnvVars_inRealDb() throws Exception {
+        // Delete so we can detect if seeder creates it
+        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
 
-        verifyNoInteractions(storeProvider);
+        Function<String, String> envLookup = name ->
+            "ANTHROPIC_API_KEY".equals(name) ? "   " : null;
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        seeder.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        // Blank value should NOT be stored
+        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        assertThat(value).isNull();
     }
 
     @Test
-    void ignoresBlankEnvVars() throws Exception {
-        seeder(Map.of("ANTHROPIC_API_KEY", "  ")).run(new DefaultApplicationArguments());
+    void seeder_skipsWhenStoreIsNotBuiltIn() throws Exception {
+        storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
 
-        verifyNoInteractions(storeProvider);
-    }
+        Function<String, String> envLookup = name ->
+            "ANTHROPIC_API_KEY".equals(name) ? "sk-should-not-store" : null;
 
-    // ── Non-built-in store ────────────────────────────────────────────
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "vault");
 
-    @Test
-    void skipsEntirelyWhenStoreIsNotBuiltIn() throws Exception {
-        CredentialEnvSeeder s = new CredentialEnvSeeder(storeProvider, Map.of("ANTHROPIC_API_KEY", "x")::get);
-        ReflectionTestUtils.setField(s, "credentialsStore", "vault");
+        seeder.run(new org.springframework.boot.DefaultApplicationArguments());
 
-        s.run(new DefaultApplicationArguments());
-
-        verifyNoInteractions(storeProvider);
-    }
-
-    // ── Mixed scenario ────────────────────────────────────────────────
-
-    @Test
-    void createsNewOnesAndSkipsExisting() throws Exception {
-        when(storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY")).thenReturn(null);
-        when(storeProvider.get(ANONYMOUS_USER_ID, "OPENAI_API_KEY")).thenReturn("already-here");
-
-        seeder(Map.of("ANTHROPIC_API_KEY", "sk-ant-new", "OPENAI_API_KEY", "sk-oai-existing"))
-                .run(new DefaultApplicationArguments());
-
-        verify(storeProvider).set(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY", "sk-ant-new");
-        verify(storeProvider, never()).set(any(), eq("OPENAI_API_KEY"), any());
+        String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
+        assertThat(value).isNull();
     }
 }

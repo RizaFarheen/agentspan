@@ -449,7 +449,7 @@ class Agent:
         self.cli_config: Optional[Any] = None
         if cli_config is not None:
             self.cli_config = cli_config
-        elif cli_commands:
+        elif cli_commands or cli_allowed_commands:
             from agentspan.agents.cli_config import CliConfig
 
             self.cli_config = CliConfig(
@@ -499,6 +499,19 @@ class Agent:
             self.credentials = auto_creds
         else:
             self.credentials = []
+
+        # Propagate agent-level credentials to CLI/code tools so the
+        # dispatch layer can resolve them per-tool (the dispatch only
+        # looks at tool_def.credentials, not agent-level credentials).
+        if self.credentials:
+            from agentspan.agents.tool import get_tool_def
+            for t in self.tools:
+                td = getattr(t, "_tool_def", None)
+                if td is not None and not td.credentials and td.tool_type in ("cli", "code"):
+                    td.credentials = list(self.credentials)
+                    # Also update _tool_def on raw func for pickle survival
+                    if td.func and hasattr(td.func, "_tool_def"):
+                        td.func._tool_def.credentials = list(self.credentials)
 
     def _attach_code_execution_tool(self) -> None:
         """Auto-create and attach a code execution tool from config."""

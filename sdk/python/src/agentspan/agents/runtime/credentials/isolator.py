@@ -10,40 +10,44 @@ Security model:
   - The env var for file credentials points to the absolute path.
   - Temp HOME and all credential files are deleted synchronously after the
     subprocess exits (TemporaryDirectory context manager).
-  - Parent process environment is NEVER modified — env dict is serialized
-    inside the cloudpickle payload and applied inside the child process.
+  - Parent process environment is NEVER modified — env dict is passed via
+    subprocess.Popen(env=...) and applied inside the child process.
 
-Implementation uses multiprocessing spawn + cloudpickle for clean isolation.
+Implementation uses subprocess.Popen + cloudpickle for clean isolation.
+This works from daemon threads (unlike multiprocessing.Process).
 """
 
 from __future__ import annotations
 
-import multiprocessing
 import os
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from agentspan.agents.runtime.credentials.types import CredentialFile
 
-
-def _subprocess_entry(pickled_payload: bytes, result_queue: Any) -> None:
-    """Subprocess entry point.
-
-    The payload is a cloudpickle-serialized ``(env, fn, args, kwargs)`` tuple.
-    We apply *env* to the subprocess's ``os.environ`` first, then call the function.
-    """
-    import cloudpickle  # noqa: PLC0415
-
-    try:
-        env, fn, args, kwargs = cloudpickle.loads(pickled_payload)
-        # Apply the isolated environment inside the child process only.
-        os.environ.clear()
-        os.environ.update(env)
-        result = fn(*args, **kwargs)
-        result_queue.put(("ok", result))
-    except BaseException as exc:  # noqa: BLE001
-        result_queue.put(("error", exc))
+# Python helper script executed in the child process.
+# Reads a cloudpickle payload from stdin, executes the function,
+# and writes the result back to stdout.
+_CHILD_SCRIPT = """\
+import sys, os, cloudpickle, base64
+payload = base64.b64decode(sys.stdin.buffer.read())
+env, fn, args, kwargs = cloudpickle.loads(payload)
+os.environ.clear()
+os.environ.update(env)
+# Redirect stdout to stderr so tool print() doesn't corrupt the result channel.
+_real_stdout = sys.stdout
+sys.stdout = sys.stderr
+try:
+    result = fn(*args, **kwargs)
+    out = cloudpickle.dumps(("ok", result))
+except BaseException as exc:
+    out = cloudpickle.dumps(("error", exc))
+_real_stdout.buffer.write(base64.b64encode(out))
+_real_stdout.buffer.flush()
+"""
 
 
 class SubprocessIsolator:
@@ -117,27 +121,39 @@ class SubprocessIsolator:
         kwargs: Dict[str, Any],
         env: Dict[str, str],
     ) -> Any:
-        """Serialize (env, fn, args, kwargs) with cloudpickle and spawn a process."""
+        """Serialize (env, fn, args, kwargs) with cloudpickle and run via Popen."""
+        import base64
+
         import cloudpickle  # noqa: PLC0415
 
-        # Env dict is part of the payload — parent os.environ is never touched.
         pickled = cloudpickle.dumps((env, fn, args, kwargs))
+        encoded = base64.b64encode(pickled)
 
-        ctx = multiprocessing.get_context("spawn")
-        result_queue: multiprocessing.Queue = ctx.Queue()
-        proc = ctx.Process(target=_subprocess_entry, args=(pickled, result_queue))
-        proc.start()
-        proc.join(timeout=self._timeout)
+        proc = subprocess.Popen(
+            [sys.executable, "-c", _CHILD_SCRIPT],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
 
-        if proc.is_alive():
-            proc.terminate()
-            proc.join(timeout=5)
+        try:
+            stdout, stderr = proc.communicate(input=encoded, timeout=self._timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
             raise TimeoutError(f"Subprocess timed out after {self._timeout}s")
 
-        if not result_queue.empty():
-            status, value = result_queue.get_nowait()
-            if status == "ok":
-                return value
-            raise value
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"Subprocess exited with code {proc.returncode}: {stderr.decode(errors='replace')}"
+            )
 
-        raise RuntimeError(f"Subprocess exited with code {proc.exitcode} and produced no result")
+        if not stdout:
+            raise RuntimeError("Subprocess produced no output")
+
+        result_bytes = base64.b64decode(stdout)
+        status, value = cloudpickle.loads(result_bytes)
+        if status == "ok":
+            return value
+        raise value

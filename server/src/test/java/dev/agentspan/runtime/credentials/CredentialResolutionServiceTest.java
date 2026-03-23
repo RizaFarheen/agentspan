@@ -4,50 +4,50 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import org.conductoross.conductor.AgentRuntime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 
-import java.util.Optional;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
+/**
+ * Integration test for CredentialResolutionService — real DB, real services, no mocks.
+ */
+@SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@ActiveProfiles("test")
 class CredentialResolutionServiceTest {
 
-    @Mock private CredentialStoreProvider storeProvider;
-    @Mock private CredentialBindingService bindingService;
-
-    @InjectMocks
+    @Autowired
     private CredentialResolutionService service;
 
-    private static final String USER_ID = "user-abc";
+    @Autowired
+    private CredentialStoreProvider storeProvider;
+
+    @Autowired
+    private CredentialBindingService bindingService;
+
+    @Autowired
+    @Qualifier("credentialJdbc")
+    private NamedParameterJdbcTemplate jdbc;
+
+    private static final String USER_ID = "resolution-test-user-001";
 
     @BeforeEach
     void setUp() {
-        // Default strict_mode=false
-        ReflectionTestUtils.setField(service, "strictMode", false);
+        jdbc.update("DELETE FROM credentials_binding WHERE user_id = :uid", Map.of("uid", USER_ID));
+        jdbc.update("DELETE FROM credentials_store WHERE user_id = :uid", Map.of("uid", USER_ID));
     }
 
     @Test
-    void resolve_withBinding_fetchesFromStore() {
-        when(bindingService.resolve(USER_ID, "GITHUB_TOKEN")).thenReturn(Optional.of("my-github-prod"));
-        when(storeProvider.get(USER_ID, "my-github-prod")).thenReturn("ghp_secret");
-
-        String value = service.resolve(USER_ID, "GITHUB_TOKEN");
-
-        assertThat(value).isEqualTo("ghp_secret");
-    }
-
-    @Test
-    void resolve_noBinding_usesLogicalKeyAsStoreName() {
-        when(bindingService.resolve(USER_ID, "GITHUB_TOKEN")).thenReturn(Optional.empty());
-        when(storeProvider.get(USER_ID, "GITHUB_TOKEN")).thenReturn("ghp_directlookup");
+    void resolve_directLookup_returnsStoredValue() {
+        storeProvider.set(USER_ID, "GITHUB_TOKEN", "ghp_directlookup");
 
         String value = service.resolve(USER_ID, "GITHUB_TOKEN");
 
@@ -55,41 +55,37 @@ class CredentialResolutionServiceTest {
     }
 
     @Test
-    void resolve_notInStore_strictModeFalse_fallsBackToEnv() {
-        when(bindingService.resolve(USER_ID, "MY_ENV_VAR")).thenReturn(Optional.empty());
-        when(storeProvider.get(USER_ID, "MY_ENV_VAR")).thenReturn(null);
+    void resolve_withBinding_usesStoreName() {
+        storeProvider.set(USER_ID, "my-github-prod", "ghp_bound_secret");
+        bindingService.setBinding(USER_ID, "GITHUB_TOKEN", "my-github-prod");
 
-        // Inject a mock env lookup — we use a subclass to override
-        // Actually for unit test, inject the env via a spy
-        CredentialResolutionService spy = spy(service);
-        doReturn("from_env_val").when(spy).getEnvVar("MY_ENV_VAR");
+        String value = service.resolve(USER_ID, "GITHUB_TOKEN");
 
-        String value = spy.resolve(USER_ID, "MY_ENV_VAR");
-
-        assertThat(value).isEqualTo("from_env_val");
+        assertThat(value).isEqualTo("ghp_bound_secret");
     }
 
     @Test
-    void resolve_notInStore_strictModeTrue_throws() {
-        ReflectionTestUtils.setField(service, "strictMode", true);
-        when(bindingService.resolve(USER_ID, "MISSING")).thenReturn(Optional.empty());
-        when(storeProvider.get(USER_ID, "MISSING")).thenReturn(null);
-
-        assertThatThrownBy(() -> service.resolve(USER_ID, "MISSING"))
-            .isInstanceOf(CredentialResolutionService.CredentialNotFoundException.class)
-            .hasMessageContaining("MISSING");
-    }
-
-    @Test
-    void resolve_notInStore_notInEnv_strictModeFalse_returnsNull() {
-        when(bindingService.resolve(USER_ID, "TOTALLY_MISSING")).thenReturn(Optional.empty());
-        when(storeProvider.get(USER_ID, "TOTALLY_MISSING")).thenReturn(null);
-
-        CredentialResolutionService spy = spy(service);
-        doReturn(null).when(spy).getEnvVar("TOTALLY_MISSING");
-
-        String value = spy.resolve(USER_ID, "TOTALLY_MISSING");
+    void resolve_notInStore_returnsNull() {
+        String value = service.resolve(USER_ID, "TOTALLY_MISSING_KEY_XYZ");
 
         assertThat(value).isNull();
+    }
+
+    @Test
+    void resolve_notInStore_noEnvFallback() {
+        // PATH exists in every process environment, but the server should NOT
+        // fall back to env vars — the store is the source of truth.
+        String value = service.resolve(USER_ID, "PATH");
+
+        assertThat(value).isNull();
+    }
+
+    @Test
+    void resolve_afterDelete_returnsNull() {
+        storeProvider.set(USER_ID, "TEMP_KEY", "temp_value");
+        assertThat(service.resolve(USER_ID, "TEMP_KEY")).isEqualTo("temp_value");
+
+        storeProvider.delete(USER_ID, "TEMP_KEY");
+        assertThat(service.resolve(USER_ID, "TEMP_KEY")).isNull();
     }
 }

@@ -62,8 +62,10 @@ public class CredentialController {
     /** GET /api/credentials/{name} — get metadata for a single credential */
     @GetMapping("/{name}")
     public ResponseEntity<?> getCredential(@PathVariable String name) {
+        log.info("Request to get {}", name);
         String userId = currentUserId();
         List<CredentialMeta> all = storeProvider.list(userId);
+        log.info("Got: {}", all);
         return all.stream()
             .filter(m -> m.getName().equals(name))
             .findFirst()

@@ -35,10 +35,6 @@ class EncryptedDbCredentialStoreProviderTest {
     @BeforeEach
     void setUp() {
         jdbc.update("DELETE FROM credentials_store WHERE user_id = :uid", Map.of("uid", USER_ID));
-        // Ensure test user exists in users table (foreign key)
-        jdbc.update("INSERT OR IGNORE INTO users (id, name, email, username, password_hash, created_at) " +
-            "VALUES (:id, 'Store Test', '', 'store_test_user', '', datetime('now'))",
-            Map.of("id", USER_ID));
     }
 
     @Test

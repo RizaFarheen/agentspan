@@ -20,7 +20,7 @@ class MasterKeyConfigTest {
         String b64 = Base64.getEncoder().encodeToString(raw);
 
         MasterKeyConfig config = new MasterKeyConfig();
-        byte[] key = config.loadOrGenerate(b64, false, tempDir);
+        byte[] key = config.loadOrGenerate(b64, tempDir);
 
         assertThat(key).hasSize(32);
         assertThat(key).isEqualTo(raw);
@@ -29,7 +29,7 @@ class MasterKeyConfigTest {
     @Test
     void loadKey_autoGen_onLocalhost_writesFileAndWarns() {
         MasterKeyConfig config = new MasterKeyConfig();
-        byte[] key = config.loadOrGenerate(null, true, tempDir);
+        byte[] key = config.loadOrGenerate(null, tempDir);
 
         assertThat(key).hasSize(32);
         // Key file is written to tempDir/.agentspan/master.key
@@ -39,26 +39,26 @@ class MasterKeyConfigTest {
     @Test
     void loadKey_autoGen_subsequentCall_returnsSameKey() {
         MasterKeyConfig config = new MasterKeyConfig();
-        byte[] key1 = config.loadOrGenerate(null, true, tempDir);
-        byte[] key2 = config.loadOrGenerate(null, true, tempDir);
+        byte[] key1 = config.loadOrGenerate(null, tempDir);
+        byte[] key2 = config.loadOrGenerate(null, tempDir);
 
         assertThat(key1).isEqualTo(key2);
     }
 
     @Test
-    void loadKey_missingKey_notLocalhost_throws() {
+    void loadKey_missingKey_autoGenerates() {
         MasterKeyConfig config = new MasterKeyConfig();
+        byte[] key = config.loadOrGenerate(null, tempDir);
 
-        assertThatThrownBy(() -> config.loadOrGenerate(null, false, tempDir))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("AGENTSPAN_MASTER_KEY");
+        assertThat(key).hasSize(32);
+        assertThat(tempDir.resolve(".agentspan/master.key")).exists();
     }
 
     @Test
     void loadKey_invalidBase64_throws() {
         MasterKeyConfig config = new MasterKeyConfig();
 
-        assertThatThrownBy(() -> config.loadOrGenerate("not-valid-base64!!!", false, tempDir))
+        assertThatThrownBy(() -> config.loadOrGenerate("not-valid-base64!!!", tempDir))
             .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -69,7 +69,7 @@ class MasterKeyConfigTest {
         String b64 = Base64.getEncoder().encodeToString(short16);
         MasterKeyConfig config = new MasterKeyConfig();
 
-        assertThatThrownBy(() -> config.loadOrGenerate(b64, false, tempDir))
+        assertThatThrownBy(() -> config.loadOrGenerate(b64, tempDir))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("32 bytes");
     }

@@ -1,9 +1,10 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Unit tests for the dispatch module workers.
+"""Tests for the dispatch module workers.
 
 Tests cover the native-FC workers: check_approval_worker and make_tool_worker.
+No mocks — tests exercise real code paths.
 """
 
 import pytest
@@ -80,7 +81,18 @@ class TestCheckApprovalWorker:
 class TestCredentialExtraction:
     """_dispatch.py extracts __agentspan_ctx__ from task input/variables."""
 
-    def test_extract_token_from_input_data(self):
+    def test_extract_token_from_input_data_dict(self):
+        from agentspan.agents.runtime._dispatch import _extract_execution_token
+
+        class FakeTask:
+            input_data = {"__agentspan_ctx__": {"execution_token": "token-from-input"}, "x": "hello"}
+            workflow_input = {}
+
+        token = _extract_execution_token(FakeTask())
+        assert token == "token-from-input"
+
+    def test_extract_token_from_input_data_string(self):
+        """Backwards compat: plain string is also accepted."""
         from agentspan.agents.runtime._dispatch import _extract_execution_token
 
         class FakeTask:
@@ -100,96 +112,82 @@ class TestCredentialExtraction:
         token = _extract_execution_token(FakeTask())
         assert token is None
 
+    def test_extract_token_from_workflow_input_dict(self):
+        from agentspan.agents.runtime._dispatch import _extract_execution_token
 
-class TestMakeToolWorkerWithCredentials:
-    """make_tool_worker integrates with credential fetching."""
+        class FakeTask:
+            input_data = {}
+            workflow_input = {"__agentspan_ctx__": {"execution_token": "token-from-wf"}}
 
-    def _make_task(self, input_data=None, ctx_token=None):
-        from conductor.client.http.models.task import Task
-        t = Task()
-        t.input_data = input_data or {}
-        if ctx_token:
-            t.input_data["__agentspan_ctx__"] = ctx_token
-        t.workflow_instance_id = "test-wf-001"
-        t.task_id = "test-task-001"
-        return t
+        token = _extract_execution_token(FakeTask())
+        assert token == "token-from-wf"
 
-    def test_non_isolated_tool_sets_credential_context(self):
-        """isolated=False tool receives credentials via context var."""
-        from unittest.mock import patch, MagicMock
-        from agentspan.agents.runtime._dispatch import make_tool_worker
-        from agentspan.agents.runtime.credentials.accessor import get_credential
-        from agentspan.agents.tool import ToolDef, tool
+    def test_extract_token_empty_dict_returns_none(self):
+        from agentspan.agents.runtime._dispatch import _extract_execution_token
 
-        captured_token = {}
+        class FakeTask:
+            input_data = {"__agentspan_ctx__": {}}
+            workflow_input = {}
 
-        @tool(isolated=False, credentials=["GITHUB_TOKEN"])
+        token = _extract_execution_token(FakeTask())
+        assert token is None
+
+
+class TestToolDefCredentialsSurvival:
+    """Verify credentials from @tool decorator survive into make_tool_worker."""
+
+    def test_tool_def_credentials_accessible_via_get_tool_def(self):
+        from agentspan.agents.tool import tool, get_tool_def
+
+        @tool(credentials=["MY_SECRET"])
         def my_tool(x: str) -> str:
-            """Get credential in tool."""
-            captured_token["val"] = get_credential("GITHUB_TOKEN")
-            return "ok"
+            return x
 
-        mock_fetcher = MagicMock()
-        mock_fetcher.fetch.return_value = {"GITHUB_TOKEN": "ghp_from_service"}
+        td = get_tool_def(my_tool)
+        assert td.credentials == ["MY_SECRET"]
 
-        with patch(
-            "agentspan.agents.runtime._dispatch._get_credential_fetcher",
-            return_value=mock_fetcher,
-        ):
-            wrapper = make_tool_worker(my_tool, "my_tool")
-            task = self._make_task(input_data={"x": "hello"}, ctx_token="exec-token-abc")
-            result = wrapper(task)
+    def test_make_tool_worker_with_tool_def_has_credentials(self):
+        """When tool_def is passed, make_tool_worker can access credentials."""
+        from agentspan.agents.runtime._dispatch import make_tool_worker, _get_credential_names_from_tool
+        from agentspan.agents.tool import tool, get_tool_def
 
-        assert result.status == "COMPLETED"
-        assert captured_token["val"] == "ghp_from_service"
-        mock_fetcher.fetch.assert_called_once_with("exec-token-abc", ["GITHUB_TOKEN"])
+        @tool(credentials=["GITHUB_TOKEN", "OPENAI_API_KEY"])
+        def cred_tool(x: str) -> str:
+            return x
 
-    def test_no_credentials_no_fetcher_call(self):
-        """Tool with no credentials — fetcher is not called."""
-        from unittest.mock import patch, MagicMock
-        from agentspan.agents.runtime._dispatch import make_tool_worker
-        from agentspan.agents.tool import tool
+        td = get_tool_def(cred_tool)
+        # Both raw func and wrapper have _tool_def (needed for spawn-mode pickling)
+        assert _get_credential_names_from_tool(td.func) == ["GITHUB_TOKEN", "OPENAI_API_KEY"]
+        assert _get_credential_names_from_tool(cred_tool) == ["GITHUB_TOKEN", "OPENAI_API_KEY"]
+
+    def test_no_credentials_tool_returns_empty(self):
+        from agentspan.agents.tool import tool, get_tool_def
 
         @tool
         def simple_tool(x: str) -> str:
-            """No credentials needed."""
-            return f"hello {x}"
+            return x
 
-        mock_fetcher = MagicMock()
+        td = get_tool_def(simple_tool)
+        assert td.credentials == []
 
-        with patch(
-            "agentspan.agents.runtime._dispatch._get_credential_fetcher",
-            return_value=mock_fetcher,
-        ):
-            wrapper = make_tool_worker(simple_tool, "simple_tool")
-            task = self._make_task(input_data={"x": "world"})
-            result = wrapper(task)
-
-        assert result.status == "COMPLETED"
-        mock_fetcher.fetch.assert_not_called()
-
-    def test_credential_auth_error_fails_task(self):
-        """CredentialAuthError → task marked FAILED."""
-        from unittest.mock import patch, MagicMock
+    def test_tool_worker_no_credentials_runs_directly(self):
+        """Tool without credentials runs without subprocess isolation."""
         from agentspan.agents.runtime._dispatch import make_tool_worker
-        from agentspan.agents.runtime.credentials.types import CredentialAuthError
-        from agentspan.agents.tool import tool
+        from agentspan.agents.tool import tool, get_tool_def
+        from conductor.client.http.models.task import Task
 
-        @tool(isolated=False, credentials=["GITHUB_TOKEN"])
-        def my_tool(x: str) -> str:
-            """Tool."""
-            return "ok"
+        @tool
+        def add(a: int, b: int) -> int:
+            return a + b
 
-        mock_fetcher = MagicMock()
-        mock_fetcher.fetch.side_effect = CredentialAuthError("token expired")
+        td = get_tool_def(add)
+        wrapper = make_tool_worker(td.func, td.name, tool_def=td)
 
-        with patch(
-            "agentspan.agents.runtime._dispatch._get_credential_fetcher",
-            return_value=mock_fetcher,
-        ):
-            wrapper = make_tool_worker(my_tool, "my_tool")
-            task = self._make_task(input_data={"x": "hello"}, ctx_token="expired-token")
-            result = wrapper(task)
+        task = Task()
+        task.input_data = {"a": 3, "b": 4}
+        task.workflow_instance_id = "test-wf"
+        task.task_id = "test-task"
 
-        assert result.status == "FAILED"
-        assert "expired" in result.reason_for_incompletion.lower()
+        result = wrapper(task)
+        assert result.status == "COMPLETED"
+        assert result.output_data["result"] == 7

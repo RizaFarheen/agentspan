@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -25,8 +24,7 @@ import java.util.Base64;
  * <p>Key sourcing rules:</p>
  * <ul>
  *   <li>If {@code AGENTSPAN_MASTER_KEY} env var is set → decode and use it</li>
- *   <li>If unset + localhost → auto-generate, persist to ~/.agentspan/master.key, warn</li>
- *   <li>If unset + non-localhost → fail startup with clear error message</li>
+ *   <li>If unset → auto-generate, persist to ~/.agentspan/master.key, warn</li>
  * </ul>
  */
 @Configuration
@@ -40,15 +38,14 @@ public class MasterKeyConfig {
 
     @Bean("credentialMasterKey")
     public byte[] credentialMasterKey() {
-        boolean isLocalhost = detectLocalhost();
         Path homeDir = Paths.get(System.getProperty("user.home"));
-        return loadOrGenerate(masterKeyBase64, isLocalhost, homeDir);
+        return loadOrGenerate(masterKeyBase64, homeDir);
     }
 
     /**
-     * Package-private for testing — accepts an explicit home directory and localhost flag.
+     * Package-private for testing — accepts an explicit home directory.
      */
-    byte[] loadOrGenerate(String keyBase64, boolean isLocalhost, Path homeDir) {
+    byte[] loadOrGenerate(String keyBase64, Path homeDir) {
         if (keyBase64 != null && !keyBase64.isBlank()) {
             byte[] decoded;
             try {
@@ -66,16 +63,7 @@ public class MasterKeyConfig {
             return decoded;
         }
 
-        // Key not configured
-        if (!isLocalhost) {
-            throw new IllegalStateException(
-                "AGENTSPAN_MASTER_KEY is not set. " +
-                "This is required when agentspan.credentials.store=built-in on a non-localhost server. " +
-                "Generate a key with: openssl rand -base64 32 " +
-                "Then set the AGENTSPAN_MASTER_KEY environment variable.");
-        }
-
-        // Localhost auto-gen path
+        // Key not configured — auto-generate and persist
         return autoGenerate(homeDir);
     }
 
@@ -108,7 +96,7 @@ public class MasterKeyConfig {
             }
 
             log.warn("┌─────────────────────────────────────────────────────────────────┐");
-            log.warn("│  AGENTSPAN_MASTER_KEY not set — auto-generated for localhost.   │");
+            log.warn("│  AGENTSPAN_MASTER_KEY not set — auto-generated key in use.      │");
             log.warn("│  Credential store key written to: {}  │", keyFile);
             log.warn("│  Back up this file — losing it means losing all credentials.   │");
             log.warn("│  Set AGENTSPAN_MASTER_KEY in production to suppress this.       │");
@@ -121,12 +109,4 @@ public class MasterKeyConfig {
         }
     }
 
-    private boolean detectLocalhost() {
-        try {
-            InetAddress addr = InetAddress.getLocalHost();
-            return addr.isLoopbackAddress() || addr.getHostName().equals("localhost");
-        } catch (Exception e) {
-            return true; // assume localhost if detection fails
-        }
-    }
 }

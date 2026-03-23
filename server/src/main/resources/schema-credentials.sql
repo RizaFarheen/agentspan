@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id           TEXT PRIMARY KEY,           -- UUID as string
-    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL,
     key_hash     TEXT NOT NULL UNIQUE,       -- SHA-256 hex of raw key
     label        TEXT,
     last_used_at TEXT,                       -- ISO-8601 UTC, updated on use
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 
 CREATE TABLE IF NOT EXISTS credentials_store (
-    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL,
     name            TEXT NOT NULL,
     encrypted_value BLOB NOT NULL,           -- AES-256-GCM ciphertext
     created_at      TEXT NOT NULL,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS credentials_store (
 );
 
 CREATE TABLE IF NOT EXISTS credentials_binding (
-    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id     TEXT NOT NULL,
     logical_key TEXT NOT NULL,              -- what code declares: "GITHUB_TOKEN"
     store_name  TEXT NOT NULL,             -- what is stored:     "my-github-prod-key"
     PRIMARY KEY (user_id, logical_key)
