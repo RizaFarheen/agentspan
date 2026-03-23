@@ -189,6 +189,74 @@ with AgentRuntime() as runtime:
     report: WeatherReport = result.output  # Fully typed
 ```
 
+### Credential Management
+
+Store API keys and secrets once on the server. Tools resolve them automatically at runtime — no `.env` files, no hardcoded keys, no secrets in git.
+
+**Step 1: Store credentials on the server**
+
+```bash
+agentspan credential store GITHUB_TOKEN ghp_xxxxxxxxxxxx
+agentspan credential store SEARCH_API_KEY xxx-your-key
+```
+
+Credentials are encrypted at rest (AES-256-GCM). List them with `agentspan credential list`.
+
+**Step 2: Declare which credentials a tool needs**
+
+```python
+from agentspan.agents import Agent, AgentRuntime, tool, get_credential
+
+# Default: tool runs in isolated subprocess with credentials as env vars
+@tool(credentials=["GITHUB_TOKEN"])
+def list_repos(username: str) -> dict:
+    """List GitHub repos."""
+    import os
+    token = os.environ["GITHUB_TOKEN"]  # Auto-injected by the runtime
+    return {"repos": ["repo1", "repo2"]}
+
+# Alternative: access credentials in-process (no subprocess)
+@tool(isolated=False, credentials=["SEARCH_API_KEY"])
+def search(query: str) -> dict:
+    """Search using API key."""
+    key = get_credential("SEARCH_API_KEY")  # Resolve from server at runtime
+    return {"results": ["result1"]}
+```
+
+**Step 3: Run — credentials resolve automatically**
+
+```python
+agent = Agent(
+    name="github_helper",
+    model="openai/gpt-4o",
+    tools=[list_repos, search],
+    credentials=["GITHUB_TOKEN"],  # Agent-level credentials (shared with all tools)
+)
+
+with AgentRuntime() as runtime:
+    result = runtime.run(agent, "List my GitHub repos and search for AI papers")
+    result.print_result()
+```
+
+**Credentials work with every tool type:**
+
+```python
+from agentspan.agents import http_tool, mcp_tool
+
+# HTTP tools: server substitutes ${NAME} in headers at runtime
+api = http_tool(
+    name="weather_api", description="Get weather data",
+    url="https://api.weather.com/v1/current",
+    headers={"Authorization": "Bearer ${WEATHER_KEY}"},
+    credentials=["WEATHER_KEY"],
+)
+
+# MCP tools: credentials passed to MCP server connection
+github = mcp_tool(server_url="http://localhost:3001/mcp", credentials=["GITHUB_TOKEN"])
+```
+
+No credentials leave the server unencrypted. Workers resolve them via scoped execution tokens that expire with the workflow. See the [11 credential examples](sdk/python/examples/) (`16_*.py` through `16k_*.py`) for every mode: isolated subprocess, in-process, CLI tools, HTTP headers, MCP, and framework passthrough.
+
 ### Multi-Agent Handoffs
 
 ```python
@@ -523,85 +591,6 @@ Execution order: `on_agent_start` → (`on_model_start` → LLM → `on_model_en
 | [Google ADK](sdk/python/examples/adk/) | 35 examples | Full ADK compatibility, all agent types |
 | [LangChain](sdk/python/examples/langchain/) | 25 examples | ReAct, memory, document analysis |
 | [LangGraph](sdk/python/examples/langgraph/) | 44 examples | StateGraph, human-in-the-loop, subgraphs |
-
-### Credential Management
-
-Store API keys and secrets once on the server. Tools resolve them automatically at runtime — no `.env` files, no hardcoded keys, no secrets in git.
-
-**Step 1: Store credentials on the server**
-
-```bash
-agentspan credential store GITHUB_TOKEN ghp_xxxxxxxxxxxx
-agentspan credential store OPENAI_API_KEY sk-xxxxxxxxxxxx
-agentspan credential store SEARCH_API_KEY xxx-your-key
-```
-
-Credentials are encrypted at rest (AES-256-GCM). List stored credentials:
-
-```bash
-agentspan credential list
-```
-
-**Step 2: Declare which credentials a tool needs**
-
-```python
-from agentspan.agents import Agent, AgentRuntime, tool, get_credential
-
-# Default: tool runs in isolated subprocess with credentials as env vars
-@tool(credentials=["GITHUB_TOKEN"])
-def list_repos(username: str) -> dict:
-    """List GitHub repos."""
-    import os
-    token = os.environ["GITHUB_TOKEN"]  # Auto-injected by the runtime
-    # ... use token to call GitHub API
-    return {"repos": ["repo1", "repo2"]}
-
-# Alternative: access credentials in-process (no subprocess)
-@tool(isolated=False, credentials=["SEARCH_API_KEY"])
-def search(query: str) -> dict:
-    """Search using API key."""
-    key = get_credential("SEARCH_API_KEY")  # Resolve from server at runtime
-    # ... use key to call search API
-    return {"results": ["result1"]}
-```
-
-**Step 3: Run the agent — credentials resolve automatically**
-
-```python
-agent = Agent(
-    name="github_helper",
-    model="openai/gpt-4o",
-    tools=[list_repos, search],
-    credentials=["GITHUB_TOKEN"],  # Agent-level credentials (shared with all tools)
-)
-
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "List my GitHub repos and search for AI papers")
-    result.print_result()
-```
-
-**Credentials work everywhere:**
-
-```python
-from agentspan.agents import http_tool, mcp_tool
-
-# HTTP tools: server substitutes ${NAME} in headers at runtime
-api = http_tool(
-    name="weather_api",
-    description="Get weather data",
-    url="https://api.weather.com/v1/current",
-    headers={"Authorization": "Bearer ${WEATHER_KEY}"},
-    credentials=["WEATHER_KEY"],  # Declare which credentials to resolve
-)
-
-# MCP tools: credentials passed to MCP server connection
-github = mcp_tool(
-    server_url="http://localhost:3001/mcp",
-    credentials=["GITHUB_TOKEN"],
-)
-```
-
-No credentials leave the server unencrypted. Workers resolve them via scoped execution tokens that expire with the workflow. See the [11 credential examples](sdk/python/examples/) (`16_*.py` through `16k_*.py`) for every mode: isolated subprocess, in-process, CLI tools, HTTP headers, MCP, and framework passthrough.
 
 ### Google ADK Compatibility
 
