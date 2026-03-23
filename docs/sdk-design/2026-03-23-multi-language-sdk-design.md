@@ -1,8 +1,22 @@
 # Multi-Language SDK Design Spec
 
 **Date:** 2026-03-23
-**Status:** Draft
+**Status:** Complete
 **Approach:** Reference Implementation + Translation Guide (Approach 2)
+
+## Deliverable Status
+
+| # | File | Status |
+|---|------|--------|
+| 1 | [base-design.md](2026-03-23-multi-language-sdk-design.md) | Complete |
+| 2 | [kitchen-sink.md](kitchen-sink.md) | Complete |
+| 3 | [kitchen_sink.py](../../sdk/python/examples/kitchen_sink.py) | Complete |
+| 4 | [typescript.md](typescript.md) | Complete |
+| 5 | [go.md](go.md) | Complete |
+| 6 | [java.md](java.md) | Complete |
+| 7 | [kotlin.md](kotlin.md) | Complete |
+| 8 | [csharp.md](csharp.md) | Complete |
+| 9 | [ruby.md](ruby.md) | Complete |
 
 ---
 
