@@ -1,0 +1,44 @@
+# Agentspan Docker Compose Deployment
+
+This directory contains a turn-key Docker Compose stack for running Agentspan server + PostgreSQL locally or on a single VM.
+
+## Path
+
+`deployment/docker-compose`
+
+## Quick Start
+
+```bash
+cd deployment/docker-compose
+cp .env.example .env
+# set at least one provider key in .env (for example OPENAI_API_KEY)
+docker compose up -d
+```
+
+Open:
+- UI: `http://localhost:8080`
+- Health: `http://localhost:8080/actuator/health`
+
+## Validate
+
+```bash
+docker compose config
+docker compose ps
+docker compose logs --tail=200 agentspan
+curl -fsS http://localhost:8080/actuator/health
+```
+
+## Stop / Cleanup
+
+```bash
+docker compose down
+docker compose down -v   # removes postgres volume/data
+```
+
+## Notes
+
+- All runtime values are environment-driven; no secrets are hardcoded in `compose.yaml`.
+- `depends_on` waits for Postgres health before starting Agentspan.
+- `host.docker.internal` is mapped so the container can reach host services (for example local Ollama).
+- If you change `POSTGRES_USER` / `POSTGRES_PASSWORD`, keep datasource credentials aligned.
+- For production HA/scaling, use Kubernetes manifests or the Helm chart under `deployment/helm/agentspan`.
