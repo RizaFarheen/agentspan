@@ -872,6 +872,9 @@ public class AgentCompiler {
             inputs.put("thinkingConfig", thinking);
         }
 
+        // Forward execution token so per-user credential resolution works in worker threads
+        inputs.put("__agentspan_ctx__", "${workflow.input.__agentspan_ctx__}");
+
         llm.setInputParameters(inputs);
         return llm;
     }

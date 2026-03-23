@@ -110,17 +110,8 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         TaskModel taskModel = super.getMappedTask(taskMapperContext);
         WorkflowModel workflowModel = taskMapperContext.getWorkflowModel();
 
-        // Per-user LLM key resolution — override server key if user has their own
-        if (userAwareAIModelProvider != null) {
-            Object llmProvider = taskModel.getInputData().get("llmProvider");
-            if (llmProvider instanceof String providerName) {
-                String userKey = userAwareAIModelProvider.resolveUserApiKey(providerName);
-                if (userKey != null) {
-                    taskModel.getInputData().put("apiKey", userKey);
-                    log.debug("Per-user API key applied for provider '{}'", providerName);
-                }
-            }
-        }
+        // Per-user LLM key resolution is handled by AgentspanAIModelProvider.getModel()
+        // which creates a fresh AIModel with the user's credential. No inputData injection needed.
 
         try {
             ChatCompletion chatCompletion =
