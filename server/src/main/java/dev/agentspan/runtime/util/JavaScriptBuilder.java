@@ -489,6 +489,87 @@ public class JavaScriptBuilder {
     }
 
     /**
+     * Build the API prepare/merge script that combines static tool specs with
+     * dynamically discovered API tools from LIST_API_TOOLS tasks, alongside
+     * any existing MCP discovery.
+     *
+     * <p>At runtime this script:</p>
+     * <ol>
+     *   <li>Parses static (non-API) tool specs from a baked-in JSON literal</li>
+     *   <li>Reads discovered tools from each LIST_API_TOOLS task output</li>
+     *   <li>Converts each discovered tool into a tool spec with {@code type: "HTTP"}</li>
+     *   <li>Builds an {@code apiConfig} map (tool name &rarr; baseUrl + method + path + headers)</li>
+     *   <li>Merges with MCP config from any parallel MCP discovery</li>
+     *   <li>Checks whether total tool count exceeds the threshold</li>
+     * </ol>
+     *
+     * @param staticSpecsJson JSON array of static tool specs (baked in at compile time)
+     * @param mcpServerCount  number of MCP servers (each provides $.mcp_discovered_N input)
+     * @param mcpServersJson  JSON array of [{serverUrl, headers}, ...] for each MCP server
+     * @param apiServerCount  number of API sources (each provides $.api_discovered_N input)
+     * @param apiServersJson  JSON array of [{headers}, ...] for each API source
+     * @param maxTools        threshold for filtering
+     */
+    public static String apiPrepareScript(String staticSpecsJson, int mcpServerCount,
+                                          String mcpServersJson, int apiServerCount,
+                                          String apiServersJson, int maxTools) {
+        // ── MCP discovered reads ──
+        StringBuilder mcpDiscoveredReads = new StringBuilder();
+        for (int i = 0; i < mcpServerCount; i++) {
+            mcpDiscoveredReads.append("  var md").append(i).append(" = $.mcp_discovered_").append(i).append(" || [];");
+        }
+        StringBuilder mcpMergeLoop = new StringBuilder();
+        for (int i = 0; i < mcpServerCount; i++) {
+            mcpMergeLoop.append(
+                "  for (var i = 0; i < md" + i + ".length; i++) {" +
+                "    var t = md" + i + "[i];" +
+                "    var s = mcpServers[" + i + "];" +
+                "    specs.push({name: t.name, type: 'CALL_MCP_TOOL'," +
+                "      description: t.description || ''," +
+                "      inputSchema: t.inputSchema || {type:'object',properties:{}}," +
+                "      configParams: {mcpServer: s.serverUrl, headers: s.headers || {}}});" +
+                "    mcpCfg[t.name] = {mcpServer: s.serverUrl, headers: s.headers || {}};" +
+                "  }");
+        }
+
+        // ── API discovered reads ──
+        StringBuilder apiDiscoveredReads = new StringBuilder();
+        for (int i = 0; i < apiServerCount; i++) {
+            apiDiscoveredReads.append("  var ad").append(i).append(" = $.api_discovered_").append(i).append(" || {};");
+        }
+        StringBuilder apiMergeLoop = new StringBuilder();
+        for (int i = 0; i < apiServerCount; i++) {
+            apiMergeLoop.append(
+                "  var apiTools" + i + " = ad" + i + ".tools || [];" +
+                "  var apiBase" + i + " = ad" + i + ".baseUrl || '';" +
+                "  var apiSrv" + i + " = apiServers[" + i + "];" +
+                "  for (var i = 0; i < apiTools" + i + ".length; i++) {" +
+                "    var at = apiTools" + i + "[i];" +
+                "    specs.push({name: at.name, type: 'HTTP'," +
+                "      description: at.description || ''," +
+                "      inputSchema: at.inputSchema || {type:'object',properties:{}}});" +
+                "    apiCfg[at.name] = {baseUrl: apiBase" + i + "," +
+                "      method: at.method || 'GET', path: at.path || ''," +
+                "      headers: apiSrv" + i + ".headers || {}};" +
+                "  }");
+        }
+
+        return iife(
+            "  var specs = " + staticSpecsJson + ";" +
+            "  var mcpServers = " + mcpServersJson + ";" +
+            "  var apiServers = " + apiServersJson + ";" +
+            "  var mcpCfg = {};" +
+            "  var apiCfg = {};" +
+            mcpDiscoveredReads +
+            mcpMergeLoop +
+            apiDiscoveredReads +
+            apiMergeLoop +
+            "  return {tools: specs, mcpConfig: mcpCfg, apiConfig: apiCfg," +
+            "    needsFilter: specs.length > " + maxTools + "};"
+        );
+    }
+
+    /**
      * Build tool enrichment script with dynamic MCP config from runtime input.
      *
      * <p>Like {@link #enrichToolsScript} but reads {@code mcpCfg} from {@code $.mcpConfig}
@@ -501,6 +582,7 @@ public class JavaScriptBuilder {
         return iife(
             "  var httpCfg = " + httpConfigJson + ";" +
             "  var mcpCfg = $.mcpConfig || {};" +
+            "  var apiCfg = $.apiConfig || {};" +
             "  var mediaCfg = " + mediaConfigJson + ";" +
             "  var agentToolCfg = " + agentToolConfigJson + ";" +
             "  var ragCfg = " + ragConfigJson + ";" +
@@ -535,6 +617,39 @@ public class JavaScriptBuilder {
             "        method: n," +
             "        arguments: tc.inputParameters || {}," +
             "        headers: mcpCfg[n].headers || {}};" +
+            "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
+            "    } else if (apiCfg[n]) {" +
+            "      var api = apiCfg[n];" +
+            "      var uri = api.baseUrl + api.path;" +
+            "      var params = {};" +
+            "      var inp = tc.inputParameters || {};" +
+            "      for (var k in inp) { params[k] = inp[k]; }" +
+            "      var pathParams = (uri.match(/\\{(\\w+)\\}/g) || []);" +
+            "      for (var j = 0; j < pathParams.length; j++) {" +
+            "        var key = pathParams[j].replace(/[{}]/g, '');" +
+            "        if (params[key] !== undefined) {" +
+            "          uri = uri.replace(pathParams[j], encodeURIComponent(String(params[key])));" +
+            "          delete params[key];" +
+            "        }" +
+            "      }" +
+            "      var method = api.method.toUpperCase();" +
+            "      if (method === 'GET' || method === 'DELETE' || method === 'HEAD') {" +
+            "        var qs = Object.keys(params).map(function(k) {" +
+            "          return encodeURIComponent(k) + '=' + encodeURIComponent(String(params[k]));" +
+            "        }).join('&');" +
+            "        if (qs) uri = uri + '?' + qs;" +
+            "        t.type = 'HTTP';" +
+            "        t.inputParameters = {http_request: {uri: uri, method: method," +
+            "          headers: api.headers, accept: 'application/json'," +
+            "          contentType: 'application/json'," +
+            "          connectionTimeOut: 30000, readTimeOut: 30000}};" +
+            "      } else {" +
+            "        t.type = 'HTTP';" +
+            "        t.inputParameters = {http_request: {uri: uri, method: method," +
+            "          headers: api.headers, body: params," +
+            "          accept: 'application/json', contentType: 'application/json'," +
+            "          connectionTimeOut: 30000, readTimeOut: 30000}};" +
+            "      }" +
             "      if ($.agentspanCtx) { t.inputParameters.__agentspan_ctx__ = $.agentspanCtx; }" +
             "    } else if (agentToolCfg[n]) {" +
             "      t.type = 'SUB_WORKFLOW';" +
@@ -630,8 +745,9 @@ public class JavaScriptBuilder {
             "  var filtered = $.filtered_tools;" +
             "  var prepared = $.prepared_tools;" +
             "  var mcpConfig = $.mcpConfig;" +
+            "  var apiConfig = $.apiConfig;" +
             "  var tools = (filtered && filtered.length > 0) ? filtered : prepared;" +
-            "  return {tools: tools, mcpConfig: mcpConfig};"
+            "  return {tools: tools, mcpConfig: mcpConfig, apiConfig: apiConfig};"
         );
     }
 

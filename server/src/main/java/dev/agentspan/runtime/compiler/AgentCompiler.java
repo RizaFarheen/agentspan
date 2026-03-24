@@ -209,32 +209,44 @@ public class AgentCompiler {
         ToolCompiler tc = new ToolCompiler();
         boolean hasApproval = tools.stream().anyMatch(ToolConfig::isApprovalRequired);
         boolean hasMcp = tools.stream().anyMatch(t -> "mcp".equals(t.getToolType()));
+        boolean hasApi = tools.stream().anyMatch(t -> "api".equals(t.getToolType()));
 
         WorkflowDef wf = createWorkflow(config);
 
-        // ── MCP discovery (pre-loop tasks) or static tool specs ──────
-        ToolCompiler.McpDiscoveryResult mcpResult = null;
+        // ── Discovery (pre-loop tasks) or static tool specs ──────────
+        ToolCompiler.DiscoveryResult discoveryResult = null;
         List<Map<String, Object>> toolSpecs = null;
 
-        if (hasMcp) {
+        if (hasMcp || hasApi) {
             List<ToolConfig> staticTools = tools.stream()
-                    .filter(t -> !"mcp".equals(t.getToolType())).toList();
+                    .filter(t -> !"mcp".equals(t.getToolType()) && !"api".equals(t.getToolType())).toList();
             List<ToolConfig> mcpTools = tools.stream()
                     .filter(t -> "mcp".equals(t.getToolType())).toList();
+            List<ToolConfig> apiTools = tools.stream()
+                    .filter(t -> "api".equals(t.getToolType())).toList();
 
             List<Map<String, Object>> staticSpecs = tc.compileToolSpecs(staticTools);
-            mcpResult = tc.buildMcpDiscoveryTasks(
-                    config.getName(), mcpTools, staticSpecs, config.getModel());
+
+            if (hasMcp && hasApi) {
+                discoveryResult = tc.buildDiscoveryTasks(
+                        config.getName(), mcpTools, apiTools, staticSpecs, config.getModel());
+            } else if (hasMcp) {
+                discoveryResult = tc.buildMcpDiscoveryTasks(
+                        config.getName(), mcpTools, staticSpecs, config.getModel());
+            } else {
+                discoveryResult = tc.buildApiDiscoveryTasks(
+                        config.getName(), apiTools, staticSpecs, config.getModel());
+            }
         } else {
             toolSpecs = tc.compileToolSpecs(tools);
         }
 
         // Build LLM task
         WorkflowTask llmTask;
-        if (mcpResult != null) {
+        if (discoveryResult != null) {
             // LLM task with null toolSpecs; wire dynamic tools ref after
             llmTask = buildLlmTask(config, parsed, llmRef, null);
-            llmTask.getInputParameters().put("tools", mcpResult.getToolsRef());
+            llmTask.getInputParameters().put("tools", discoveryResult.getToolsRef());
         } else {
             llmTask = buildLlmTask(config, parsed, llmRef, toolSpecs);
         }
@@ -254,10 +266,10 @@ public class AgentCompiler {
 
         // Tool call routing SwitchTask (with tool-level guardrail metadata)
         ToolCompiler.ToolCallRoutingResult toolRoutingResult;
-        if (mcpResult != null) {
+        if (discoveryResult != null) {
             toolRoutingResult = tc.buildToolCallRoutingDynamicWithResult(
                 config.getName(), llmRef, tools, hasApproval, config.getModel(),
-                mcpResult.getMcpConfigRef());
+                discoveryResult.getMcpConfigRef(), discoveryResult.getApiConfigRef());
         } else {
             toolRoutingResult = tc.buildToolCallRoutingWithResult(
                 config.getName(), llmRef, tools, hasApproval, config.getModel()
@@ -389,8 +401,8 @@ public class AgentCompiler {
             allTasks.add(buildCallbackTask(beforeAgent, config.getName(), null));
         }
 
-        if (mcpResult != null) {
-            allTasks.addAll(mcpResult.getPreTasks());
+        if (discoveryResult != null) {
+            allTasks.addAll(discoveryResult.getPreTasks());
         }
 
         // Initialize workflow variables
@@ -490,41 +502,53 @@ public class AgentCompiler {
         ToolCompiler tc = new ToolCompiler();
         boolean hasApproval = allTools.stream().anyMatch(ToolConfig::isApprovalRequired);
         boolean hasMcp = allTools.stream().anyMatch(t -> "mcp".equals(t.getToolType()));
+        boolean hasApi = allTools.stream().anyMatch(t -> "api".equals(t.getToolType()));
 
         WorkflowDef wf = createWorkflow(config);
         wf.setDescription("Hybrid agent: " + config.getName());
 
-        // ── MCP discovery or static tool specs ───────────────────────
-        ToolCompiler.McpDiscoveryResult mcpResult = null;
+        // ── Discovery or static tool specs ───────────────────────────
+        ToolCompiler.DiscoveryResult discoveryResult = null;
         List<Map<String, Object>> toolSpecs = null;
 
-        if (hasMcp) {
+        if (hasMcp || hasApi) {
             List<ToolConfig> staticTools = allTools.stream()
-                    .filter(t -> !"mcp".equals(t.getToolType())).toList();
+                    .filter(t -> !"mcp".equals(t.getToolType()) && !"api".equals(t.getToolType())).toList();
             List<ToolConfig> mcpTools = allTools.stream()
                     .filter(t -> "mcp".equals(t.getToolType())).toList();
+            List<ToolConfig> apiTools = allTools.stream()
+                    .filter(t -> "api".equals(t.getToolType())).toList();
             List<Map<String, Object>> staticSpecs = tc.compileToolSpecs(staticTools);
-            mcpResult = tc.buildMcpDiscoveryTasks(
-                    config.getName(), mcpTools, staticSpecs, config.getModel());
+
+            if (hasMcp && hasApi) {
+                discoveryResult = tc.buildDiscoveryTasks(
+                        config.getName(), mcpTools, apiTools, staticSpecs, config.getModel());
+            } else if (hasMcp) {
+                discoveryResult = tc.buildMcpDiscoveryTasks(
+                        config.getName(), mcpTools, staticSpecs, config.getModel());
+            } else {
+                discoveryResult = tc.buildApiDiscoveryTasks(
+                        config.getName(), apiTools, staticSpecs, config.getModel());
+            }
         } else {
             toolSpecs = tc.compileToolSpecs(allTools);
         }
 
         // Build LLM task
         WorkflowTask llmTask;
-        if (mcpResult != null) {
+        if (discoveryResult != null) {
             llmTask = buildLlmTask(config, parsed, llmRef, null);
-            llmTask.getInputParameters().put("tools", mcpResult.getToolsRef());
+            llmTask.getInputParameters().put("tools", discoveryResult.getToolsRef());
         } else {
             llmTask = buildLlmTask(config, parsed, llmRef, toolSpecs);
         }
 
         // Tool call routing (with tool-level guardrail metadata)
         ToolCompiler.ToolCallRoutingResult toolRoutingResult;
-        if (mcpResult != null) {
+        if (discoveryResult != null) {
             toolRoutingResult = tc.buildToolCallRoutingDynamicWithResult(
                 config.getName(), llmRef, allTools, hasApproval, config.getModel(),
-                mcpResult.getMcpConfigRef());
+                discoveryResult.getMcpConfigRef(), discoveryResult.getApiConfigRef());
         } else {
             toolRoutingResult = tc.buildToolCallRoutingWithResult(
                 config.getName(), llmRef, allTools, hasApproval, config.getModel()
@@ -643,8 +667,8 @@ public class AgentCompiler {
         initStateHybrid.setTaskReferenceName(config.getName() + "_init_state");
         initStateHybrid.setInputParameters(initHybridVars);
 
-        if (mcpResult != null) {
-            List<WorkflowTask> allTasks = new ArrayList<>(mcpResult.getPreTasks());
+        if (discoveryResult != null) {
+            List<WorkflowTask> allTasks = new ArrayList<>(discoveryResult.getPreTasks());
             allTasks.add(initStateHybrid);
             allTasks.add(loop);
             allTasks.add(transferSwitch);
