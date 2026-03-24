@@ -14,7 +14,7 @@ export type {
   AgentEvent,
   AgentStatus,
   DeploymentInfo,
-  PromptTemplate,
+  PromptTemplate as PromptTemplateInterface,
   CredentialFile,
   CodeExecutionConfig,
   CliConfig,
@@ -46,3 +46,61 @@ export {
 // ── Config ───────────────────────────────────────────────
 export type { AgentConfigOptions, LogLevel } from './config.js';
 export { AgentConfig, normalizeServerUrl } from './config.js';
+
+// ── Tool System ─────────────────────────────────────────
+export type { ToolFunction, ToolOptions } from './tool.js';
+export type {
+  HttpToolOptions,
+  McpToolOptions,
+  ApiToolOptions,
+  AgentToolOptions,
+  HumanToolOptions,
+  ImageToolOptions,
+  AudioToolOptions,
+  VideoToolOptions,
+  PdfToolOptions,
+  SearchToolOptions,
+  IndexToolOptions,
+} from './tool.js';
+export {
+  tool,
+  getToolDef,
+  normalizeToolInput,
+  isZodSchema,
+  httpTool,
+  mcpTool,
+  apiTool,
+  agentTool,
+  humanTool,
+  imageTool,
+  audioTool,
+  videoTool,
+  pdfTool,
+  searchTool,
+  indexTool,
+  Tool,
+  toolsFrom,
+} from './tool.js';
+
+// ── Agent ───────────────────────────────────────────────
+export type {
+  AgentOptions,
+  ScatterGatherOptions,
+  TerminationCondition,
+  HandoffCondition,
+  GateCondition,
+  CallbackHandler,
+  ConversationMemory,
+} from './agent.js';
+export {
+  Agent,
+  PromptTemplate,
+  scatterGather,
+  AgentDec,
+  agentsFrom,
+  agent,
+} from './agent.js';
+
+// ── Serializer ──────────────────────────────────────────
+export type { SerializeOptions } from './serializer.js';
+export { AgentConfigSerializer } from './serializer.js';
