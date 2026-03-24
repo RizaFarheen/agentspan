@@ -1,20 +1,20 @@
 /**
- * 14 - Existing Workers — use external worker_task functions as agent tools.
+ * 14 - Existing Workers — reuse worker_task functions as agent tools.
  *
  * Demonstrates:
- *   - Referencing existing Conductor worker tasks as external agent tools
- *   - Mixing external and local tools in a single agent
- *   - No local worker registration needed for external tools
+ *   - Using tool functions that mirror existing Conductor worker tasks
+ *   - Mixing worker-backed and agent-specific tools in a single agent
+ *   - The external: true option for referencing remote workers (shown but
+ *     commented out since no remote workers are running in this demo)
  *
- * In the Python SDK, existing @worker_task functions can be passed directly
- * as agent tools. In TypeScript, we use tool() with { external: true } to
- * reference existing Conductor task definitions without registering a local
- * worker — the task runs on whatever worker is already deployed.
+ * In the Python SDK, @worker_task decorated functions can be passed
+ * directly as agent tools. In TypeScript, use tool() to wrap functions
+ * that implement the same logic as your existing Conductor workers.
+ * For truly remote workers, use { external: true } to reference task
+ * definitions without registering a local handler.
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - The referenced worker tasks (get_customer_data, get_order_history) must
- *     be registered in Conductor (e.g., by a separate worker process)
  *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
@@ -23,16 +23,19 @@ import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '../src/index.js';
 import { llmModel } from './settings.js';
 
-// --- Existing worker tasks (already deployed, already working) ---
-// These reference Conductor task definitions by name. The SDK does not
-// register a local worker for them — they are dispatched to whatever
-// remote worker is handling those task types.
+// --- Existing worker task implementations ---
+// These mirror @worker_task functions from an existing Conductor deployment.
+// The function bodies match what your deployed workers do, so the agent
+// gets the same behavior whether running locally or dispatched remotely.
 
 const getCustomerData = tool(
-  async (_args: { customerId: string }) => {
-    // This function body is never called for external tools.
-    // The actual execution happens on the remote worker.
-    return {};
+  async (args: { customerId: string }) => {
+    // In production this would query a real database
+    const customers: Record<string, { name: string; plan: string; since: string }> = {
+      C001: { name: 'Alice', plan: 'Enterprise', since: '2021-03' },
+      C002: { name: 'Bob', plan: 'Starter', since: '2023-11' },
+    };
+    return customers[args.customerId] ?? { error: 'Customer not found' };
   },
   {
     name: 'get_customer_data',
@@ -40,14 +43,25 @@ const getCustomerData = tool(
     inputSchema: z.object({
       customerId: z.string().describe('The customer ID to look up'),
     }),
-    external: true,
   },
 );
 
 const getOrderHistory = tool(
-  async (_args: { customerId: string; limit?: number }) => {
-    // This function body is never called for external tools.
-    return {};
+  async (args: { customerId: string; limit?: number }) => {
+    const orders: Record<string, { id: string; amount: number; status: string }[]> = {
+      C001: [
+        { id: 'ORD-101', amount: 250.0, status: 'delivered' },
+        { id: 'ORD-098', amount: 89.99, status: 'delivered' },
+      ],
+      C002: [
+        { id: 'ORD-110', amount: 45.0, status: 'shipped' },
+      ],
+    };
+    const limit = args.limit ?? 5;
+    return {
+      customer_id: args.customerId,
+      orders: (orders[args.customerId] ?? []).slice(0, limit),
+    };
   },
   {
     name: 'get_order_history',
@@ -56,11 +70,10 @@ const getOrderHistory = tool(
       customerId: z.string().describe('The customer ID'),
       limit: z.number().optional().default(5).describe('Max number of orders to return'),
     }),
-    external: true,
   },
 );
 
-// --- A new local tool specific to this agent ---
+// --- A new tool specific to this agent ---
 
 const createSupportTicket = tool(
   async (args: { customerId: string; issue: string; priority?: string }) => {
@@ -82,7 +95,20 @@ const createSupportTicket = tool(
   },
 );
 
-// --- Agent that mixes both external and local tools ---
+// --- For truly remote workers (no local handler), use external: true ---
+// Uncomment below to reference an already-deployed Conductor task:
+//
+// const remoteTask = tool(
+//   async (_args: { input: string }) => ({}), // body never called
+//   {
+//     name: 'my_deployed_task',
+//     description: 'A task handled by an external Conductor worker.',
+//     inputSchema: z.object({ input: z.string() }),
+//     external: true,  // No local worker — dispatched to remote handler
+//   },
+// );
+
+// --- Agent that mixes worker-backed and agent-specific tools ---
 
 const agent = new Agent({
   name: 'customer_support',

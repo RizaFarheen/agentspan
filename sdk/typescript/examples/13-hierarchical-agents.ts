@@ -19,7 +19,7 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { Agent, AgentRuntime, OnTextMention } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src/index.js';
 import { llmModel } from './settings.js';
 
 // ── Level 3: Individual specialists ─────────────────────────
@@ -88,13 +88,10 @@ const ceo = new Agent({
   instructions:
     'You are the CEO. Route requests to the right department: ' +
     'engineering_lead for technical/development questions, ' +
-    'marketing_lead for marketing/content/SEO questions.',
+    'marketing_lead for marketing/content/SEO questions. ' +
+    'Delegate the entire request to the appropriate lead.',
   agents: [engineeringLead, marketingLead],
-  handoffs: [
-    new OnTextMention({ text: 'engineering_lead', target: 'engineering_lead' }),
-    new OnTextMention({ text: 'marketing_lead', target: 'marketing_lead' }),
-  ],
-  strategy: 'swarm',
+  strategy: 'handoff',
 });
 
 // ── Run ───────────────────────────────────────────────────
