@@ -6,7 +6,7 @@
  * 2. .generate() + .stream() + .tools → 'vercel_ai'
  * 3. .invoke() + (.getGraph() OR .nodes Map) → 'langgraph'
  * 4. .invoke() + .lc_namespace → 'langchain'
- * 5. .run() + OpenAI markers → 'openai'
+ * 5. .name + .instructions + .model + .tools + .handoffs → 'openai'
  * 6. .model + .instruction + ADK-specific props → 'google_adk'
  * 7. Otherwise → null
  *
@@ -50,20 +50,24 @@ function hasInvokeAndLcNamespace(obj: any): boolean {
 }
 
 /**
- * OpenAI Agents SDK: has .run(), .tools, and .model with OpenAI-related markers.
+ * OpenAI Agents SDK: Agent has .name, .instructions, .model, .tools, .handoffs,
+ * .inputGuardrails, .outputGuardrails, .toJSON(), .asTool().
+ * Note: run() is a standalone function, NOT a method on Agent.
  */
-function hasRunAndOpenAIMarkers(obj: any): boolean {
-  if (typeof obj?.run !== 'function') return false;
-  // Check for OpenAI-specific markers: model field with openai-ish pattern,
-  // or constructor name referencing OpenAI/Agent, or _oai* internal fields
-  const hasTools = obj?.tools != null;
-  const hasModel = typeof obj?.model === 'string';
-  const hasOpenAIHint =
-    obj?.constructor?.name === 'Agent' ||
-    typeof obj?._oaiConfig === 'object' ||
-    typeof obj?.model_settings === 'object' ||
-    (hasModel && /^(gpt|o1|o3)/.test(obj.model));
-  return hasTools && hasOpenAIHint;
+function hasOpenAIAgentMarkers(obj: any): boolean {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const hasName = typeof obj.name === 'string';
+  const hasInstructions = typeof obj.instructions === 'string' || typeof obj.instructions === 'function';
+  const hasModel = typeof obj.model === 'string';
+  const hasTools = Array.isArray(obj.tools);
+  // OpenAI-specific: handoffs array, inputGuardrails, outputGuardrails, asTool method
+  const hasOpenAIProps =
+    Array.isArray(obj.handoffs) ||
+    Array.isArray(obj.inputGuardrails) ||
+    Array.isArray(obj.outputGuardrails) ||
+    typeof obj.asTool === 'function' ||
+    typeof obj.toolUseBehavior === 'string';
+  return hasName && hasInstructions && hasModel && hasTools && hasOpenAIProps;
 }
 
 /**
@@ -108,8 +112,8 @@ export function detectFramework(agent: unknown): FrameworkId | null {
   // 4. LangChain.js: AgentExecutor/Runnable has .invoke() + .lc_namespace
   if (hasInvokeAndLcNamespace(agent)) return 'langchain';
 
-  // 5. OpenAI Agents: has .run() + .tools + .model with OpenAI markers
-  if (hasRunAndOpenAIMarkers(agent)) return 'openai';
+  // 5. OpenAI Agents: has .name + .instructions + .model + .tools + .handoffs
+  if (hasOpenAIAgentMarkers(agent)) return 'openai';
 
   // 6. Google ADK: LlmAgent with .model + .instruction + ADK-specific properties
   if (hasADKMarkers(agent)) return 'google_adk';

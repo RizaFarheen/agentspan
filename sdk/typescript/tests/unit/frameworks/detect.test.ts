@@ -135,40 +135,46 @@ describe('detectFramework', () => {
   });
 
   describe('OpenAI Agents SDK detection', () => {
-    it('detects object with run(), tools, and model_settings', () => {
+    it('detects Agent with name, instructions, model, tools, handoffs', () => {
       const mockAgent = {
-        run: () => {},
-        tools: [{ name: 'search' }],
-        model: 'gpt-4',
-        model_settings: {},
-      };
-      expect(detectFramework(mockAgent)).toBe('openai');
-    });
-
-    it('detects object with run(), tools, and gpt model prefix', () => {
-      const mockAgent = {
-        run: () => {},
-        tools: [{ name: 'search' }],
+        name: 'test',
+        instructions: 'You are helpful.',
         model: 'gpt-4o',
+        tools: [],
+        handoffs: [],
       };
       expect(detectFramework(mockAgent)).toBe('openai');
     });
 
-    it('detects object with run(), tools, model, and _oaiConfig', () => {
+    it('detects Agent with inputGuardrails/outputGuardrails', () => {
       const mockAgent = {
-        run: () => {},
-        tools: [{ name: 'search' }],
-        model: 'gpt-4',
-        _oaiConfig: {},
+        name: 'test',
+        instructions: 'hi',
+        model: 'gpt-4o-mini',
+        tools: [],
+        inputGuardrails: [],
+        outputGuardrails: [],
       };
       expect(detectFramework(mockAgent)).toBe('openai');
     });
 
-    it('does not detect when run is missing', () => {
-      const mock = {
-        tools: [{ name: 'search' }],
+    it('detects Agent with asTool method', () => {
+      const mockAgent = {
+        name: 'test',
+        instructions: 'hi',
         model: 'gpt-4',
-        model_settings: {},
+        tools: [{ name: 'search' }],
+        asTool: () => {},
+      };
+      expect(detectFramework(mockAgent)).toBe('openai');
+    });
+
+    it('does not detect when instructions is missing', () => {
+      const mock = {
+        name: 'test',
+        model: 'gpt-4',
+        tools: [],
+        handoffs: [],
       };
       expect(detectFramework(mock)).not.toBe('openai');
     });
@@ -278,14 +284,15 @@ describe('detectFramework', () => {
     });
 
     it('LangChain takes priority over OpenAI when both shapes match', () => {
-      // An object that has invoke/lc_namespace AND run/tools/model
+      // An object that has invoke/lc_namespace AND name/instructions/tools/model/handoffs
       const mock = {
         invoke: () => {},
         lc_namespace: ['langchain'],
-        run: () => {},
+        name: 'test',
+        instructions: 'hi',
         tools: [],
         model: 'gpt-4',
-        model_settings: {},
+        handoffs: [],
       };
       expect(detectFramework(mock)).toBe('langchain');
     });
