@@ -5,8 +5,9 @@
 
 Demonstrates:
     - Starting a workflow and saving its workflow_id
-    - Reaching a durable HUMAN wait state on the server
+    - Reaching a durable approval wait state on the server
     - Hard-killing the local client process with SIGKILL from another process
+    - Re-registering the tool worker from a fresh process
     - Reconnecting later by workflow_id and continuing the same workflow
 
 This proves client-process durability. The local Python process can die, but
@@ -27,29 +28,26 @@ import signal
 import time
 from pathlib import Path
 
-from agentspan.agents import Agent, AgentRuntime, human_tool
+from agentspan.agents import Agent, AgentRuntime, tool
 from settings import settings
 
 DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_client_reconnect.workflow_id")
 DEFAULT_CLIENT_PID_FILE = Path("/tmp/agentspan_client_reconnect.pid")
 
 
-ask_release_manager = human_tool(
-    name="ask_release_manager",
-    description=(
-        "Ask the release manager whether a production change is approved to ship. "
-        "Use this before finalizing any release decision."
-    ),
-)
+@tool(approval_required=True)
+def approve_release(change_id: str) -> dict:
+    """Approve a production release change after human review."""
+    return {"change_id": change_id, "approved": True}
 
 agent = Agent(
     name="client_reconnect_demo",
     model=settings.llm_model,
-    tools=[ask_release_manager],
+    tools=[approve_release],
     instructions=(
         "You are a careful release coordinator. When asked whether to ship a change, "
-        "you must call ask_release_manager first. After the human responds, explain "
-        "whether the release is approved."
+        "you must call approve_release first. After approval, explain that the "
+        "release is approved and ready to ship."
     ),
 )
 
@@ -131,16 +129,14 @@ def show_status(workflow_id: str, timeout_seconds: int) -> None:
 
 def resume_workflow(workflow_id: str, timeout_seconds: int, approve: bool) -> None:
     with AgentRuntime() as runtime:
+        runtime.serve(agent, blocking=False)
         print(f"Reconnected to workflow: {workflow_id}")
         status = runtime.get_status(workflow_id)
         print_status("  [initial]", status)
 
         if status.is_waiting and approve:
             print("Sending approval from this new process...")
-            runtime.respond(
-                workflow_id,
-                {"response": "Approved. Proceed with the release."},
-            )
+            runtime.respond(workflow_id, {"approved": True})
         elif status.is_waiting:
             print("Workflow is waiting. Re-run with --approve to continue it.")
             return
