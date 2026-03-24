@@ -429,18 +429,125 @@ for event in result.events:
 
 ---
 
-## 8. Out of Scope (for v1)
+## 8. Signal Accept/Reject (Agent Autonomy)
+
+Agents are not passive recipients. When a signal arrives, the agent **evaluates it against its current task** and decides whether to accept or reject it. This is how real teams work — a researcher asked to "write code" can say "that's not my job."
+
+### FR-12: Signal Evaluation
+
+**FR-12.1:** When a signal is delivered, the LLM evaluates it on its next iteration. The signal message includes an instruction for the LLM to assess relevance:
+
+```
+[Signal from {sender}]: {message}
+
+Evaluate this signal. If it is relevant to your current task, accept it and adjust your approach.
+If it is not relevant (e.g., asks you to do something outside your role), reject it with a brief reason.
+Respond with [SIGNAL ACCEPTED] or [SIGNAL REJECTED: reason] before continuing.
+```
+
+**FR-12.2:** The LLM's accept/reject decision is captured as a structured event:
+
+| Event | SSE type | Fields |
+|---|---|---|
+| Signal accepted | `signal_accepted` | `signalId`, `message`, `sender`, `agentResponse` |
+| Signal rejected | `signal_rejected` | `signalId`, `message`, `sender`, `reason` |
+
+**FR-12.3:** If the agent accepts the signal, it incorporates the context and adjusts its behavior. The signal remains in the conversation history.
+
+**FR-12.4:** If the agent rejects the signal, the rejection reason is:
+- Sent back to the sender as a response event (if sender is monitoring)
+- Logged in the workflow execution history
+- Emitted as `signal_rejected` SSE event
+
+**FR-12.5:** The sender can poll for signal status:
+```python
+status = runtime.get_signal_status(signal_id)
+# status.delivered = True
+# status.disposition = "accepted" | "rejected" | "pending"
+# status.agent_response = "Understood, pivoting to error correction..."
+# status.rejection_reason = "I am a research agent, not a coding agent."
+```
+
+**FR-12.6:** Rejection does NOT cause any error. It's an informational response. The sender decides what to do (retry, signal a different agent, escalate).
+
+### FR-13: Signal Priority and Condensation
+
+**FR-13.1:** Accepted signals are given **higher weight** during context condensation. When the condensation LLM summarizes the conversation, it treats accepted signals as high-priority context that should be preserved more faithfully than regular conversation turns.
+
+**FR-13.2:** The condensation system distinguishes signals from regular messages via the `[Signal from ...]` prefix and preserves their core content.
+
+**FR-13.3:** Rejected signals are low-priority during condensation and may be dropped entirely.
+
+**FR-13.4:** This is achieved by including signal metadata in the condensation prompt:
+```
+The following messages are external signals that were accepted by the agent.
+Preserve their key instructions in your summary:
+- [Signal from supervisor]: Focus on error correction (ACCEPTED)
+```
+
+### FR-14: Signal Testing Framework
+
+**FR-14.1:** `mock_run()` supports injecting signals at specific turns:
+```python
+from agentspan.agents.testing import mock_run, MockSignal
+
+result = mock_run(
+    agent,
+    "Do market research on quantum computing",
+    signals=[
+        MockSignal(at_turn=3, message="Focus only on error correction", sender="supervisor"),
+        MockSignal(at_turn=5, message="Write code instead", sender="unrelated_agent"),
+    ],
+)
+```
+
+**FR-14.2:** Signal-related assertions:
+```python
+from agentspan.agents.testing import assert_signal_accepted, assert_signal_rejected
+
+# Verify the agent accepted the relevant signal
+assert_signal_accepted(result, message_contains="error correction")
+
+# Verify the agent rejected the irrelevant signal
+assert_signal_rejected(result, message_contains="Write code")
+```
+
+**FR-14.3:** `expect()` fluent API supports signal assertions:
+```python
+expect(result) \
+    .completed() \
+    .signal_accepted("error correction") \
+    .signal_rejected("Write code") \
+    .output_contains("error correction")
+```
+
+**FR-14.4:** `record()`/`replay()` captures and replays signal events.
+
+### FR-15: Signal UI Visibility
+
+**FR-15.1:** Signals appear in the workflow UI as **distinct visual elements** — different icon and color from regular messages, tool calls, and HITL events.
+
+**FR-15.2:** Accepted signals are shown with a green/success indicator. Rejected signals with an orange/warning indicator.
+
+**FR-15.3:** Signal details are expandable in the UI: sender, message, data, priority, disposition (accepted/rejected), agent response.
+
+**FR-15.4:** The workflow timeline shows signals as marked events, making it easy to see when an agent received external input and how it responded.
+
+**FR-15.5:** The signal sender and agent response are shown together so a reviewer can understand the interaction at a glance.
+
+---
+
+## 9. Out of Scope (for v1)
 
 | Feature | Reason |
 |---|---|
-| **Signal acknowledgment by receiver** | Adds complexity. Sender gets "queued" confirmation, not "processed." |
 | **Signal priority levels beyond normal/urgent** | Two levels cover 95% of use cases. More can be added later. |
-| **Signal-based control flow** (conditional branching) | Signals provide context, not control. Agent decides how to respond. |
+| **Signal-based control flow** (conditional branching) | Signals provide context, not control. Agent decides via accept/reject. |
 | **Signal encryption** (end-to-end) | Transport-level TLS is sufficient for v1. |
-| **Signal rate limiting** (per sender) | Use standard API rate limiting. No signal-specific limits. |
-| **Signal filtering/routing rules** | All signals reach the agent. Agent decides relevance via LLM. |
+| **Signal rate limiting** (per workflow) | Use standard API rate limiting for v1. Consider per-workflow limits in v2. |
+| **Signal filtering/routing rules** | Agent's accept/reject handles relevance filtering. No pre-delivery filtering. |
 | **Signal channels/topics** | Single signal queue per workflow. Topics add unnecessary complexity for v1. |
-| **Persistent signal history** (queryable) | Signals are in workflow events. No separate signal store. |
+| **Persistent signal history** (queryable beyond workflow events) | Signals are in workflow events. No separate signal store. |
 | **Signal subscriptions** (agent subscribes to topics) | Pub/sub is v2. V1 is point-to-point + broadcast. |
 
 ---
@@ -448,13 +555,20 @@ for event in result.events:
 ## 9. Success Criteria
 
 1. A human can send a signal to a running agent and see the agent incorporate it on its next LLM iteration
-2. An agent can signal another concurrent agent via a tool
+2. An agent can signal another concurrent agent via a tool (built-in `signal_tool()`)
 3. Urgent signals take effect before the agent's next action (after current task completes)
 4. Signals are durable — survive server restarts
 5. Signals appear in the SSE event stream and workflow execution history
 6. Broadcast sends one signal to multiple workflows
 7. The feature works across processes and machines (same as HITL)
 8. Existing features (HITL, guardrails, streaming, termination) continue to work unchanged
+9. Agents can accept or reject signals — irrelevant signals are rejected with a reason
+10. Signal senders can poll for disposition (accepted/rejected) and agent response
+11. Accepted signals are preserved with higher priority during context condensation
+12. Signals are visually distinct in the workflow UI with accept/reject indicators
+13. Testing framework supports mock signals with accept/reject assertions
+14. Signals can be sent by agent name (with optional correlation_id/session_id), not just workflow ID
+15. Parent workflow signals propagate to active sub-workflows
 
 ---
 
