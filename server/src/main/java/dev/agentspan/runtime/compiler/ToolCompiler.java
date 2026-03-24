@@ -737,7 +737,8 @@ public class ToolCompiler {
         int maxTools = 32; // default threshold
         for (ToolConfig tool : apiTools) {
             Map<String, Object> cfg = tool.getConfig() != null ? tool.getConfig() : Collections.emptyMap();
-            String specUrl = (String) cfg.getOrDefault("spec_url", "");
+            String specUrl = (String) cfg.getOrDefault("url",
+                    cfg.getOrDefault("spec_url", ""));
             if (!specUrl.isEmpty() && !specMap.containsKey(specUrl)) {
                 Map<String, Object> specInfo = new LinkedHashMap<>();
                 specInfo.put("specUrl", specUrl);
@@ -755,22 +756,43 @@ public class ToolCompiler {
 
         for (int i = 0; i < apiServers.size(); i++) {
             Map<String, Object> server = apiServers.get(i);
-            String listRef = agentName + "_list_api_" + i;
-            listTaskRefs.add(listRef);
+            String fetchRef = agentName + "_fetch_api_" + i;
+            String parseRef = agentName + "_list_api_" + i;
+            listTaskRefs.add(parseRef);
 
-            WorkflowTask listTask = new WorkflowTask();
-            listTask.setName("LIST_API_TOOLS");
-            listTask.setTaskReferenceName(listRef);
-            listTask.setType("LIST_API_TOOLS");
+            // Step 1: HTTP task to fetch the spec
+            WorkflowTask fetchTask = new WorkflowTask();
+            fetchTask.setName("http_fetch_api_spec");
+            fetchTask.setTaskReferenceName(fetchRef);
+            fetchTask.setType("HTTP");
 
-            Map<String, Object> listInputs = new LinkedHashMap<>();
-            listInputs.put("specUrl", server.get("specUrl"));
-            Object headers = server.get("headers");
-            if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
-                listInputs.put("headers", headers);
+            Map<String, Object> httpReq = new LinkedHashMap<>();
+            httpReq.put("uri", server.get("specUrl"));
+            httpReq.put("method", "GET");
+            httpReq.put("accept", "application/json");
+            httpReq.put("connectionTimeOut", 30000);
+            httpReq.put("readTimeOut", 30000);
+            Object hdrs = server.get("headers");
+            if (hdrs != null && !((Map<?, ?>) hdrs).isEmpty()) {
+                httpReq.put("headers", hdrs);
             }
-            listTask.setInputParameters(listInputs);
-            preTasks.add(listTask);
+            Map<String, Object> fetchInputs = new LinkedHashMap<>();
+            fetchInputs.put("http_request", httpReq);
+            fetchTask.setInputParameters(fetchInputs);
+            preTasks.add(fetchTask);
+
+            // Step 2: INLINE task to parse the OpenAPI/Swagger/Postman spec
+            WorkflowTask parseTask = new WorkflowTask();
+            parseTask.setTaskReferenceName(parseRef);
+            parseTask.setType("INLINE");
+
+            Map<String, Object> parseInputs = new LinkedHashMap<>();
+            parseInputs.put("evaluatorType", "graaljs");
+            parseInputs.put("expression", JavaScriptBuilder.apiParseScript());
+            parseInputs.put("specBody", "${" + fetchRef + ".output.response.body}");
+            parseInputs.put("specUrl", server.get("specUrl"));
+            parseTask.setInputParameters(parseInputs);
+            preTasks.add(parseTask);
         }
 
         // ── 2. INLINE prepare task ───────────────────────────────────
@@ -790,7 +812,7 @@ public class ToolCompiler {
         prepareInputs.put("expression", prepareScript);
         for (int i = 0; i < listTaskRefs.size(); i++) {
             prepareInputs.put("api_discovered_" + i,
-                    "${" + listTaskRefs.get(i) + ".output}");
+                    "${" + listTaskRefs.get(i) + ".output.result}");
         }
         prepareTask.setInputParameters(prepareInputs);
         preTasks.add(prepareTask);
@@ -917,7 +939,8 @@ public class ToolCompiler {
         Map<String, Map<String, Object>> apiSpecMap = new LinkedHashMap<>();
         for (ToolConfig tool : apiTools) {
             Map<String, Object> cfg = tool.getConfig() != null ? tool.getConfig() : Collections.emptyMap();
-            String specUrl = (String) cfg.getOrDefault("spec_url", "");
+            String specUrl = (String) cfg.getOrDefault("url",
+                    cfg.getOrDefault("spec_url", ""));
             if (!specUrl.isEmpty() && !apiSpecMap.containsKey(specUrl)) {
                 Map<String, Object> specInfo = new LinkedHashMap<>();
                 specInfo.put("specUrl", specUrl);
@@ -933,22 +956,43 @@ public class ToolCompiler {
 
         for (int i = 0; i < apiServers.size(); i++) {
             Map<String, Object> server = apiServers.get(i);
-            String listRef = agentName + "_list_api_" + i;
-            apiListRefs.add(listRef);
+            String fetchRef = agentName + "_fetch_api_" + i;
+            String parseRef = agentName + "_list_api_" + i;
+            apiListRefs.add(parseRef);
 
-            WorkflowTask listTask = new WorkflowTask();
-            listTask.setName("LIST_API_TOOLS");
-            listTask.setTaskReferenceName(listRef);
-            listTask.setType("LIST_API_TOOLS");
+            // HTTP task to fetch the spec
+            WorkflowTask fetchTask = new WorkflowTask();
+            fetchTask.setName("http_fetch_api_spec");
+            fetchTask.setTaskReferenceName(fetchRef);
+            fetchTask.setType("HTTP");
 
-            Map<String, Object> listInputs = new LinkedHashMap<>();
-            listInputs.put("specUrl", server.get("specUrl"));
-            Object headers = server.get("headers");
-            if (headers != null && !((Map<?, ?>) headers).isEmpty()) {
-                listInputs.put("headers", headers);
+            Map<String, Object> httpReq = new LinkedHashMap<>();
+            httpReq.put("uri", server.get("specUrl"));
+            httpReq.put("method", "GET");
+            httpReq.put("accept", "application/json");
+            httpReq.put("connectionTimeOut", 30000);
+            httpReq.put("readTimeOut", 30000);
+            Object hdrs = server.get("headers");
+            if (hdrs != null && !((Map<?, ?>) hdrs).isEmpty()) {
+                httpReq.put("headers", hdrs);
             }
-            listTask.setInputParameters(listInputs);
-            preTasks.add(listTask);
+            Map<String, Object> fetchInputs = new LinkedHashMap<>();
+            fetchInputs.put("http_request", httpReq);
+            fetchTask.setInputParameters(fetchInputs);
+            preTasks.add(fetchTask);
+
+            // INLINE task to parse the spec
+            WorkflowTask parseTask = new WorkflowTask();
+            parseTask.setTaskReferenceName(parseRef);
+            parseTask.setType("INLINE");
+
+            Map<String, Object> parseInputs = new LinkedHashMap<>();
+            parseInputs.put("evaluatorType", "graaljs");
+            parseInputs.put("expression", JavaScriptBuilder.apiParseScript());
+            parseInputs.put("specBody", "${" + fetchRef + ".output.response.body}");
+            parseInputs.put("specUrl", server.get("specUrl"));
+            parseTask.setInputParameters(parseInputs);
+            preTasks.add(parseTask);
         }
 
         // ── 2. INLINE prepare task (combined MCP + API) ─────────────

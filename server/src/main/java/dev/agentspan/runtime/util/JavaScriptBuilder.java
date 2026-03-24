@@ -510,6 +510,140 @@ public class JavaScriptBuilder {
      * @param apiServersJson  JSON array of [{headers}, ...] for each API source
      * @param maxTools        threshold for filtering
      */
+    /**
+     * JavaScript that parses an OpenAPI 3.x, Swagger 2.0, or Postman collection
+     * JSON into normalized tool descriptors. Runs as an INLINE task after the
+     * HTTP fetch task retrieves the spec.
+     *
+     * <p>Input: {@code $.specBody} (parsed JSON object), {@code $.specUrl}</p>
+     * <p>Output: {@code {tools: [...], baseUrl: "...", format: "openapi3|swagger2|postman"}}</p>
+     */
+    public static String apiParseScript() {
+        return iife("""
+            var spec = $.specBody;
+            var specUrl = $.specUrl || '';
+            if (!spec) return {tools: [], baseUrl: '', format: 'unknown'};
+            // If spec is a string, parse it
+            if (typeof spec === 'string') { try { spec = JSON.parse(spec); } catch(e) { return {tools: [], baseUrl: specUrl, format: 'parse_error', error: '' + e}; } }
+            // For GraalJS interop: access nested maps via string keys
+            function get(obj, key) { if (!obj) return null; return obj[key] !== undefined ? obj[key] : null; }
+
+            var tools = [];
+            var baseUrl = '';
+            var format = 'unknown';
+
+            function slug(s) { return s.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '').toLowerCase(); }
+            function mergeParams(params, reqBody) {
+                var props = {};
+                var required = [];
+                (params || []).forEach(function(p) {
+                    if (p.name && p['in'] !== 'header') {
+                        props[p.name] = p.schema || {type: 'string'};
+                        if (p.description) props[p.name].description = p.description;
+                        if (p.required) required.push(p.name);
+                    }
+                });
+                if (reqBody && reqBody.content) {
+                    var ct = reqBody.content['application/json'] || reqBody.content[Object.keys(reqBody.content)[0]];
+                    if (ct && ct.schema && ct.schema.properties) {
+                        var bp = ct.schema.properties;
+                        Object.keys(bp).forEach(function(k) { props[k] = bp[k]; });
+                        if (ct.schema.required) ct.schema.required.forEach(function(r) { if (required.indexOf(r) < 0) required.push(r); });
+                    }
+                }
+                return {type: 'object', properties: props, required: required.length > 0 ? required : undefined};
+            }
+
+            // OpenAPI 3.x
+            var oa = get(spec, 'openapi');
+            if (oa && ('' + oa).indexOf('3.') === 0) {
+                format = 'openapi3';
+                var servers = get(spec, 'servers');
+                var specBase = '' + get(servers && servers[0] ? servers[0] : {}, 'url');
+                // If baseUrl is relative (starts with /), prepend the spec URL's origin
+                if (specBase && specBase.indexOf('/') === 0) {
+                    var m = specUrl.match(/^(https?:\\/\\/[^\\/]+)/);
+                    specBase = (m ? m[1] : '') + specBase;
+                }
+                baseUrl = specBase || specUrl.replace(/\\/[^\\/]*\\.(json|yaml).*$/, '');
+                var paths = get(spec, 'paths');
+                if (paths) {
+                    for (var path in paths) {
+                        var methods = get(paths, path);
+                        if (!methods || typeof methods !== 'object') continue;
+                        var httpMethods = ['get','post','put','patch','delete','head','options'];
+                        for (var mi = 0; mi < httpMethods.length; mi++) {
+                            var m = httpMethods[mi];
+                            var op = get(methods, m);
+                            if (!op) continue;
+                            var opId = get(op, 'operationId');
+                            var name = '' + (opId || (m + '_' + slug('' + path)));
+                            var summary = get(op, 'summary');
+                            var description = get(op, 'description');
+                            var desc = '' + (summary || description || name);
+                            tools.push({
+                                name: name,
+                                description: desc,
+                                method: m.toUpperCase(),
+                                path: '' + path,
+                                inputSchema: mergeParams(get(op, 'parameters') || get(methods, 'parameters'), get(op, 'requestBody'))
+                            });
+                        }
+                    }
+                }
+            }
+            // Swagger 2.0
+            else if (get(spec, 'swagger') === '2.0') {
+                format = 'swagger2';
+                var scheme = (spec.schemes && spec.schemes[0]) || 'https';
+                baseUrl = scheme + '://' + (spec.host || '') + (spec.basePath || '');
+                var paths2 = spec.paths || {};
+                Object.keys(paths2).forEach(function(path) {
+                    var methods = paths2[path];
+                    ['get','post','put','patch','delete'].forEach(function(m) {
+                        var op = methods[m];
+                        if (!op) return;
+                        var name = op.operationId || (m + '_' + slug(path));
+                        var params = (op.parameters || []).concat(methods.parameters || []);
+                        var bodyParam = params.filter(function(p) { return p['in'] === 'body'; })[0];
+                        var otherParams = params.filter(function(p) { return p['in'] !== 'body'; });
+                        var schema = mergeParams(otherParams, bodyParam ? {content: {'application/json': {schema: bodyParam.schema}}} : null);
+                        tools.push({
+                            name: name, description: op.summary || op.description || name,
+                            method: m.toUpperCase(), path: path, inputSchema: schema
+                        });
+                    });
+                });
+            }
+            // Postman Collection
+            else if ((get(spec, 'info') && get(get(spec, 'info'), '_postman_id')) || (get(spec, 'item') && Array.isArray(get(spec, 'item')))) {
+                format = 'postman';
+                function flatten(items, prefix) {
+                    (items || []).forEach(function(item) {
+                        if (item.item) { flatten(item.item, (prefix ? prefix + '_' : '') + slug(item.name || '')); return; }
+                        if (!item.request) return;
+                        var req = item.request;
+                        var url = typeof req.url === 'string' ? req.url : (req.url && req.url.raw ? req.url.raw : '');
+                        var name = (prefix ? prefix + '_' : '') + slug(item.name || 'unnamed');
+                        var method = (req.method || 'GET').toUpperCase();
+                        var pathStr = url.replace(/https?:\\/\\/[^\\/]+/, '');
+                        if (!baseUrl && url) baseUrl = url.replace(pathStr, '');
+                        var props = {};
+                        if (req.url && req.url.query) req.url.query.forEach(function(q) { props[q.key] = {type: 'string', description: q.description || ''}; });
+                        tools.push({
+                            name: name, description: item.name || name,
+                            method: method, path: pathStr,
+                            inputSchema: {type: 'object', properties: props}
+                        });
+                    });
+                }
+                flatten(spec.item, '');
+            }
+
+            return {tools: tools, baseUrl: baseUrl, format: format};
+            """);
+    }
+
     public static String apiPrepareScript(String staticSpecsJson, int mcpServerCount,
                                           String mcpServersJson, int apiServerCount,
                                           String apiServersJson, int maxTools) {
