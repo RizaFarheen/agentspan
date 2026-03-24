@@ -6,6 +6,20 @@
 
 ---
 
+## 0. Glossary
+
+| Term | Definition |
+|---|---|
+| **Signal** | An asynchronous message sent to a running workflow, carrying natural language context and optional structured data. |
+| **Disposition** | The outcome of an agent evaluating a signal: `accepted`, `rejected`, or `pending` (not yet evaluated). |
+| **Ephemeral tool** | A tool injected into the agent's tool set for a single LLM iteration, then removed. Used for `accept_signal`/`reject_signal`. |
+| **Signal mode** | Per-agent configuration (`evaluate` or `auto_accept`) controlling whether the agent evaluates each signal via tools or implicitly accepts all signals. |
+| **Pending signal** | A signal that has been queued to a workflow but not yet delivered to the LLM's conversation context. |
+| **Delivered signal** | A signal that has been injected into the LLM's conversation context but whose disposition is not yet recorded. |
+| **Processed signal** | A signal that has been dispositioned (accepted/rejected) or implicitly accepted after the LLM iteration completes. |
+
+---
+
 ## 1. Problem Statement
 
 Agentspan agents run as durable workflows that can execute for minutes to hours. Today, once an agent starts, the only external interactions are:
@@ -149,12 +163,12 @@ There is no mechanism for **providing new context, redirecting priorities, or co
 - `sender` (string, optional) — identifier of the sending agent/user (for attribution)
 
 **FR-1.3:** Signals can be sent from:
-- Python SDK: `runtime.signal(workflow_id, ...)`
+- Python SDK: `runtime.signal(workflow_id="...", message="...")`
 - REST API: `POST /agent/{workflowId}/signal`
 - Another agent's tool: `@tool` that calls `runtime.signal(...)`
 - Any process, any machine (same as HITL)
 
-**FR-1.4:** Sending a signal to a completed/failed/terminated workflow returns an error (not silently ignored). This is a **send-time validation** — the server checks workflow status before queuing. See FR-4.5 for the race condition where a workflow completes between send and delivery.
+**FR-1.4:** Sending a signal to a workflow in any terminal state (COMPLETED, FAILED, TERMINATED, TIMED_OUT) returns an error (not silently ignored). This is a **send-time validation** — the server checks workflow status before queuing. See FR-4.5 for the race condition where a workflow completes between send and delivery.
 
 **FR-1.5:** Multiple signals can be sent to the same workflow. They queue in order.
 
@@ -168,6 +182,34 @@ status = runtime.get_signal_status(receipt.signal_id)
 ```
 The REST API returns this as the 202 response body (already specified in Section 6). `runtime.broadcast()` returns a list of `SignalReceipt` objects.
 
+**FR-1.7:** Type definitions for `SignalReceipt` and `SignalStatus`:
+```python
+@dataclass
+class SignalReceipt:
+    signal_id: str           # Unique ID for this signal instance
+    workflow_id: str         # Target workflow that received the signal
+    status: str              # Always "queued" at send time
+
+@dataclass
+class SignalStatus:
+    signal_id: str           # Unique ID for this signal instance
+    workflow_id: str         # Target workflow
+    delivered: bool          # True if the signal was injected into the LLM conversation
+    disposition: str         # "pending" | "accepted" | "rejected"
+    rejection_reason: str | None  # Reason provided by the LLM (only if disposition == "rejected")
+```
+
+`SignalReceipt` is returned at send time (lightweight, confirms queuing). `SignalStatus` is returned by `get_signal_status()` (reflects current disposition). These are separate types because receipt is immutable while status evolves over time.
+
+**Error types** (all inherit from `AgentspanError`):
+- `WorkflowNotActiveError` — signal sent to a terminal workflow (EC-1, EC-14)
+- `WorkflowNotFoundError` — signal sent to a non-existent workflow (EC-2)
+- `NoRunningWorkflowError` — agent name resolved to zero active workflows (FR-10.4)
+- `PayloadTooLargeError` — signal payload exceeds 64KB (EC-5)
+- `SignalLimitExceededError` — 100-signal lifetime limit exceeded (FR-17.1)
+- `TooManyPendingSignalsError` — 10-pending-signal limit exceeded (FR-17.2)
+- `SignalRejectedError` — raised by `on_signal_received` callback to programmatically reject a signal (Section 7, Signals + Callbacks)
+
 ### FR-2: Normal Priority Signal
 
 **FR-2.1:** A normal signal is injected into the workflow's conversation context as a **user-role message** (see Decision Q5).
@@ -178,10 +220,11 @@ The REST API returns this as the 202 response body (already specified in Section
 
 **FR-2.4:** If multiple normal signals arrive between LLM iterations, they are all included (concatenated or as separate messages).
 
-**FR-2.5:** The LLM message format should clearly indicate this is an external signal, not a user message:
-```
-[Signal from {sender}]: {message}
-```
+**FR-2.5:** The LLM message format should clearly indicate this is an external signal, not a user message. The exact format depends on signal mode:
+- **`auto_accept` mode:** `[Signal from {sender}]: {message}`
+- **`evaluate` mode:** `[Signal from {sender} (id: {signalId})]: {message}` — includes the signal ID so the LLM can reference it in accept/reject tool calls (see FR-12.2)
+
+In both modes, signals are additionally wrapped with `[SIGNAL_START id={signalId}]...[SIGNAL_END]` delimiters (see NFR-4.4) for parseability.
 
 ### FR-3: Urgent Priority Signal
 
@@ -226,7 +269,7 @@ The REST API returns this as the 202 response body (already specified in Section
 @tool
 def signal_agent(workflow_id: str, message: str) -> dict:
     """Send a signal to another running agent."""
-    runtime.signal(workflow_id, message=message, priority="normal")
+    runtime.signal(workflow_id=workflow_id, message=message, priority="normal")
     return {"status": "signal_sent"}
 ```
 
@@ -321,7 +364,7 @@ Agent(signal_mode="evaluate", ...)     # Default — LLM evaluates each signal
 ## 5. Edge Cases & Failure Modes
 
 ### EC-1: Signal to completed workflow
-**Behavior:** Return error `WorkflowCompletedError("Workflow {id} is already completed")`
+**Behavior:** Return error `WorkflowNotActiveError("Workflow {id} is in COMPLETED state and cannot receive signals")`. See also EC-14 for other terminal states.
 
 ### EC-2: Signal to non-existent workflow
 **Behavior:** Return error `WorkflowNotFoundError("Workflow {id} not found")`
@@ -350,11 +393,59 @@ Agent(signal_mode="evaluate", ...)     # Default — LLM evaluates each signal
 ### EC-10: Signal to a sub-workflow within a parent workflow
 **Behavior:** Signals target workflow IDs, not agent names. Sub-workflows have their own IDs and can be signaled independently.
 
+### EC-11: Signal to a manually paused workflow (not HITL)
+**Behavior:** Queue the signal. Deliver when the workflow is resumed via `runtime.resume()` or the REST API. Same behavior as EC-3 (HITL pause) — signals always queue when the workflow is not actively running. The signal does NOT auto-resume the workflow (unlike urgent signals during active execution).
+
+### EC-12: `accept_signal`/`reject_signal` called with invalid signal_id
+**Behavior:** The tool returns an error result: `{"error": "invalid_signal_id", "message": "Signal {id} not found in this workflow"}`. This is a tool result, not a workflow exception — the LLM continues normally. See FR-12.13.
+
+### EC-13: `accept_signal`/`reject_signal` called twice for the same signal
+**Behavior:** The second call is idempotent: returns `{"status": "already_dispositioned", "disposition": "accepted|rejected"}`. No state change. See FR-12.12.
+
+### EC-14: Signal sent while workflow is in FAILED or TERMINATED state
+**Behavior:** Return error `WorkflowNotActiveError("Workflow {id} is in {status} state and cannot receive signals")`. Same class of error as EC-1 (completed workflow). FR-1.4 applies to all terminal states: COMPLETED, FAILED, TERMINATED, TIMED_OUT.
+
 ---
 
 ## 6. API Surface (Proposed)
 
 ### Python SDK
+
+**Full signatures:**
+
+```python
+# runtime.signal — full signature
+def signal(
+    self,
+    *,
+    workflow_id: str = None,          # Target by workflow ID (mutually exclusive with agent_name)
+    agent_name: str = None,           # Target by agent name (mutually exclusive with workflow_id)
+    correlation_id: str = None,       # Filter when using agent_name
+    session_id: str = None,           # Filter when using agent_name
+    message: str,                     # Natural language context (required, max 4096 chars)
+    data: dict = None,                # Structured data for tools (optional, message+data ≤ 64KB)
+    priority: str = "normal",         # "normal" | "urgent"
+    sender: str = None,               # Attribution (optional, defaults to caller identity)
+    propagate: bool = True,           # Propagate to active sub-workflows (default True)
+) -> SignalReceipt: ...
+
+# runtime.broadcast — full signature
+def broadcast(
+    self,
+    *,
+    workflow_ids: list[str],
+    message: str,
+    data: dict = None,
+    priority: str = "normal",
+    sender: str = None,
+    propagate: bool = True,
+) -> list[SignalReceipt]: ...
+
+# runtime.get_signal_status — full signature
+def get_signal_status(self, signal_id: str) -> SignalStatus: ...
+```
+
+**Usage examples:**
 
 ```python
 # Send a signal
@@ -377,7 +468,7 @@ runtime.broadcast(
 @tool
 def redirect_research(workflow_id: str, new_focus: str) -> dict:
     """Redirect a running research agent to a new focus area."""
-    runtime.signal(workflow_id, message=f"Redirect: focus on {new_focus}", priority="urgent")
+    runtime.signal(workflow_id=workflow_id, message=f"Redirect: focus on {new_focus}", priority="urgent")
     return {"status": "redirected"}
 
 # From AgentHandle
@@ -396,7 +487,8 @@ Content-Type: application/json
   "message": "Focus on error correction",
   "data": {"priority_topic": "quantum error correction"},
   "priority": "normal",
-  "sender": "supervisor_agent"
+  "sender": "supervisor_agent",
+  "propagate": true
 }
 
 Response: 202 Accepted
@@ -406,6 +498,49 @@ Response: 202 Accepted
   "status": "queued"
 }
 ```
+
+```
+POST /agent/signal?agentName=researcher&correlationId=project-42
+Content-Type: application/json
+
+{
+  "message": "Focus on error correction",
+  "priority": "normal"
+}
+
+Response: 202 Accepted
+{
+  "signals": [
+    {"signalId": "uuid-1", "workflowId": "uuid-a", "status": "queued"},
+    {"signalId": "uuid-2", "workflowId": "uuid-b", "status": "queued"}
+  ]
+}
+```
+
+```
+GET /agent/signal/{signalId}/status
+
+Response: 200 OK
+{
+  "signalId": "uuid-...",
+  "workflowId": "uuid-...",
+  "delivered": true,
+  "disposition": "accepted",
+  "rejectionReason": null
+}
+```
+
+```
+GET /agent/{workflowId}/signals/pending
+
+Response: 200 OK
+{
+  "signals": [
+    {"signalId": "uuid-...", "message": "...", "data": {...}, "sender": "...", "priority": "normal"}
+  ]
+}
+```
+Note: The `signals/pending` endpoint is primarily for framework passthrough workers (see Section 7, Signals + Framework Passthrough Agents). It atomically returns and marks signals as delivered.
 
 ### SSE Event
 
@@ -449,8 +584,8 @@ for event in result.events:
 - Agents without signals work exactly as before — no behavioral changes when no signals are sent
 - The `EventType` enum gains three new values: `SIGNAL_RECEIVED`, `SIGNAL_ACCEPTED`, `SIGNAL_REJECTED`. Existing event-processing code (e.g., `_build_result`, `AgentStream.__iter__`) uses if/elif chains that naturally skip unknown types, so no existing code breaks
 - The `accept_signal`/`reject_signal` ephemeral tools are only injected when signals are pending — agents with no signals never see these tools
-- The `_pending_signals` and `_signal_data` workflow variable namespaces use underscore prefixes to avoid collision with user-defined variables
-- No existing REST endpoints change. The new `POST /agent/{workflowId}/signal` and `GET /agent/signal/{signalId}/status` are additive
+- The `_pending_signals`, `_processed_signals`, and `_signal_data` workflow variable namespaces use underscore prefixes to avoid collision with user-defined variables
+- No existing REST endpoints change. The new `POST /agent/{workflowId}/signal`, `POST /agent/signal` (by agent name), `GET /agent/signal/{signalId}/status`, and `GET /agent/{workflowId}/signals/pending` are all additive
 
 ### Signals + Termination Conditions
 - Signals do not affect termination conditions directly
@@ -469,16 +604,58 @@ for event in result.events:
 - To signal a specific stage by name, use `runtime.signal(agent_name="writer", ...)` — this targets the specific sub-workflow, not the pipeline
 
 ### Signals + Callbacks
-- A new callback position: `on_signal_received(message, data, sender, priority)`
+- A new callback position with the following signature:
+```python
+def on_signal_received(
+    signal_id: str,               # Unique signal ID (for correlation with events)
+    message: str,                 # Signal message
+    data: dict | None,            # Signal structured data
+    sender: str | None,           # Signal sender attribution
+    priority: str,                # "normal" | "urgent"
+) -> str | None:
+    """
+    Called after a signal is read from _pending_signals and before it is
+    injected into the LLM conversation. Fires in both "evaluate" and
+    "auto_accept" signal modes.
+
+    Return values:
+      - str:  Replace the signal message with this string (modified/sanitized version).
+              The original `data` is preserved unless you also mutate it in-place.
+      - None: Deliver the signal as-is (no modification).
+
+    To suppress (drop) a signal entirely, return the empty string "".
+    The signal will be marked as "accepted" with no message injected.
+
+    To reject a signal programmatically (before the LLM sees it), raise
+    `SignalRejectedError(reason="...")`. The signal will be dispositioned
+    as "rejected" with the provided reason, and no message is injected.
+
+    If this callback raises any other exception, the signal is delivered
+    unmodified and the exception is logged as a warning (fail-open).
+    """
+```
 - Callback can modify/filter the signal before it reaches the LLM
 - Callback can trigger side effects (logging, alerting, forwarding)
+- Callback is registered on the Agent: `Agent(on_signal_received=my_callback, ...)`
 
 ### Signals + Framework Passthrough Agents (LangGraph/LangChain)
 - Framework passthrough agents compile to a **single opaque SIMPLE task** — there is no Conductor-managed DO_WHILE loop or conversation
 - Normal signals: **queued** and delivered to the framework worker via a polling mechanism. The worker process periodically checks for pending signals and injects them into the framework's state/memory.
 - Urgent signals: **pause the workflow** after the passthrough task completes (since the whole framework execution is one atomic task, urgent signals cannot interrupt mid-execution)
 - This is a **degraded experience** compared to native agents — signals are less granular for passthrough agents
-- The framework worker SDK must implement a signal polling loop (e.g., check `/agent/{workflowId}/signals/pending` every 5 seconds)
+- The framework worker SDK must implement a signal polling loop (e.g., check `GET /agent/{workflowId}/signals/pending` every 5 seconds)
+- The pending signals endpoint returns queued signals and atomically marks them as delivered:
+```
+GET /agent/{workflowId}/signals/pending
+
+Response: 200 OK
+{
+  "signals": [
+    {"signalId": "uuid-...", "message": "...", "data": {...}, "sender": "...", "priority": "normal"}
+  ]
+}
+```
+- This endpoint is primarily for framework passthrough workers. Native agents do not use it — the task mapper handles delivery internally (FR-18.2)
 
 ### Signals + Multi-Tool Iterations
 - During a multi-tool iteration (LLM requested 5 tools, all executing via FORK_JOIN_DYNAMIC), signals behave as follows:
@@ -519,7 +696,7 @@ You have received an external signal. Use accept_signal("{signalId}") if this is
 ```
 accept_all_signals() → {"status": "accepted", "count": N}
 ```
-This allows the LLM to accept all pending signals in one tool call and proceed to productive work. Individual `reject_signal` calls are still available for selective rejection.
+This allows the LLM to accept all pending signals in one tool call and proceed to productive work. Individual `reject_signal` calls are still available for selective rejection. There is intentionally no `reject_all_signals` — blanket rejection is an unusual case, and selective rejection with reasons provides better observability.
 
 **FR-12.4:** The accept/reject tool call produces a structured event:
 
@@ -564,6 +741,19 @@ Note: the `disposition` field reflects the tool call made by the LLM. `"pending"
 **FR-12.9:** Rejection does NOT cause any error. It's informational — the system records the disposition but does **not** enforce it. The LLM is autonomous and may still act on rejected signal content (though this is unusual). The sender decides what to do with rejection info (retry, signal a different agent, escalate).
 
 **FR-12.10:** For urgent signals, accept/reject still applies. The workflow pauses (per FR-3), the signal is injected, the workflow resumes, and the LLM evaluates and accepts/rejects on the resumed iteration. If rejected, the pause/resume overhead was incurred but the agent continues unchanged.
+
+**FR-12.11: Signal Mode Interaction.** The `signal_mode` agent configuration (see NFR-6.2) controls whether FR-12.1–12.10 apply:
+
+| `signal_mode` | Behavior |
+|---|---|
+| `"evaluate"` (default) | Full FR-12 applies: `accept_signal`/`reject_signal` tools injected, LLM evaluates each signal, events emitted. |
+| `"auto_accept"` | FR-12.1 tools are **not injected**. Signals are injected as context-only user-role messages (no accept/reject instructions in FR-12.2). All signals are immediately dispositioned as `accepted`. `signal_accepted` events are emitted automatically (no LLM turn consumed). Signal `data` is stored in `_signal_data` as normal. |
+
+Under `auto_accept`, the agent cannot reject signals. This is by design — `auto_accept` is for cost-sensitive deployments where the agent trusts all signal senders. If selective rejection is needed, use `signal_mode="evaluate"`. The `on_signal_received` callback (Section 7, Signals + Callbacks) still fires under `auto_accept` and can be used for programmatic filtering before signals reach the LLM.
+
+**FR-12.12: Idempotent Disposition.** Calling `accept_signal` or `reject_signal` with an already-dispositioned `signal_id` returns `{"status": "already_dispositioned", "disposition": "accepted|rejected"}` and is a no-op. This handles cases where the LLM calls `reject_signal` twice for the same signal (e.g., in a retry loop or duplicated tool call).
+
+**FR-12.13: Invalid Signal ID.** Calling `accept_signal` or `reject_signal` with a `signal_id` that does not exist or does not belong to this workflow returns `{"error": "invalid_signal_id", "message": "Signal {signal_id} not found in this workflow"}`. This is returned as a tool result (not an exception) so the LLM can recover gracefully.
 
 ### FR-13: Signal Priority and Condensation
 
@@ -664,7 +854,7 @@ expect(result) \
 7. The feature works across processes and machines (same as HITL)
 8. Existing features (HITL, guardrails, streaming, termination) continue to work unchanged
 9. Agents can accept or reject signals — irrelevant signals are rejected with a reason
-10. Signal senders can poll for disposition (accepted/rejected) and agent response
+10. Signal senders can poll for disposition (accepted/rejected) via `get_signal_status()`
 11. Accepted signals are preserved with higher priority during context condensation
 12. Signals are visually distinct in the workflow UI with accept/reject indicators
 13. Testing framework supports mock signals with accept/reject assertions
@@ -677,7 +867,7 @@ expect(result) \
 
 **Q1: Signal TTL** — **No TTL.** Signals are durable and permanent. They are always delivered. The agent will see them on its next LLM iteration. If the signal is "stale" by then, the LLM is smart enough to discard irrelevant context. Simplifies implementation — no expiry tracking needed.
 
-**Q2: Pull model** — **No.** Push-only is sufficient. Signals are injected into conversation context automatically. No `get_pending_signals()` tool needed.
+**Q2: Pull model** — **No** (for native agents). Push-only is sufficient. Signals are injected into conversation context automatically by the task mapper. No `get_pending_signals()` LLM-facing tool needed. Note: Framework passthrough workers do use a pull-based `GET /agent/{workflowId}/signals/pending` endpoint (see Section 7, Signals + Framework Passthrough Agents), but this is a worker-level mechanism, not an LLM-facing tool.
 
 **Q3: Built-in `signal_tool()`** — **Yes.** Provide a built-in `signal_tool()` (like `human_tool()`) so any agent can signal other agents without writing custom tool code:
 ```python
@@ -739,7 +929,7 @@ signal_tool(name="signal_agent", description="Signal another running agent")
 }
 ```
 
-**FR-9.3:** The tool resolves `target` by format: if `target` matches UUID format (`[0-9a-f]{8}-[0-9a-f]{4}-...`), it is treated as a workflow ID; otherwise it is treated as an agent name and resolved via search (FR-10). No fallback between the two — the format determines the resolution path.
+**FR-9.3:** The tool resolves `target` by format: if `target` matches UUID v4 format (`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`), it is treated as a workflow ID; otherwise it is treated as an agent name and resolved via search (FR-10). No fallback between the two — the format determines the resolution path.
 
 **FR-9.4:** The tool executes server-side (like `http_tool`) — no worker needed.
 
@@ -747,9 +937,9 @@ signal_tool(name="signal_agent", description="Signal another running agent")
 
 **FR-10.1:** The signal API accepts `agent_name` as an alternative to `workflow_id`.
 
-**FR-10.2:** Server resolves agent name to running workflow(s) by searching:
+**FR-10.2:** Server resolves agent name to active (non-terminal) workflow(s) by searching:
 - Workflow type = agent_name
-- Status = RUNNING
+- Status in (RUNNING, PAUSED) — excludes terminal states per FR-1.4
 - Optionally filtered by `correlation_id` or `session_id`
 
 **FR-10.3:** If multiple running workflows match, the signal is sent to ALL of them (broadcast).
@@ -789,6 +979,8 @@ runtime.signal(workflow_id="...", message="...")                   # propagates 
 
 **FR-16.4:** When a signal is rejected, its data is removed from `_signal_data`.
 
+**FR-16.5:** Accepted signal data persists in `_signal_data` for the remainder of the workflow execution. It is not automatically cleaned up — tools may reference it at any point. The 100-signal lifetime limit (FR-17.1) bounds the total size of `_signal_data`.
+
 ### FR-17: Signal Limits
 
 **FR-17.1:** Maximum **100 signals per workflow** lifetime. Exceeding this returns `SignalLimitExceededError`.
@@ -823,43 +1015,6 @@ def signal(self, message: str, **kwargs) -> SignalReceipt: ...
 async def signal(self, message: str, **kwargs) -> SignalReceipt: ...
 ```
 
-### Updated API Surface
+### Consolidated API Surface
 
-```python
-# By workflow ID
-runtime.signal(workflow_id="uuid-...", message="...", priority="normal")
-
-# By agent name (all running instances)
-runtime.signal(agent_name="researcher", message="...")
-
-# By agent name + criteria
-runtime.signal(agent_name="researcher", correlation_id="project-42", message="...")
-runtime.signal(agent_name="researcher", session_id="user-session-7", message="...")
-
-# From AgentHandle
-handle.signal("Additional context: deadline moved to Friday")
-handle.signal("STOP — requirements changed", priority="urgent")
-
-# Without sub-workflow propagation
-runtime.signal(workflow_id="...", message="...", propagate=False)
-
-# Built-in signal tool (for agent-to-agent)
-from agentspan.agents import signal_tool
-sig = signal_tool(name="notify_team", description="Notify another agent")
-agent = Agent(tools=[sig], ...)
-```
-
-### Updated REST API
-
-```
-POST /agent/{workflowId}/signal
-POST /agent/signal?agentName=researcher&correlationId=project-42
-
-{
-  "message": "Focus on error correction",
-  "data": {"priority_topic": "quantum error correction"},
-  "priority": "normal",
-  "sender": "supervisor_agent",
-  "propagate": true
-}
-```
+The full API surface — including `runtime.signal()`, `runtime.broadcast()`, `runtime.get_signal_status()`, REST endpoints (by workflow ID and by agent name), `AgentHandle.signal()`, and SSE events — is defined in **Section 6**. The additional requirements in this section (FR-9 through FR-18) extend but do not duplicate those definitions.
