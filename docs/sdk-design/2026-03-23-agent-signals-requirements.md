@@ -458,18 +458,141 @@ for event in result.events:
 
 ---
 
-## 10. Open Questions
+## 10. Decisions (Resolved)
 
-**Q1:** Should signals have a TTL (time-to-live)? A signal sent to a long-running workflow might become stale. Should we support `expires_at` or `ttl_seconds`?
+**Q1: Signal TTL** — **No TTL.** Signals are durable and permanent. They are always delivered. The agent will see them on its next LLM iteration. If the signal is "stale" by then, the LLM is smart enough to discard irrelevant context. Simplifies implementation — no expiry tracking needed.
 
-**Q2:** Should the agent be able to "read" pending signals proactively (pull model) in addition to receiving them (push model)? E.g., `get_pending_signals()` tool.
+**Q2: Pull model** — **No.** Push-only is sufficient. Signals are injected into conversation context automatically. No `get_pending_signals()` tool needed.
 
-**Q3:** Should there be a `signal_tool()` built-in (like `human_tool()`) so any agent can signal other agents without custom tool code?
+**Q3: Built-in `signal_tool()`** — **Yes.** Provide a built-in `signal_tool()` (like `human_tool()`) so any agent can signal other agents without writing custom tool code:
+```python
+from agentspan.agents import signal_tool
 
-**Q4:** Should parent workflows automatically get notified when sub-workflows receive signals? (Signal propagation vs. isolation)
+sig = signal_tool(
+    name="signal_team",
+    description="Send a signal to another running agent to provide context or redirect.",
+)
 
-**Q5:** For the message format in conversation, should signals be `system` role messages or `user` role messages? System messages are less likely to confuse the LLM, but some models handle system messages differently.
+supervisor = Agent(tools=[sig], ...)
+```
 
-**Q6:** Should there be a way to signal by agent name (latest execution) rather than only by workflow ID?
+**Q4: Sub-workflow propagation** — **Yes.** Signaling a parent workflow propagates to all active sub-workflows. This matches how real teams work — when a manager announces something, the whole team hears it.
 
-**Q7:** How should signals interact with context condensation? If the context is condensed, are old signals preserved or summarized along with other messages?
+**Q5: Message role** — **`user` role.** Signals are injected as user-role messages with a clear prefix:
+```
+[Signal from {sender}]: {message}
+```
+Rationale: `user` role messages are universally handled well across all LLM providers. `system` role has inconsistent handling (some models ignore late system messages, some treat them differently). The `[Signal from ...]` prefix clearly distinguishes signals from actual user messages, so the LLM won't confuse them.
+
+**Q6: Signal by agent name** — **Yes.** Support signaling by agent name with optional search criteria, not just workflow ID:
+```python
+# By workflow ID (exact)
+runtime.signal(workflow_id="uuid-...", message="...")
+
+# By agent name (latest running execution)
+runtime.signal(agent_name="researcher", message="...")
+
+# By agent name + criteria (specific execution)
+runtime.signal(agent_name="researcher", correlation_id="project-42", message="...")
+runtime.signal(agent_name="researcher", session_id="user-session-7", message="...")
+```
+The server resolves the agent name to workflow ID(s) via search. If multiple matches, signals ALL matching running workflows (broadcast behavior). If no matches, returns error.
+
+**Q7: Context condensation** — **Summarize with other messages.** Signals are regular conversation messages. When context condensation triggers, old signals are summarized along with everything else. The condensation LLM preserves the key information from signals as it does with any other message.
+
+---
+
+## 11. Additional Requirements (from decisions)
+
+### FR-9: Built-in signal_tool()
+
+**FR-9.1:** Provide `signal_tool()` constructor that creates a tool for agent-to-agent signaling:
+```python
+signal_tool(name="signal_agent", description="Signal another running agent")
+```
+
+**FR-9.2:** The tool's input schema:
+```json
+{
+  "type": "object",
+  "properties": {
+    "target": {"type": "string", "description": "Workflow ID or agent name of the target"},
+    "message": {"type": "string", "description": "Message to send"},
+    "priority": {"type": "string", "enum": ["normal", "urgent"], "default": "normal"}
+  },
+  "required": ["target", "message"]
+}
+```
+
+**FR-9.3:** The tool resolves `target` as workflow ID first, then falls back to agent name search.
+
+**FR-9.4:** The tool executes server-side (like `http_tool`) — no worker needed.
+
+### FR-10: Signal by Agent Name
+
+**FR-10.1:** The signal API accepts `agent_name` as an alternative to `workflow_id`.
+
+**FR-10.2:** Server resolves agent name to running workflow(s) by searching:
+- Workflow type = agent_name
+- Status = RUNNING
+- Optionally filtered by `correlation_id` or `session_id`
+
+**FR-10.3:** If multiple running workflows match, the signal is sent to ALL of them (broadcast).
+
+**FR-10.4:** If no running workflows match, return error `NoRunningWorkflowError("No running workflows found for agent '{name}'")`
+
+### FR-11: Sub-workflow Signal Propagation
+
+**FR-11.1:** When a signal is sent to a parent workflow, the server identifies all active sub-workflows (SUB_WORKFLOW tasks in RUNNING state).
+
+**FR-11.2:** The signal is forwarded to each active sub-workflow with the same message, data, and priority.
+
+**FR-11.3:** Sub-workflow propagation is recursive — if a sub-workflow has its own sub-workflows, they receive the signal too.
+
+**FR-11.4:** The propagation is best-effort — if a sub-workflow completes before the signal reaches it, no error.
+
+**FR-11.5:** To signal ONLY the parent (no propagation), a `propagate=false` option can be set:
+```python
+runtime.signal(workflow_id="...", message="...", propagate=False)
+```
+
+### Updated API Surface
+
+```python
+# By workflow ID
+runtime.signal(workflow_id="uuid-...", message="...", priority="normal")
+
+# By agent name (all running instances)
+runtime.signal(agent_name="researcher", message="...")
+
+# By agent name + criteria
+runtime.signal(agent_name="researcher", correlation_id="project-42", message="...")
+runtime.signal(agent_name="researcher", session_id="user-session-7", message="...")
+
+# From AgentHandle
+handle.signal("Additional context: deadline moved to Friday")
+handle.signal("STOP — requirements changed", priority="urgent")
+
+# Without sub-workflow propagation
+runtime.signal(workflow_id="...", message="...", propagate=False)
+
+# Built-in signal tool (for agent-to-agent)
+from agentspan.agents import signal_tool
+sig = signal_tool(name="notify_team", description="Notify another agent")
+agent = Agent(tools=[sig], ...)
+```
+
+### Updated REST API
+
+```
+POST /agent/{workflowId}/signal
+POST /agent/signal?agentName=researcher&correlationId=project-42
+
+{
+  "message": "Focus on error correction",
+  "data": {"priority_topic": "quantum error correction"},
+  "priority": "normal",
+  "sender": "supervisor_agent",
+  "propagate": true
+}
+```
