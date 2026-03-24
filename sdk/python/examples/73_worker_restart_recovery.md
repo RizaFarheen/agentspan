@@ -1,6 +1,6 @@
 # Worker Restart Recovery Demo
 
-This demo proves that a workflow survives a worker-service crash and continues after the worker comes back.
+This demo proves that a workflow survives worker-service outage and continues after the worker service comes back.
 
 ## Prerequisites
 
@@ -44,29 +44,21 @@ python 73_worker_restart_recovery.py serve
 
 This writes the worker PID and process group to `/tmp/agentspan_worker_restart.worker.json`.
 
-## Terminal 3: Start the workflow
-
-```bash
-python 73_worker_restart_recovery.py start
-```
-
-Wait for:
-
-```text
-Attempt 1 is now running.
-Hard-kill the worker service from another terminal with:
-  python 73_worker_restart_recovery.py kill-worker
-Then restart the worker service with:
-  python 73_worker_restart_recovery.py serve
-```
-
-## Terminal 4: Hard-kill the worker service
+## Terminal 3: Kill the worker service
 
 ```bash
 python 73_worker_restart_recovery.py kill-worker
 ```
 
 This sends `SIGKILL` to the worker process group, including the polling child processes.
+
+## Terminal 4: Start the workflow while workers are down
+
+```bash
+python 73_worker_restart_recovery.py start
+```
+
+You should see the workflow stay `RUNNING` with `attempts=none` because no worker service is available to execute the tool.
 
 ## Terminal 5: Restart the worker service
 
@@ -82,12 +74,12 @@ python 73_worker_restart_recovery.py status
 
 The attempt history file at `/tmp/agentspan_worker_restart.attempts.json` should eventually show:
 
-- attempt 1 started but never completed
-- attempt 2 completed after the worker service came back
+- no attempts while the worker service is down
+- attempt 1 starts and completes after the worker service comes back
 
 ## What this proves
 
 - Agent definitions can be deployed separately from worker processes
 - The workflow remains durable while the worker service is down
-- After the worker returns, the tool task is retried and the same workflow finishes
+- After the worker returns, the queued tool task runs and the same workflow finishes
 - Recovery is from durable workflow state, not from keeping the original Python process alive
