@@ -249,7 +249,7 @@ These may appear on the SSE stream but are not part of the SDK's EventType enum.
 
 #### POST /agent/{workflowId}/events — Framework Worker Event Push
 
-For framework passthrough workers (LangGraph, LangChain) to push events back to the server for SSE forwarding.
+For framework agent workers to push intermediate events back to the server for SSE forwarding.
 
 **Request:**
 ```json
@@ -958,7 +958,7 @@ The server stores encrypted credentials (AES-256-GCM). SDKs interact via:
 | CLI injection | Credentials injected into CLI tool env |
 | HTTP header injection | Server substitutes `${credential.NAME}` in headers |
 | MCP credential injection | Passed to MCP server connection |
-| Framework passthrough | Passed to framework's native credential mechanism |
+| Framework agent workers | Passed to extracted tool workers from framework agents |
 
 #### CredentialFile
 
@@ -1085,116 +1085,67 @@ The decorator accepts all the same parameters as the `Agent` constructor. Each S
 | Retry delay | 2s | Delay between retries |
 | Retry policy | LINEAR_BACKOFF | Backoff strategy |
 
-### 5.3 Framework Passthrough Workers
+### 5.3 Framework Agent Compilation (REQUIRED)
 
-For LangGraph/LangChain/Vercel AI SDK agents, the SDK registers a single "passthrough" worker that:
-1. Receives the full agent execution request
-2. Runs the framework's native execution
-3. Streams events back to the server via `POST /agent/{id}/events`
-4. Returns the final result
+**There is NO passthrough pattern.** Every framework agent MUST be compiled into a proper agentspan workflow — the same AgentConfig JSON → Conductor WorkflowDef compilation that native agents use. This is a hard requirement.
 
-Timeout for passthrough workers: 600s (10 minutes).
+**Rationale:** The entire value of agentspan is durable, observable, distributed execution. A passthrough black-box task defeats this — you lose crash recovery at the tool level, visibility into intermediate steps, HITL at individual tool calls, and distributed worker execution. If a user wanted to run their framework agent as a black box, they wouldn't need agentspan.
 
-#### Framework Passthrough in TypeScript SDK
+#### What SDKs MUST do for framework agents
 
-The TypeScript SDK supports running agents from **five external frameworks** on agentspan via the same passthrough pattern used for LangGraph/LangChain in Python. All five use the identical architecture: auto-detect → single SIMPLE worker → event push → result.
+When `runtime.run(frameworkAgent, prompt)` is called with a framework agent (Vercel AI SDK, LangGraph, LangChain, OpenAI Agents, Google ADK), the SDK must:
 
-##### Supported Frameworks
+1. **Detect** the framework via duck-typing
+2. **Introspect** the framework agent to extract:
+   - Model (LLM provider + model name)
+   - Tools (function definitions with schemas)
+   - Instructions/system prompt
+   - Sub-agents (if multi-agent)
+   - Configuration (temperature, max tokens, etc.)
+3. **Map** the extracted components to agentspan primitives:
+   - Framework agent → `AgentConfig` with model, instructions, tools
+   - Framework tools → `ToolConfig` entries (toolType: 'worker' with local functions, or 'http'/'mcp' for server-side tools)
+   - Framework sub-agents → nested `AgentConfig` entries
+   - Framework orchestration → agentspan strategy (handoff, sequential, parallel, etc.)
+4. **Serialize** to the standard AgentConfig JSON (identical wire format to native agents)
+5. **Register** tool workers for extracted tool functions
+6. **Execute** via the normal `POST /agent/start` → Conductor workflow → worker execution path
 
-| Framework | npm Package(s) | Detection Method | Agent Object |
-|-----------|---------------|-----------------|-------------|
-| Vercel AI SDK | `ai` | Has `.generate()` + `.stream()` + `.tools` | `ToolLoopAgent` |
-| LangChain.js | `langchain`, `@langchain/core` | Has `.invoke()` + `.lc_namespace` | `AgentExecutor`, `RunnableSequence` |
-| LangGraph.js | `@langchain/langgraph` | Has `.invoke()` + `.getGraph()` / `.nodes` | `CompiledStateGraph` |
-| OpenAI Agents SDK | `@openai/agents` (or equivalent) | Has `.run()` + `.tools` + `.model` | `Agent` from `@openai/agents` |
-| Google ADK | `@google/adk` (or equivalent) | Has `.run()` + `.model` + Google-specific markers | ADK `Agent` |
+The resulting Conductor workflow must have **individual tasks per tool, per LLM call, per sub-agent** — NOT a single black-box task. The server's `AgentCompiler` handles the workflow compilation, but the SDK must produce an `AgentConfig` that represents the full agent structure.
 
-##### Detection (duck-typing, no hard imports)
+#### Extraction paths per framework
 
-The runtime calls `detectFramework(agent)` which checks method/property signatures in priority order:
+| Framework | Model extraction | Tool extraction | Sub-agent extraction |
+|-----------|-----------------|-----------------|---------------------|
+| Vercel AI SDK | From `model` parameter | From `tools` object (Zod schemas + execute functions) | From nested `generateText` calls |
+| LangGraph.js | From `ChatOpenAI`/model node | From `ToolNode.tools_by_name` | From StateGraph nodes |
+| LangChain.js | From `ChatOpenAI` binding | From `tools` parameter or `AgentExecutor.tools` | From chain steps |
+| OpenAI Agents SDK | From `agent.model` | From `agent.tools` (with schemas) | From `agent.handoffs` |
+| Google ADK | From `agent.model` | From `agent.tools` (FunctionTool) | From `agent.subAgents` |
 
-```typescript
-function detectFramework(agent: unknown): FrameworkId | null {
-  if (agent instanceof Agent) return null; // Native agentspan
-  if (hasGenerateAndStream(agent)) return 'vercel_ai';
-  if (hasGetGraphAndNodes(agent)) return 'langgraph';
-  if (hasInvokeAndLcNamespace(agent)) return 'langchain';
-  if (hasRunAndOpenAIMarkers(agent)) return 'openai';
-  if (hasRunAndADKMarkers(agent)) return 'google_adk';
-  return null;
-}
-```
+#### When full extraction is not possible
 
-All detection uses **duck-typing** (checking method/property signatures) so the SDK works without any framework package installed — only native agents are available in that case.
+Some framework constructs cannot be fully decomposed (e.g., custom LangGraph StateGraph with complex conditional routing, or framework-internal state management). In these cases:
 
-##### Worker Execution Flow (all frameworks)
+1. **Extract what you can** — model, tools, instructions, simple sub-agents
+2. **For unextractable logic** — register tool workers that encapsulate the framework-specific behavior. Each worker is still a separate Conductor task (not a single black-box), giving visibility and retry capability at the node level.
+3. **Never wrap the entire agent in one task** — even for complex graphs, each node should be its own Conductor task.
 
-1. Worker receives task with `prompt`, `session_id`, `media`
-2. Calls the framework's native execution method
-3. Maps framework events to agentspan SSE events via framework-specific adapter
-4. Pushes events via `POST /agent/{workflowId}/events` (non-blocking)
-5. Returns `TaskResult` with final output
+#### Detection (duck-typing, no hard imports)
 
-##### Per-Framework Event Mapping
+SDKs detect framework agents via property/method signatures without importing framework packages:
 
-**Vercel AI SDK:**
-- `onStepFinish` with `toolCalls` → `tool_call` events
-- `onStepFinish` with `toolResults` → `tool_result` events
-- `onStepFinish` with `text` → `thinking` events
-- `onFinish` → worker returns final result
+| Framework | Detection signature |
+|-----------|-------------------|
+| Vercel AI SDK | Has `generate()` + `stream()` + `tools` |
+| LangGraph.js | Has `invoke()` + (`getGraph()` or `nodes` Map) |
+| LangChain.js | Has `invoke()` + `lc_namespace` |
+| OpenAI Agents SDK | Has `name` + `instructions` + `model` + `tools` + `handoffs` |
+| Google ADK | Has `model` + `instruction` + ADK-specific properties |
 
-**LangGraph.js:**
-- `graph.stream(input, { streamMode: ['updates', 'values'] })` — dual stream mode
-- Per-node state updates → `thinking` events (node name as content)
-- AIMessage with `tool_calls` → `tool_call` events
-- ToolMessage → `tool_result` events
-- Final values chunk → output extraction
+#### Framework packages as optional dependencies
 
-**LangChain.js:**
-- Callback handler injected via `config.callbacks`
-- `handleLLMStart` → `thinking` event
-- `handleToolStart` → `tool_call` event
-- `handleToolEnd` → `tool_result` event
-- `AgentExecutor.invoke()` result → final output
-
-**OpenAI Agents SDK:**
-- Agent `.run()` with streaming callback
-- `tool_call` / `tool_result` / `thinking` events mapped directly
-- Final run result → output
-
-**Google ADK:**
-- Agent `.run()` with event handler
-- Maps ADK events to agentspan SSE event types
-- Final result → output
-
-##### Server-side
-
-The server handles all five framework identifiers identically — each normalizer produces an `AgentConfig` with `_framework_passthrough: true` metadata and a single worker tool. Server-side normalizers needed:
-- `VercelAINormalizer` (new)
-- `LangGraphNormalizer` (exists — used by both Python and TypeScript SDKs)
-- `LangChainNormalizer` (exists — used by both Python and TypeScript SDKs)
-- `OpenAINormalizer` (exists or new)
-- `GoogleADKNormalizer` (exists or new)
-
-##### Dependencies
-
-All framework packages are **optional peer dependencies** of `@agentspan/sdk`:
-
-```json
-{
-  "peerDependencies": {
-    "ai": "^4.0.0",
-    "@langchain/core": "^0.3.0",
-    "@langchain/langgraph": "^0.2.0",
-    "zod": "^3.22.0"
-  },
-  "peerDependenciesMeta": {
-    "ai": { "optional": true },
-    "@langchain/core": { "optional": true },
-    "@langchain/langgraph": { "optional": true }
-  }
-}
-```
+Framework packages are optional peer/dev dependencies. Only needed when running framework-specific examples. The core SDK works without them.
 
 ### 5.4 Credential Injection in Workers
 
@@ -1369,7 +1320,7 @@ A single mega-workflow that processes an article request through a complete publ
 
 Exercised throughout the workflow:
 
-- **All credential modes:** isolated subprocess, in-process `get_credential()`, CLI injection, HTTP header injection, MCP credential injection, framework passthrough, external worker credentials
+- **All credential modes:** isolated subprocess, in-process `get_credential()`, CLI injection, HTTP header injection, MCP credential injection, framework agent workers, external worker credentials
 - **CliConfig:** CLI tool allowlisting for git/gh commands
 - **CodeExecutionConfig:** Sandbox settings for code execution
 - **Extended thinking:** `thinking_budget_tokens` on analysis agent
@@ -1440,7 +1391,7 @@ For validation purposes, each SDK must support running examples using the framew
 | Google ADK | `google-adk` (Python), equivalent per language | Same |
 | LangChain | `langchain` per language | Same |
 | LangGraph | `langgraph` per language | Same |
-| Vercel AI SDK | `ai` (TypeScript) | Compare agentspan-passthrough vs native execution |
+| Vercel AI SDK | `ai` (TypeScript) | Compare agentspan-compiled vs native execution |
 
 This is **validation-only** — not a runtime dependency. The validation runner:
 1. Runs the example via agentspan compilation (normal path)
@@ -1641,7 +1592,7 @@ Recommended order for implementing a new SDK:
 12. **Code execution** — all executor types
 13. **Extended types** — UserProxyAgent, GPTAssistantAgent
 14. **Callbacks** — lifecycle hooks
-15. **Framework integration** — passthrough detection, worker, event push (TypeScript: Vercel AI SDK; Python: LangGraph, LangChain)
+15. **Framework integration** — detection, extraction, compilation to AgentConfig (TypeScript: Vercel AI SDK; Python: LangGraph, LangChain)
 16. **Testing framework** — mock, expect, assertions, record/replay
 17. **Validation framework** — runner, judge, native execution, reports
 18. **Kitchen sink** — full acceptance test
@@ -1685,11 +1636,11 @@ These cover every feature of the native SDK. Each new SDK must implement all of 
 | 16d | `credentials_gh_cli` | GitHub CLI with credentials |
 | 16e | `credentials_http_tool` | HTTP header ${CREDENTIAL} substitution |
 | 16f | `credentials_mcp_tool` | MCP tool credentials |
-| 16g | `credentials_framework_passthrough` | Framework credential injection |
+| 16g | `credentials_framework_agent` | Framework agent credential injection |
 | 16h | `credentials_external_worker` | External worker credentials |
-| 16i | `credentials_langchain` | LangChain credential passthrough |
-| 16j | `credentials_openai_sdk` | OpenAI SDK credential passthrough |
-| 16k | `credentials_google_adk` | Google ADK credential passthrough |
+| 16i | `credentials_langchain` | LangChain agent credential injection |
+| 16j | `credentials_openai_sdk` | OpenAI SDK agent credential injection |
+| 16k | `credentials_google_adk` | Google ADK agent credential injection |
 | 17 | `swarm_orchestration` | Strategy.SWARM |
 | 18 | `manual_selection` | Strategy.MANUAL |
 | 19 | `composable_termination` | TextMention \| (MaxMessage & TokenUsage) |
@@ -1763,7 +1714,7 @@ Each framework integration must have equivalent examples ported from Python. The
 
 | # | Example | Features Covered |
 |---|---------|-----------------|
-| 01 | `hello_world` | Basic create_react_agent passthrough |
+| 01 | `hello_world` | Basic create_react_agent compiled to agentspan |
 | 02 | `react_with_tools` | ReAct agent with tool calling |
 | 03 | `memory` | Checkpointed memory |
 | 04 | `simple_stategraph` | Custom StateGraph |
@@ -1782,7 +1733,7 @@ Each framework integration must have equivalent examples ported from Python. The
 
 | # | Example | Features Covered |
 |---|---------|-----------------|
-| 01 | `hello_world` | Basic AgentExecutor passthrough |
+| 01 | `hello_world` | Basic AgentExecutor compiled to agentspan |
 | 02 | `react_with_tools` | ReAct agent with tools |
 | 03-07 | Core patterns | Custom tools, structured output, prompt templates, chat history, memory |
 | 08-15 | Domain agents | Multi-tool, math, web search, code review, document summarizer, customer service, research, data analyst |
@@ -1793,7 +1744,7 @@ Each framework integration must have equivalent examples ported from Python. The
 
 | # | Example | Features Covered |
 |---|---------|-----------------|
-| 01 | `basic_agent` | Basic Agent passthrough |
+| 01 | `basic_agent` | Basic Agent compiled to agentspan |
 | 02 | `function_tools` | Function tool definitions |
 | 03 | `structured_output` | Typed output |
 | 04 | `handoffs` | Agent handoffs |
@@ -1823,7 +1774,7 @@ Since the Vercel AI SDK is TypeScript-specific, these examples only apply to the
 
 | # | Example | Features Covered |
 |---|---------|-----------------|
-| 01 | `passthrough` | ToolLoopAgent on agentspan |
+| 01 | `basic_agent` | Vercel AI SDK agent compiled to agentspan |
 | 02 | `tools_compat` | Mix AI SDK + native tools |
 | 03 | `streaming` | Stream Vercel AI SDK agent events |
 | 04 | `structured_output` | Zod schema output |
@@ -1831,7 +1782,7 @@ Since the Vercel AI SDK is TypeScript-specific, these examples only apply to the
 | 06 | `middleware` | Middleware + agentspan guardrails |
 | 07 | `stop_conditions` | stopWhen + agentspan termination |
 | 08 | `agent_handoff` | Vercel AI → native agent handoff |
-| 09 | `credentials` | Credential passthrough |
+| 09 | `credentials` | Credential injection |
 | 10 | `hitl` | HITL with Vercel AI SDK agent |
 
 #### Example Parity Rules
@@ -1847,7 +1798,7 @@ Since the Vercel AI SDK is TypeScript-specific, these examples only apply to the
 
 **Framework examples (LangGraph, LangChain, OpenAI Agents, Google ADK, Vercel AI SDK) MUST import and use the REAL framework packages — never mocks or duck-typed stand-ins.** This is a non-negotiable requirement for all language SDKs.
 
-**Rationale:** The entire value proposition of framework integration is "take your existing framework code, run it on agentspan." If examples use mocks, they prove nothing — they only test the detection duck-typing, not the actual passthrough execution. Users need real, runnable examples they can copy and adapt.
+**Rationale:** The entire value proposition of framework integration is "take your existing framework code, run it on agentspan." If examples use mocks, they prove nothing — they only test the detection duck-typing, not the actual compiled execution. Users need real, runnable examples they can copy and adapt.
 
 **What this means:**
 
@@ -1865,7 +1816,7 @@ Since the Vercel AI SDK is TypeScript-specific, these examples only apply to the
      // Path 1: Native framework execution (baseline)
      const nativeResult = await agent.generate({ prompt });
 
-     // Path 2: Agentspan passthrough (what we're testing)
+     // Path 2: Agentspan compiled execution (what we're testing)
      const agentspanResult = await runtime.run(agent, prompt);
 
      // Compare results
@@ -1899,7 +1850,7 @@ A new language SDK is considered complete when:
 8. Both sync and async APIs work correctly
 9. Documentation covers all public APIs
 10. Package is publishable to the language's package registry
-11. Framework integration works (TypeScript: Vercel AI SDK agents run via passthrough; Python: LangGraph/LangChain)
+11. Framework integration works (TypeScript: Vercel AI SDK agents compiled to agentspan workflows; Python: LangGraph/LangChain compiled to agentspan workflows)
 12. **All Python examples ported** — every native example (97) + framework examples (LangGraph 44, LangChain 25, OpenAI 10, ADK 35) have idiomatic equivalents per §12.1
 
 ---
@@ -2013,7 +1964,7 @@ When a tool modifies `ToolContext.state`, the SDK captures mutations and appends
 
 ### 14.7 Framework Event Push Wire Format
 
-Framework passthrough workers push events to `POST /agent/{workflowId}/events`:
+Framework agent workers push events to `POST /agent/{workflowId}/events`:
 
 ```json
 [
