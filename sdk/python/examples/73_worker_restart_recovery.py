@@ -127,7 +127,7 @@ agent = Agent(
     ),
 )
 
-WORKFLOW_NAME = f"agent_{agent.name}"
+WORKFLOW_NAME = agent.name
 
 
 def save_workflow_id(path: Path, workflow_id: str) -> None:
