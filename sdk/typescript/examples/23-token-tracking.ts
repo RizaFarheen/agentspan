@@ -1,0 +1,71 @@
+/**
+ * Token & Cost Tracking -- monitor LLM token usage per agent run.
+ *
+ * Demonstrates the `tokenUsage` field on `AgentResult` which provides
+ * aggregated token usage across all LLM calls in an agent execution.
+ *
+ * Requirements:
+ *   - Conductor server with LLM support
+ *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
+ */
+
+import { Agent, AgentRuntime, tool } from '../src/index.js';
+import { llmModel } from './settings.js';
+
+const calculate = tool(
+  async (args: { expression: string }) => {
+    // For demo only -- use a safe evaluator in production
+    const result = new Function('return ' + args.expression)();
+    return String(result);
+  },
+  {
+    name: 'calculate',
+    description: 'Evaluate a mathematical expression.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'The mathematical expression to evaluate' },
+      },
+      required: ['expression'],
+    },
+  },
+);
+
+const agent = new Agent({
+  name: 'math_tutor',
+  model: llmModel,
+  tools: [calculate],
+  instructions:
+    'You are a math tutor. Solve problems step by step, using the calculate ' +
+    'tool for computations. Explain each step clearly.',
+});
+
+// -- Run -------------------------------------------------------------------
+
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(
+    agent,
+    'Calculate the compound interest on $10,000 at 5% annual rate ' +
+      'compounded monthly for 3 years.',
+  );
+  result.printResult();
+
+  // Token usage is automatically extracted from the workflow
+  if (result.tokenUsage) {
+    console.log('Token Usage Summary:');
+    console.log(`  Prompt tokens:     ${result.tokenUsage.promptTokens}`);
+    console.log(`  Completion tokens: ${result.tokenUsage.completionTokens}`);
+    console.log(`  Total tokens:      ${result.tokenUsage.totalTokens}`);
+
+    // Estimate cost (example pricing -- adjust for your model)
+    const promptCost = result.tokenUsage.promptTokens * 0.0025 / 1000;
+    const completionCost = result.tokenUsage.completionTokens * 0.01 / 1000;
+    console.log(`\n  Estimated cost: $${(promptCost + completionCost).toFixed(4)}`);
+  } else {
+    console.log('(Token usage not available from workflow)');
+  }
+} finally {
+  await runtime.shutdown();
+}
