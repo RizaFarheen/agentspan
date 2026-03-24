@@ -120,12 +120,43 @@ const gitPushPR = new Agent({
 
 const pipeline = gitFetchIssues.pipe(codingQA).pipe(gitPushPR);
 
-// Just deploy (since serve is blocking, per the Python source)
+// Run the pipeline with streaming
 const runtime = new AgentRuntime();
 try {
-  const info = await runtime.deploy(pipeline);
-  console.log(`Deployed: ${info.agentName} -> ${info.workflowName}`);
-  console.log('Pipeline deployed. Use runtime.serve() to start workers.');
+  console.log('Starting pipeline: gitFetchIssues >> codingQA >> gitPushPR\n');
+  const agentStream = await runtime.stream(
+    pipeline,
+    `Pick the most suitable open issue on ${REPO} and implement a fix.`,
+  );
+
+  console.log(`Workflow: ${agentStream.workflowId}\n`);
+
+  for await (const event of agentStream) {
+    switch (event.type) {
+      case 'thinking':
+        console.log(`  [thinking] ${String(event.content).slice(0, 120)}...`);
+        break;
+      case 'tool_call':
+        console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args).slice(0, 100)})`);
+        break;
+      case 'tool_result':
+        console.log(`  [tool_result] ${event.toolName} -> ${String(event.result).slice(0, 200)}`);
+        break;
+      case 'error':
+        console.log(`  [error] ${event.content}`);
+        break;
+      case 'done':
+        console.log(`\n[done] Pipeline complete.`);
+        console.log(`Output: ${JSON.stringify(event.output).slice(0, 500)}`);
+        break;
+      default:
+        console.log(`  [${event.type}] ${JSON.stringify(event).slice(0, 150)}`);
+    }
+  }
+
+  const result = await agentStream.getResult();
+  console.log(`\nStatus: ${result.status}`);
+  console.log(`Tool calls: ${result.toolCalls.length}`);
 } finally {
   await runtime.shutdown();
 }

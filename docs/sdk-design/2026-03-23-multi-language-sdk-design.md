@@ -1877,9 +1877,11 @@ Since the Vercel AI SDK is TypeScript-specific, these examples only apply to the
    - Output should be semantically similar (LLM judge comparison)
    - The validation framework's per-framework groups (LANGGRAPH, LANGCHAIN, VERCEL_AI, etc.) should run these comparisons
 
-4. **If a framework package is not available or incompatible** for the target language, skip those framework examples for that SDK — but document the gap. Never substitute mocks. Example: `@openai/agents` v0.8 and `@google/adk` v0.5 require Zod v4, while the TypeScript SDK uses Zod v3. These examples use mocks until Zod v4 migration. This is acceptable for v0.x packages — track and revisit when they stabilize.
+4. **If a framework package is not available or incompatible** for the target language, **do not ship those framework examples**. Remove them entirely — do not substitute mocks, stubs, or duck-typed stand-ins. Document the gap with a tracking issue that specifies what dependency change is needed (e.g., "Blocked on Zod v4 migration — `@openai/agents` v0.8 and `@google/adk` v0.5 require Zod v4"). The examples are added back only when the real SDK can be imported and executed.
 
-5. **Framework packages are dev/optional dependencies** — they must NOT be required for core SDK functionality. Only needed to run framework-specific examples and validation.
+5. **No mocks, ever.** This is absolute. If an example file exists in the `examples/` directory for a framework, it MUST use real imports from that framework's package. If the package can't be installed, the example file must not exist. A missing example is honest; a mock example is misleading and will be copied by users who expect it to work.
+
+6. **Framework packages are dev/optional dependencies** — they must NOT be required for core SDK functionality. Only needed to run framework-specific examples and validation.
 
 ---
 
