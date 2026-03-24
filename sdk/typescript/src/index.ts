@@ -8,9 +8,11 @@ export type {
   Position,
   ToolType,
   FrameworkId,
+  GuardrailType,
   TokenUsage,
   ToolContext,
   GuardrailResult,
+  GuardrailDef,
   AgentEvent,
   AgentStatus,
   DeploymentInfo,
@@ -86,11 +88,11 @@ export {
 export type {
   AgentOptions,
   ScatterGatherOptions,
-  TerminationCondition,
+  TerminationCondition as TerminationConditionInterface,
   HandoffCondition,
   GateCondition,
-  CallbackHandler,
-  ConversationMemory,
+  CallbackHandler as CallbackHandlerInterface,
+  ConversationMemory as ConversationMemoryInterface,
 } from './agent.js';
 export {
   Agent,
@@ -148,3 +150,84 @@ export {
   serve,
   shutdown,
 } from './runtime.js';
+
+// ── Credentials ─────────────────────────────────────────
+export {
+  extractExecutionToken,
+  resolveCredentials,
+  getCredential,
+  setCredentialContext,
+  clearCredentialContext,
+  injectCredentials,
+} from './credentials.js';
+
+// ── Guardrails ──────────────────────────────────────────
+export type {
+  GuardrailOptions,
+  ExternalGuardrailOptions,
+  RegexGuardrailOptions,
+  LLMGuardrailOptions,
+  GuardrailDecoratorOptions,
+} from './guardrail.js';
+export {
+  guardrail,
+  RegexGuardrail,
+  LLMGuardrail,
+  Guardrail,
+  guardrailsFrom,
+} from './guardrail.js';
+
+// ── Memory ──────────────────────────────────────────────
+export type { MemoryEntry, MemoryStore } from './memory.js';
+export {
+  ConversationMemory,
+  SemanticMemory,
+  InMemoryStore,
+} from './memory.js';
+
+// ── Termination ─────────────────────────────────────────
+export {
+  TerminationCondition,
+  TextMention,
+  StopMessage,
+  MaxMessage,
+  TokenUsageCondition,
+  AndCondition,
+  OrCondition,
+} from './termination.js';
+
+// ── Handoffs ────────────────────────────────────────────
+export {
+  OnToolResult,
+  OnTextMention,
+  OnCondition,
+  TextGate,
+  gate,
+} from './handoff.js';
+
+// ── Callbacks ───────────────────────────────────────────
+export {
+  CallbackHandler,
+  CALLBACK_POSITIONS,
+  getCallbackWorkerNames,
+} from './callback.js';
+
+// ── Code Execution ──────────────────────────────────────
+export type { ExecutionResult } from './code-execution.js';
+export {
+  CodeExecutor,
+  LocalCodeExecutor,
+  DockerCodeExecutor,
+  JupyterCodeExecutor,
+  ServerlessCodeExecutor,
+} from './code-execution.js';
+
+// ── Extended Agent Types ────────────────────────────────
+export type { UserProxyMode, UserProxyAgentOptions, GPTAssistantAgentOptions } from './ext.js';
+export { UserProxyAgent, GPTAssistantAgent } from './ext.js';
+
+// ── Discovery ───────────────────────────────────────────
+export { discoverAgents } from './discovery.js';
+
+// ── Tracing ─────────────────────────────────────────────
+export { isTracingEnabled } from './tracing.js';

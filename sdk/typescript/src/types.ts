@@ -57,6 +57,33 @@ export type OnFail = 'retry' | 'raise' | 'fix' | 'human';
 export type Position = 'input' | 'output';
 
 /**
+ * Guardrail type determining execution strategy.
+ */
+export type GuardrailType = 'regex' | 'llm' | 'custom' | 'external';
+
+/**
+ * Complete guardrail definition for serialization and worker registration.
+ */
+export interface GuardrailDef {
+  name: string;
+  position: Position;
+  onFail: OnFail;
+  guardrailType: GuardrailType;
+  maxRetries?: number;
+  taskName?: string;
+  /** Local handler function, for custom guardrails only. */
+  func?: ((content: string) => GuardrailResult | Promise<GuardrailResult>) | null;
+  // Regex guardrail fields
+  patterns?: string[];
+  mode?: 'block' | 'allow';
+  message?: string;
+  // LLM guardrail fields
+  model?: string;
+  policy?: string;
+  maxTokens?: number;
+}
+
+/**
  * Tool execution type determining where/how the tool runs.
  */
 export type ToolType =
