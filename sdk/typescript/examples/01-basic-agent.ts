@@ -1,36 +1,27 @@
 /**
- * 01 - Basic Agent
+ * Basic Agent — 5-line hello world.
  *
- * Demonstrates the simplest possible agent: a single LLM agent
- * with model + instructions, run via runtime.run().
+ * Demonstrates the simplest possible agent: a single LLM with no tools.
+ *
+ * Requirements:
+ *   - Conductor server with LLM support
+ *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
 import { Agent, AgentRuntime } from '../src/index.js';
+import { llmModel } from './settings.js';
 
-const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
+const agent = new Agent({ name: 'greeter', model: llmModel });
 
-// -- Define a simple agent --
-const assistant = new Agent({
-  name: 'helpful_assistant',
-  model: MODEL,
-  instructions: 'You are a helpful assistant. Answer concisely.',
-  maxTurns: 5,
-  temperature: 0.7,
-});
-
-// -- Run it --
-async function main() {
-  const runtime = new AgentRuntime();
-
-  const result = await runtime.run(assistant, 'What is the capital of France?');
+const runtime = new AgentRuntime();
+try {
+  const result = await runtime.run(
+    agent,
+    'Say hello and tell me a fun fact about Python programming.',
+  );
+  console.log(`agent completed with status: ${result.status}`);
   result.printResult();
-
-  // Access individual fields
-  console.log('Status:', result.status);
-  console.log('Output:', result.output);
-  console.log('Success:', result.isSuccess);
-
+} finally {
   await runtime.shutdown();
 }
-
-main().catch(console.error);
