@@ -1,0 +1,114 @@
+// Copyright (c) 2025 Agentspan
+// Licensed under the MIT License. See LICENSE file in the project root for details.
+
+/**
+ * OpenAI Agent with Dynamic Instructions -- callable instruction function.
+ *
+ * Demonstrates:
+ *   - Using a function for dynamic instructions
+ *   - Instructions that change based on context (time of day, user info, etc.)
+ *   - Function tools alongside dynamic instructions
+ *
+ * Requirements:
+ *   - OPENAI_API_KEY for the native path
+ *   - AGENTSPAN_SERVER_URL for the Agentspan path
+ */
+
+import { Agent, run, tool, setTracingDisabled } from '@openai/agents';
+import { z } from 'zod';
+import { AgentRuntime } from '@agentspan/sdk';
+
+setTracingDisabled(true);
+
+// ── Dynamic instructions function ───────────────────────────────────
+
+function getDynamicInstructions(_ctx: unknown, _agent: unknown): string {
+  const hour = new Date().getHours();
+  let greetingStyle: string;
+  let tone: string;
+
+  if (hour < 12) {
+    greetingStyle = 'cheerful morning';
+    tone = 'energetic and upbeat';
+  } else if (hour < 17) {
+    greetingStyle = 'professional afternoon';
+    tone = 'focused and efficient';
+  } else {
+    greetingStyle = 'relaxed evening';
+    tone = 'calm and conversational';
+  }
+
+  const timeStr = new Date().toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  return (
+    `You are a personal assistant with a ${greetingStyle} style. ` +
+    `Respond in a ${tone} tone. ` +
+    `Current time: ${timeStr}. ` +
+    `Always be helpful and use available tools when appropriate.`
+  );
+}
+
+// ── Tools ───────────────────────────────────────────────────────────
+
+const getTodoList = tool({
+  name: 'get_todo_list',
+  description: "Get the user's current todo list.",
+  parameters: z.object({}),
+  execute: async () => {
+    const todos = [
+      'Review PR #42 -- high priority',
+      'Write unit tests for auth module',
+      'Team standup at 2pm',
+      'Deploy v2.1 to staging',
+    ];
+    return todos.map((t) => `- ${t}`).join('\n');
+  },
+});
+
+const addTodo = tool({
+  name: 'add_todo',
+  description: 'Add a new item to the todo list.',
+  parameters: z.object({
+    task: z.string().describe('Task description'),
+    priority: z.string().default('medium').describe('Priority level'),
+  }),
+  execute: async ({ task, priority }) => {
+    return `Added to todo list: '${task}' (priority: ${priority})`;
+  },
+});
+
+// ── Agent ───────────────────────────────────────────────────────────
+
+const agent = new Agent({
+  name: 'personal_assistant',
+  instructions: getDynamicInstructions,
+  model: 'gpt-4o-mini',
+  tools: [getTodoList, addTodo],
+});
+
+const prompt = "Show me my todo list and add 'Prepare demo for Friday' as high priority.";
+
+// ── Path 1: Native OpenAI Agents SDK execution ─────────────────────
+console.log('=== Path 1: Native OpenAI Agents SDK ===\n');
+try {
+  const nativeResult = await run(agent, prompt);
+  console.log('Native output:', nativeResult.finalOutput);
+} catch (err: any) {
+  console.log('Native path error (need OPENAI_API_KEY):', err.message);
+}
+
+// ── Path 2: Agentspan passthrough ──────────────────────────────────
+console.log('\n=== Path 2: Agentspan Passthrough ===\n');
+const runtime = new AgentRuntime();
+try {
+  const agentspanResult = await runtime.run(agent, prompt);
+  console.log('Agentspan output:', agentspanResult.output);
+} catch (err: any) {
+  console.log('Agentspan path error (need AGENTSPAN_SERVER_URL):', err.message);
+} finally {
+  await runtime.shutdown();
+}
