@@ -56,21 +56,25 @@ Agent Signals allow humans and agents to send context, redirections, and coordin
               └────────────────────┼─────────────────────┘
                                    │
                     ┌──────────────▼───────────────────────────┐
-                    │     AgentChatCompleteTaskMapper           │
-                    │     (runs on each DO_WHILE iteration)    │
+                    │   Pre-LLM Signal Intake                   │
+                    │   (INLINE + SET_VARIABLE pair)            │
                     │                                          │
-                    │  Read _pending_signals                   │
-                    │  If empty → skip (zero overhead)         │
+                    │  INLINE: read _pending_signals            │
+                    │    If empty → no-op (zero overhead)       │
+                    │    If auto_accept → move to _processed    │
+                    │    If evaluate → move to _processing      │
+                    │    Output: injection messages + tools     │
+                    │  SET_VARIABLE: persist variable changes   │
+                    └──────────────┬───────────────────────────┘
+                                   │
+                    ┌──────────────▼───────────────────────────┐
+                    │  AgentChatCompleteTaskMapper (read-only)  │
+                    │  (runs inside LLM_CHAT_COMPLETE mapping) │
                     │                                          │
-                    │  If signal_mode="auto_accept":           │
-                    │    Inject as user messages                │
-                    │    Emit signal_accepted events            │
-                    │    Move to _processed (atomic)            │
-                    │                                          │
-                    │  If signal_mode="evaluate" (default):    │
-                    │    Inject as user messages with markers   │
-                    │    Inject ephemeral tools                 │
-                    │    Move to _processing (atomic)           │
+                    │  Reads SET_VARIABLE output:              │
+                    │    _signal_injection.messages → append   │
+                    │    _signal_injection.tools → append      │
+                    │  Zero overhead when no signals present   │
                     └──────────────┬───────────────────────────┘
                                    │
                     ┌──────────────▼───────────────────────────┐
@@ -135,51 +139,239 @@ Signals live in three workflow variable namespaces:
     "lifetime": 1,
     "pending": 1
   },
-  "_urgent_pause_requested": false
+  "_urgent_pause_requested": false,
+  "_signal_injection": {
+    "messages": [],
+    "tools": []
+  }
 }
 ```
+
+The `_signal_injection` variable is a transient communication channel between the pre-LLM signal intake task (Section 4.1) and the `AgentChatCompleteTaskMapper` (Section 4.1.1). It is written by the intake SET_VARIABLE before each LLM call and read by the task mapper. It contains empty arrays when no signals are pending.
 
 ### 3.2 Variable Lifecycle
 
 ```
-Signal sent → _pending_signals (queued)
+Signal sent (AgentService.signal()) → _pending_signals (queued)
                     │
-        Task mapper reads → _processing_signals (delivered to LLM)
+        [on_signal_received callback — optional, may filter/modify]
                     │
+        Signal intake INLINE + SET_VARIABLE (Section 4.1)
+                    │
+        ┌───────────┴───────────┐
+        │                       │
+  evaluate mode            auto_accept mode
+        │                       │
+  → _processing_signals    → _processed_signals (done)
+  (delivered to LLM)            │
+        │                  (disposition: "accepted")
+        │
         ┌───────────┼───────────┐
         │           │           │
   accept_signal  reject_signal  implicit accept
+  (INLINE)       (INLINE)       (end-of-iteration)
         │           │           │
         └───────────┼───────────┘
+                    │
+        Signal state merge (post-JOIN)
                     │
               _processed_signals (done)
 ```
 
 ### 3.3 Atomic Operations
 
-All variable mutations use a single `updateVariables` call to prevent race conditions:
+All variable mutations happen via SET_VARIABLE Conductor tasks (not direct Java calls). The pre-LLM signal intake SET_VARIABLE (Section 4.1) writes multiple variables in a single task execution, which Conductor processes atomically:
 
 ```java
-// Atomic: read pending, move to processing, clear pending
-Map<String, Object> update = new LinkedHashMap<>();
-update.put("_pending_signals", Collections.emptyList());
-update.put("_processing_signals", pendingSignals);
-workflowExecutor.updateVariables(workflowId, update);
+// Signal intake SET_VARIABLE writes all these in one task execution:
+setTask.setInputParameters(Map.of(
+    "_pending_signals", "${intakeRef.output.result.newPending}",      // []
+    "_processing_signals", "${intakeRef.output.result.newProcessing}", // [signals...]
+    "_processed_signals", "${intakeRef.output.result.newProcessed}",
+    "_signal_counts", "${intakeRef.output.result.newSignalCounts}",
+    "_signal_injection", Map.of(
+        "messages", "${intakeRef.output.result.injectionMessages}",
+        "tools", "${intakeRef.output.result.injectionTools}")
+));
 ```
+
+The INLINE task computes the full new state for all variables, and the SET_VARIABLE writes them all at once. Because Conductor tasks execute serially within a workflow's task chain, no concurrent task can interleave between the INLINE read and SET_VARIABLE write.
+
+**External race (concurrent `AgentService.signal()` calls):** A new signal could arrive via `updateVariables` between the INLINE task reading `_pending_signals` and the SET_VARIABLE writing it back as empty. The SET_VARIABLE would overwrite the new signal. This is handled by the per-workflow `synchronized` block in `AgentService.signal()` (Section 17.2) — but that only serializes signal writes against each other, not against SET_VARIABLE. Mitigation: the SET_VARIABLE only clears `_pending_signals` — it does not prevent new signals from arriving on the *next* iteration. If a signal arrives during this window, it is lost for this iteration but will NOT be lost permanently because `AgentService.signal()` appends to `_pending_signals` (read-modify-write under lock), and the SET_VARIABLE blindly writes `[]`. **To prevent this**, the signal intake INLINE should use a compare-and-set approach: include the count/timestamp of pending signals it read, and the SET_VARIABLE should only clear if the count matches. However, this adds complexity. The simpler approach: accept that signals arriving during the intake window (a few milliseconds) are overwritten and must be re-sent. This is documented as a known limitation (see Section 17.3).
 
 ---
 
 ## 4. Signal Injection into LLM Conversation
 
-### 4.1 Task Mapper Modification
+### 4.1 Pre-LLM Signal Intake (INLINE + SET_VARIABLE)
 
-The `AgentChatCompleteTaskMapper` (or equivalent message builder in `AgentCompiler`) is modified to check for pending signals on each iteration.
+> **Key constraint:** The `AgentChatCompleteTaskMapper` is a read-only task mapper — it creates a `TaskModel` from `TaskMapperContext` but has no access to `WorkflowExecutor.updateVariables()`. It **cannot** move signals between variable namespaces. All variable mutations must happen via Conductor task primitives (SET_VARIABLE, INLINE).
 
-**When `_pending_signals` is empty:** Zero overhead. The check is a single null/empty-list test.
+Signal intake is handled by an **INLINE + SET_VARIABLE pair** inserted into the DO_WHILE loop body **before** the LLM task. This matches the existing pattern (e.g., `buildStateMergeTasks` uses INLINE to compute, SET_VARIABLE to persist).
 
-**When signals are pending — `signal_mode="evaluate"` (default):**
+**INLINE task** (`{agentName}_signal_intake`): reads `_pending_signals`, computes the variable transition and injection payloads:
 
-Messages injected:
+```javascript
+(function() {
+    var pending = $.pending || [];
+    var processing = $.processing || [];
+    var processed = $.processed || [];
+    var signalMode = $.signalMode || 'evaluate';
+    var signalCounts = $.signalCounts || {lifetime: 0, pending: 0};
+
+    if (pending.length === 0) {
+        return {
+            noop: true,
+            newPending: pending,
+            newProcessing: processing,
+            newProcessed: processed,
+            newSignalCounts: signalCounts,
+            injectionMessages: [],
+            injectionTools: []
+        };
+    }
+
+    var messages = [];
+    var tools = [];
+
+    if (signalMode === 'auto_accept') {
+        // Auto-accept: inject messages, move directly to processed
+        for (var i = 0; i < pending.length; i++) {
+            var sig = pending[i];
+            messages.push({
+                role: 'user',
+                message: '[Signal from ' + (sig.sender || 'unknown') + ']: ' + sig.message
+            });
+            sig.disposition = 'accepted';
+            sig.processedAt = Date.now();
+            sig.deliveredAt = Date.now();
+            processed.push(sig);
+        }
+        signalCounts.pending = 0;
+        return {
+            noop: false,
+            newPending: [],
+            newProcessing: processing,
+            newProcessed: processed,
+            newSignalCounts: signalCounts,
+            injectionMessages: messages,
+            injectionTools: [],
+            autoAcceptedSignals: pending
+        };
+    }
+
+    // Evaluate mode: inject messages with markers + ephemeral tools, move to processing
+    for (var i = 0; i < pending.length; i++) {
+        var sig = pending[i];
+        sig.deliveredAt = Date.now();
+        messages.push({
+            role: 'user',
+            message: '[SIGNAL_START id=' + sig.signalId + ']\n' +
+                     '[Signal from ' + (sig.sender || 'unknown') + ']: ' + sig.message + '\n' +
+                     '[SIGNAL_END]\n\n' +
+                     'Use accept_signal("' + sig.signalId + '") if relevant to your task, ' +
+                     'or reject_signal("' + sig.signalId + '", "reason") if not.'
+        });
+        processing.push(sig);
+    }
+
+    // Ephemeral tool definitions (only when signals are delivered)
+    tools = [
+        {name: 'accept_signal',
+         description: 'Accept a signal as relevant to your current task',
+         inputSchema: {type: 'object', properties: {signal_id: {type: 'string'}}, required: ['signal_id']}},
+        {name: 'reject_signal',
+         description: 'Reject a signal as irrelevant to your role or task',
+         inputSchema: {type: 'object', properties: {signal_id: {type: 'string'}, reason: {type: 'string'}}, required: ['signal_id', 'reason']}},
+        {name: 'accept_all_signals',
+         description: 'Accept all pending signals at once',
+         inputSchema: {type: 'object', properties: {}}}
+    ];
+
+    signalCounts.pending = 0;
+    return {
+        noop: false,
+        newPending: [],
+        newProcessing: processing,
+        newProcessed: processed,
+        newSignalCounts: signalCounts,
+        injectionMessages: messages,
+        injectionTools: tools
+    };
+})()
+```
+
+`inputParameters` for this INLINE task:
+
+```java
+Map<String, Object> intakeInput = new LinkedHashMap<>();
+intakeInput.put("evaluatorType", "graaljs");
+intakeInput.put("expression", JavaScriptBuilder.signalIntakeScript(signalMode));
+intakeInput.put("pending", "${workflow.variables._pending_signals}");
+intakeInput.put("processing", "${workflow.variables._processing_signals}");
+intakeInput.put("processed", "${workflow.variables._processed_signals}");
+intakeInput.put("signalMode", signalMode);
+intakeInput.put("signalCounts", "${workflow.variables._signal_counts}");
+```
+
+**SET_VARIABLE task** (`{agentName}_signal_intake_set`): persists the computed state AND stores injection payloads in workflow variables for the task mapper to read:
+
+```java
+WorkflowTask setTask = new WorkflowTask();
+setTask.setType("SET_VARIABLE");
+setTask.setTaskReferenceName(agentName + "_signal_intake_set");
+setTask.setInputParameters(Map.of(
+    "_pending_signals", "${" + intakeRef + ".output.result.newPending}",
+    "_processing_signals", "${" + intakeRef + ".output.result.newProcessing}",
+    "_processed_signals", "${" + intakeRef + ".output.result.newProcessed}",
+    "_signal_counts", "${" + intakeRef + ".output.result.newSignalCounts}",
+    "_signal_injection", Map.of(
+        "messages", "${" + intakeRef + ".output.result.injectionMessages}",
+        "tools", "${" + intakeRef + ".output.result.injectionTools}"
+    )
+));
+```
+
+### 4.1.1 Task Mapper Reads Injection Data (Read-Only)
+
+The `AgentChatCompleteTaskMapper` reads `_signal_injection` from workflow variables — it never writes. This is a simple read from the workflow model, same as how it reads `_human_feedback` today:
+
+```java
+// In AgentChatCompleteTaskMapper.getMappedTask(), after getHistory():
+Map<String, Object> vars = workflowModel.getVariables();
+Map<String, Object> signalInjection = (Map<String, Object>) vars.get("_signal_injection");
+
+if (signalInjection != null) {
+    // Append signal messages AFTER conversation history (most recent position)
+    List<Map<String, Object>> signalMessages =
+        (List<Map<String, Object>>) signalInjection.get("messages");
+    if (signalMessages != null && !signalMessages.isEmpty()) {
+        List<ChatMessage> messages = chatCompletion.getMessages();
+        for (Map<String, Object> sm : signalMessages) {
+            messages.add(new ChatMessage(
+                ChatMessage.Role.user, (String) sm.get("message")));
+        }
+    }
+
+    // Append ephemeral signal tools to the tool list
+    List<Map<String, Object>> signalTools =
+        (List<Map<String, Object>>) signalInjection.get("tools");
+    if (signalTools != null && !signalTools.isEmpty()) {
+        List<Object> tools = chatCompletion.getTools();
+        if (tools == null) {
+            tools = new ArrayList<>();
+            chatCompletion.setTools(tools);
+        }
+        tools.addAll(signalTools);
+    }
+}
+```
+
+**Position in message list:** Signal messages are appended AFTER all conversation history. This places them as the most recent user messages, ensuring the LLM treats them as current context rather than stale history. They appear after tool results from the previous iteration and before the LLM generates its next response.
+
+**When `_signal_injection` is empty/null:** The `if` check short-circuits — zero overhead. The `_signal_injection` variable contains empty arrays when no signals are pending (from the INLINE task's `noop: true` path).
+
+### 4.1.2 Message Format — Evaluate Mode
 
 ```json
 [
@@ -190,25 +382,7 @@ Messages injected:
 ]
 ```
 
-Tools injected (ephemeral — this iteration only):
-
-```json
-[
-  {"name": "accept_signal", "type": "INLINE",
-   "description": "Accept a signal as relevant to your current task",
-   "inputSchema": {"type": "object", "properties": {"signal_id": {"type": "string"}}, "required": ["signal_id"]}},
-  {"name": "reject_signal", "type": "INLINE",
-   "description": "Reject a signal as irrelevant to your role or task",
-   "inputSchema": {"type": "object", "properties": {"signal_id": {"type": "string"}, "reason": {"type": "string"}}, "required": ["signal_id", "reason"]}},
-  {"name": "accept_all_signals", "type": "INLINE",
-   "description": "Accept all pending signals at once",
-   "inputSchema": {"type": "object", "properties": {}}}
-]
-```
-
-**When signals are pending — `signal_mode="auto_accept"`:**
-
-Messages injected (no accept/reject instruction):
+### 4.1.3 Message Format — Auto-Accept Mode
 
 ```json
 [
@@ -219,7 +393,7 @@ Messages injected (no accept/reject instruction):
 ]
 ```
 
-No ephemeral tools injected. Signals are immediately moved to `_processed` with `disposition: "accepted"`. SSE events emitted.
+No ephemeral tools injected. Signals are already moved to `_processed` with `disposition: "accepted"` by the pre-LLM INLINE task.
 
 ### 4.2 System Prompt Addition
 
@@ -253,6 +427,8 @@ When a signal arrives at a parent workflow:
 ## 5. Accept/Reject Tool Execution
 
 ### 5.1 Enrichment Script Routing
+
+> **Important distinction:** This section covers **signal disposition tools** (`accept_signal`, `reject_signal`, `accept_all_signals`) — the tools the LLM calls to accept or reject a received signal. These are completely separate from `signal_tool()` (Section 7), which is the tool an LLM calls to *send* a signal to another agent and compiles to an HTTP call.
 
 Signal disposition tools are **compile-time known** — they are always `accept_signal`, `reject_signal`, and `accept_all_signals`. The enrichment script is compiled at workflow creation time, so we bake signal tool routing into the script as a static `if` check, the same way `httpCfg`, `mcpCfg`, etc. are baked in. This works because the tool names are fixed (not user-defined) and can be hard-coded.
 
@@ -294,7 +470,9 @@ for (var i = 0; i < tcs.length; i++) {
 }
 ```
 
-The `$.processingSignals`, `$.processedSignals`, and `$.signalData` references are fed from the enrichment task's `inputParameters`:
+**Variable reference chain:** The `$.processingSignals` in the enrichment script refers to the enrichment INLINE task's own `inputParameters.processingSignals`. This is evaluated by Conductor at task execution time, **after** the pre-LLM signal intake SET_VARIABLE (Section 4.1) has already updated `_processing_signals`. So the enrichment reads the correct, post-intake state.
+
+When the enrichment script creates a nested INLINE task for `accept_signal`, it sets `processing: $.processingSignals` — this copies the value into the nested task's `inputParameters.processing`. The disposition scripts (Section 5.2) then read `$.processing`, matching the key name `processing` in their own `inputParameters`. The indirection is: `workflow.variables._processing_signals` → enrichment task's `$.processingSignals` → nested INLINE task's `$.processing`.
 
 ```java
 // In ToolCompiler, when building the enrichment task inputParameters:
@@ -304,6 +482,8 @@ enrichInput.put("signalData", "${workflow.variables._signal_data}");
 ```
 
 These are only added when the agent has `signalMode != "disabled"`. When no signals are active, the arrays are empty and the `signalTools[n]` check never matches — zero overhead.
+
+**Regarding ephemeral tool definitions vs. enrichment routing:** The ephemeral tool definitions (the JSON schemas injected into the LLM's tool list by the task mapper, Section 4.1.1) tell the LLM that `accept_signal` / `reject_signal` / `accept_all_signals` exist as callable tools. The enrichment script handles the *routing* — when the LLM's output contains a call to `accept_signal`, the enrichment script recognizes the name via `signalTools[n]` and creates an INLINE task. The tool definitions and the routing are independent: definitions are injected dynamically by the pre-LLM INLINE task (only when signals are pending), while routing is baked into the enrichment script at compile time. If the LLM calls `accept_signal` when no signals are pending, the INLINE disposition script returns an `invalid_signal_id` error (Section 5.2).
 
 ### 5.2 Disposition INLINE Scripts
 
@@ -456,9 +636,23 @@ setTask.setInputParameters(Map.of(
 ));
 ```
 
-The merge script scans `joinOutput` for tasks whose `output.result` contains `updatedProcessing` / `updatedProcessed` fields, applies each disposition to the authoritative variable state, and returns the merged result. Signal data deletions (from `reject_signal`) are also merged.
+The merge script scans `joinOutput` for tasks whose `output.result` contains `updatedProcessing` / `updatedProcessed` fields, applies each disposition to the authoritative variable state, and returns the merged result. Signal data deletions (from `reject_signal`) are also merged. The merge output must include a `newDispositions` array listing each signal that was dispositioned in this fork, along with its disposition type and signalId — this is used by `AgentEventListener` for SSE emission (Section 8.2).
 
-This pair is only added when the agent has `signalMode != "disabled"`. When no signals are active, the merge is a no-op (no forked tasks have signal output fields).
+Example merge output structure:
+
+```javascript
+return {
+    processing: mergedProcessing,
+    processed: mergedProcessed,
+    signalData: mergedSignalData,
+    newDispositions: [
+        {type: 'signal_accepted', signalId: 'uuid-1'},
+        {type: 'signal_rejected', signalId: 'uuid-2', reason: 'not relevant'}
+    ]
+};
+```
+
+This pair is only added when the agent has `signalMode != "disabled"`. When no signals are active, the merge is a no-op (no forked tasks have signal output fields, `newDispositions` is empty).
 
 ### 5.3 Implicit Acceptance
 
@@ -485,10 +679,13 @@ This is an **INLINE + SET_VARIABLE** pair added after the signal state merge (Se
     return {
         processing: [],
         processed: processed,
+        newDispositions: events,
         _signal_events: events
     };
 })()
 ```
+
+The `newDispositions` field is read by `AgentEventListener` when the subsequent SET_VARIABLE completes (see Section 8.2).
 
 **SET_VARIABLE task** (persists the result):
 
@@ -514,24 +711,33 @@ implicitInputs.put("already_processed", "${workflow.variables._processed_signals
 Within a single DO_WHILE iteration when signals are present:
 
 ```
-1. Task mapper injects signal messages + ephemeral tools
-2. LLM_CHAT_COMPLETE: LLM sees signals, calls accept/reject + regular tools
-3. Enrichment INLINE routes tool calls:
-   - accept_signal / reject_signal → INLINE tasks (disposition computation)
-   - regular tools → SIMPLE / HTTP / MCP / SUB_WORKFLOW tasks
-4. FORK_JOIN_DYNAMIC executes ALL tasks in parallel (signal + regular)
-   - Signal INLINE tasks complete near-instantly (no external calls)
-   - Regular tools execute normally
-5. JOIN collects all results
-6. Signal state merge (INLINE) — scans JOIN output for dispositions
-7. Signal state persist (SET_VARIABLE) — writes merged state to workflow vars
-8. Agent state merge + persist (existing pattern for ToolContext.state)
-9. Implicit acceptance cleanup (INLINE + SET_VARIABLE) — catches undispositioned signals
-10. AgentEventListener emits SSE events for _signal_event/_signal_events in task outputs
-11. Loop continues or terminates
+ 1. [on_signal_received callback SIMPLE task — optional, if configured]
+ 2. Signal intake INLINE — reads _pending_signals, computes injection payloads
+    and variable transitions (pending→processing or pending→processed)
+ 3. Signal intake SET_VARIABLE — persists updated signal variables +
+    stores _signal_injection (messages + tools) for the task mapper
+ 4. AgentChatCompleteTaskMapper (read-only) — reads _signal_injection from
+    workflow variables, appends messages + ephemeral tools to ChatCompletion
+ 5. LLM_CHAT_COMPLETE: LLM sees signals in conversation, calls accept/reject
+    + regular tools
+ 6. Enrichment INLINE routes tool calls:
+    - accept_signal / reject_signal → INLINE tasks (disposition computation)
+    - regular tools → SIMPLE / HTTP / MCP / SUB_WORKFLOW tasks
+ 7. FORK_JOIN_DYNAMIC executes ALL tasks in parallel (signal + regular)
+    - Signal INLINE tasks complete near-instantly (no external calls)
+    - Regular tools execute normally
+ 8. JOIN collects all results
+ 9. Signal state merge (INLINE) — scans JOIN output for dispositions
+10. Signal state persist (SET_VARIABLE) — writes merged state to workflow vars
+11. Agent state merge + persist (existing pattern for ToolContext.state)
+12. Implicit acceptance cleanup (INLINE + SET_VARIABLE) — catches undispositioned signals
+13. AgentEventListener emits SSE events (detects via SET_VARIABLE task completion)
+14. Loop continues or terminates
 ```
 
-Note: Signal disposition INLINE tasks run **inside** the FORK_JOIN_DYNAMIC, not before it. The enrichment script produces them as dynamic task entries alongside regular tools. This is simpler than a separate pre-fork step and matches the existing architecture where all tool-call-derived tasks go through the same enrich-fork-join pipeline.
+Steps 2-3 are the pre-LLM signal intake pair (Section 4.1). Step 4 happens inside the `LLM_CHAT_COMPLETE` task mapper, which Conductor invokes when preparing the task's input data. Steps 2-3 are compiled as Conductor tasks in the DO_WHILE loop body, appearing before the LLM task.
+
+Note: Signal disposition INLINE tasks run **inside** the FORK_JOIN_DYNAMIC (step 7), not before it. The enrichment script produces them as dynamic task entries alongside regular tools. This is simpler than a separate pre-fork step and matches the existing architecture where all tool-call-derived tasks go through the same enrich-fork-join pipeline.
 
 ---
 
@@ -677,47 +883,50 @@ def signal_tool(
 
 ### 7.3 Server Compilation
 
-`ToolCompiler` adds `"signal"` to `TYPE_MAP`:
+`ToolCompiler` recognizes `toolType: "signal"` and generates a `signalCfg` entry at compile time (baked into the enrichment script, see Section 7.4). The `TYPE_MAP` entry is not strictly needed because the enrichment script sets `t.type = 'HTTP'` directly, but for consistency with other tool types:
 
 ```java
-Map.entry("signal", "HTTP")  // Compiled as HTTP task calling self
+Map.entry("signal", "HTTP")  // Default type; overridden by enrichment signalCfg routing
 ```
 
 ### 7.4 Enrichment
 
-The enrichment script handles `signal` tools by constructing a self-referential HTTP call:
+> **Note:** `signal_tool()` is for **sending** signals to other agents. It compiles as an HTTP task (Section 7.3). This is entirely separate from the signal **disposition** tools (`accept_signal` / `reject_signal`), which are INLINE tasks routed via the `signalTools` block in the enrichment script (Section 5.1).
+
+`signal_tool()` is compiled into the enrichment script using the same `httpCfg[n]` pattern as other HTTP tools. At compile time, `ToolCompiler` generates an `httpCfg` entry whose URL is determined at runtime based on the `target` parameter.
+
+However, because the target can be either a UUID (direct workflow ID) or an agent name (needs name-based endpoint), the enrichment script needs a special `signalCfg` block (separate from `httpCfg`) that dynamically selects the URL:
 
 ```javascript
-if (toolType === 'signal') {
-    var target = params.target || '';
+var signalCfg = {BAKED_SIGNAL_CFG_JSON};  // e.g. {'signal_agent': {serverBaseUrl: '...', sender: 'supervisor'}}
+
+// Inside the for loop, BEFORE httpCfg[n] check:
+if (signalCfg[n]) {
+    var cfg = signalCfg[n];
+    var target = (tc.inputParameters && tc.inputParameters.target) || '';
     var isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(target);
 
+    var uri;
     if (isUuid) {
-        // Direct signal by workflow ID
-        t.type = 'HTTP';
-        t.inputParameters = {http_request: {
-            uri: serverBaseUrl + '/api/agent/' + target + '/signal',
-            method: 'POST',
-            headers: internalAuthHeaders,
-            body: {message: params.message, priority: params.priority || 'normal',
-                   sender: agentName, propagate: true},
-            connectionTimeOut: 10000, readTimeOut: 10000
-        }};
+        uri = cfg.serverBaseUrl + '/api/agent/' + target + '/signal';
     } else {
-        // Resolve agent name first, then signal
-        // Compiled as two sequential tasks: resolve → signal
-        t.type = 'HTTP';
-        t.inputParameters = {http_request: {
-            uri: serverBaseUrl + '/api/agent/signal?agentName=' + encodeURIComponent(target),
-            method: 'POST',
-            headers: internalAuthHeaders,
-            body: {message: params.message, priority: params.priority || 'normal',
-                   sender: agentName, propagate: true},
-            connectionTimeOut: 10000, readTimeOut: 10000
-        }};
+        uri = cfg.serverBaseUrl + '/api/agent/signal?agentName=' + encodeURIComponent(target);
     }
+
+    t.type = 'HTTP';
+    t.inputParameters = {http_request: {
+        uri: uri,
+        method: 'POST',
+        headers: cfg.headers || {},
+        body: {message: tc.inputParameters.message || '',
+               priority: tc.inputParameters.priority || 'normal',
+               sender: cfg.sender, propagate: true},
+        connectionTimeOut: 10000, readTimeOut: 10000
+    }};
 }
 ```
+
+The `signalCfg` is baked in at compile time with the server's base URL and internal auth headers. The `sender` field is set to the owning agent's name.
 
 ### 7.5 Agent Name Resolution
 
@@ -771,9 +980,15 @@ public static AgentSSEEvent signalRejected(String workflowId, String signalId,
 | `signal_accepted` | `AgentEventListener` | When signal merge SET_VARIABLE completes (listener scans `_processed_signals` diff) |
 | `signal_rejected` | `AgentEventListener` | When signal merge SET_VARIABLE completes (listener scans `_processed_signals` diff) |
 
-**Note on SSE emission mechanism:** The original design proposed reading `_signal_event` from INLINE task output in `onTaskCompleted`. However, INLINE tasks that run inside FORK_JOIN_DYNAMIC do fire `onTaskCompleted`, but their output is nested under `output.result` and is not easily distinguishable from regular tool outputs. Instead, the event listener should detect signal disposition changes by watching the **signal merge SET_VARIABLE task** (Section 5.2.1). When a SET_VARIABLE task with reference name matching `*_signal_set` or `*_signal_implicit_set` completes, the listener compares the new `_processed_signals` with the previous value to find newly-dispositioned signals and emits the appropriate SSE events.
+**Note on SSE emission mechanism:** The original design proposed reading `_signal_event` from INLINE task output in `onTaskCompleted`. However, INLINE tasks that run inside FORK_JOIN_DYNAMIC do fire `onTaskCompleted`, but their output is nested under `output.result` and is not easily distinguishable from regular tool outputs. Instead, the event listener should detect signal disposition changes by watching **SET_VARIABLE tasks whose reference names match signal patterns**:
 
-Alternative (simpler): The signal merge INLINE task (Section 5.2.1) already computes the list of newly-dispositioned signals. Store this as a field in the merge output (e.g., `newDispositions`), and have the event listener read it from the SET_VARIABLE task's input (which references the merge output). This avoids diffing.
+- `*_signal_intake_set` — for auto_accept mode (signals go directly to `_processed`)
+- `*_signal_set` — for post-fork signal state merge (explicit accept/reject)
+- `*_signal_implicit_set` — for implicit acceptance at end of iteration
+
+When any of these SET_VARIABLE tasks complete, the listener reads the `newDispositions` field from the preceding INLINE task's output (available via the SET_VARIABLE task's input references). Each INLINE task (intake, merge, implicit) should include a `newDispositions` array in its output listing the signals that changed state in that step, along with their disposition type. This avoids diffing `_processed_signals`.
+
+For example, the signal intake INLINE (Section 4.1) includes `autoAcceptedSignals` in its output for auto_accept mode. The merge INLINE (Section 5.2.1) should similarly include a `newDispositions` field listing signals that were explicitly accepted or rejected in the current fork.
 
 ### 8.3 SDK Event Types
 
@@ -980,7 +1195,7 @@ Response: 200 OK
 }
 ```
 
-For framework passthrough workers: this endpoint **atomically returns and marks** signals as delivered (moves from `_pending` to `_processing`). This prevents double-delivery if the worker polls multiple times. For native agents, the task mapper handles this instead.
+For framework passthrough workers: this endpoint **atomically returns and marks** signals as delivered (moves from `_pending` to `_processing`). This prevents double-delivery if the worker polls multiple times. For native agents, the pre-LLM signal intake task handles this instead (Section 4.1).
 
 ---
 
@@ -991,12 +1206,32 @@ For framework passthrough workers: this endpoint **atomically returns and marks*
 In `compileWithTools()`:
 
 1. Read `signalMode` from AgentConfig
-2. If agent has `onSignalReceived` callback, register a worker for it
+2. If agent has `onSignalReceived` callback, register a worker for it and insert a SIMPLE task before the signal intake pair (Section 16.3)
 3. Add signal system prompt line (Section 4.2)
 4. If `signalMode != "disabled"`:
+   - **Pre-LLM: Signal intake INLINE + SET_VARIABLE pair** (Section 4.1) — inserted into the DO_WHILE loop body BEFORE the LLM task. This is analogous to how `before_model` callbacks are inserted before the LLM task. The intake pair reads `_pending_signals`, moves them to `_processing` (evaluate) or `_processed` (auto_accept), and writes `_signal_injection` for the task mapper.
    - Add `processingSignals`, `processedSignals`, `signalData` to the enrichment task's `inputParameters` (so the enrichment script can pass them to signal INLINE tasks)
-   - Add signal state merge INLINE + SET_VARIABLE pair after the existing `buildStateMergeTasks` (Section 5.2.1)
-   - Add implicit acceptance INLINE + SET_VARIABLE pair after the signal state merge (Section 5.3)
+   - **Post-fork: Signal state merge INLINE + SET_VARIABLE pair** (Section 5.2.1) — added after the existing `buildStateMergeTasks`
+   - **Post-merge: Implicit acceptance INLINE + SET_VARIABLE pair** (Section 5.3) — added after the signal state merge
+
+   Note: `_signal_counts.pending` is already zeroed by the signal intake INLINE (step 1 above). No separate count update is needed after the merge.
+
+The loop body order with signals enabled:
+
+```
+[on_signal_received callback — optional]
+[signal_intake INLINE]
+[signal_intake_set SET_VARIABLE]
+[before_model callback — optional]
+[LLM_CHAT_COMPLETE]
+[after_model callback — optional]
+[output guardrails — optional]
+[tool routing SWITCH → enrichment → FORK_JOIN_DYNAMIC → JOIN]
+[agent state merge INLINE + SET_VARIABLE (existing)]
+[signal state merge INLINE + SET_VARIABLE]
+[implicit acceptance INLINE + SET_VARIABLE]
+[stop_when / termination — optional]
+```
 5. Initialize signal variables in the pre-loop SET_VARIABLE task (alongside `_agent_state`, `_human_feedback`, etc.):
    ```java
    initVars.put("_pending_signals", Collections.emptyList());
@@ -1005,20 +1240,29 @@ In `compileWithTools()`:
    initVars.put("_signal_data", Collections.emptyMap());
    initVars.put("_signal_counts", Map.of("lifetime", 0, "pending", 0));
    initVars.put("_urgent_pause_requested", false);
+   initVars.put("_signal_injection", Map.of("messages", Collections.emptyList(),
+                                             "tools", Collections.emptyList()));
    ```
+
+   The `_signal_injection` variable is initialized empty so the task mapper's read (Section 4.1.1) never encounters a null on the first iteration.
 
 ### 11.2 ToolCompiler Modifications
 
 1. Add `"signal"` to `TYPE_MAP` (maps to `"HTTP"`)
-2. Add signal tool routing block in `enrichToolsScript()` and `enrichToolsScriptDynamic()` — a static `if (signalTools[n])` check baked into the enrichment JavaScript (Section 5.1). This is compile-time code, not dynamic.
-3. Add `processingSignals`, `processedSignals`, `signalData` input parameters to enrichment tasks when signals are enabled
-4. Add `buildSignalStateMergeTasks()` method (analogous to `buildStateMergeTasks()`)
+2. Add **signal disposition** routing block in `enrichToolsScript()` and `enrichToolsScriptDynamic()` — a static `if (signalTools[n])` check baked into the enrichment JavaScript (Section 5.1). This is compile-time code, not dynamic.
+3. Add **signal_tool** routing block — `signalCfg[n]` check baked into the enrichment JavaScript (Section 7.4). This handles the `signal_tool()` HTTP call for sending signals to other agents. Separate from disposition tools.
+4. Add `processingSignals`, `processedSignals`, `signalData` input parameters to enrichment tasks when signals are enabled
+5. Add `buildSignalStateMergeTasks()` method (analogous to `buildStateMergeTasks()`)
+6. Add `buildSignalIntakeTasks()` method — creates the pre-LLM INLINE + SET_VARIABLE pair (Section 4.1)
 
 ### 11.3 JavaScriptBuilder Additions
 
 New methods:
 
 ```java
+/** Returns INLINE script for the pre-LLM signal intake (Section 4.1). */
+public static String signalIntakeScript(String signalMode) { ... }
+
 /** Returns INLINE script for accept_signal, reject_signal, or accept_all_signals. */
 public static String signalDispositionScript(String action) { ... }
 
@@ -1082,7 +1326,8 @@ A future version could compile framework agents with a DO_WHILE wrapper that per
 
 - `signal()` validates workflow state
 - `signal()` enforces limits
-- Task mapper injects signals correctly
+- Signal intake INLINE computes correct variable transitions and injection payloads
+- Task mapper reads `_signal_injection` and appends messages/tools correctly
 - Accept/reject INLINE scripts produce correct variable updates
 - Implicit acceptance cleanup works
 - Urgent pause flag is set and cleared
@@ -1155,17 +1400,15 @@ Modify `condenseIfNeeded()` to:
 
 ### 16.1 When It Fires
 
-The `on_signal_received` callback fires **before** signals are injected into the LLM conversation. It runs as a SIMPLE worker task (the Python callback is registered as a worker, same as `before_model`/`after_model` callbacks).
+The `on_signal_received` callback fires **before** the signal intake INLINE task (Section 4.1) — that is, before signals are moved from `_pending` to `_processing` and before injection messages are computed. It runs as a SIMPLE worker task (the Python callback is registered as a worker, same as `before_model`/`after_model` callbacks).
 
 ### 16.2 Flow
 
-In the task mapper (or as a pre-LLM INLINE task):
-
 ```
-Read _pending_signals
+Callback SIMPLE task reads _pending_signals
     │
     ├─ For each signal:
-    │   ├─ Invoke on_signal_received callback
+    │   ├─ Invoke on_signal_received callback worker
     │   │   Return value:
     │   │   ├─ str → modified message (signal proceeds with new message)
     │   │   ├─ None → passthrough (signal proceeds unchanged)
@@ -1174,20 +1417,24 @@ Read _pending_signals
     │   │
     │   └─ On unexpected exception → fail-open (signal proceeds unchanged, error logged)
     │
-    └─ Inject surviving signals into conversation
+    └─ Output: filtered _pending_signals list
+              ↓
+Signal intake INLINE + SET_VARIABLE (Section 4.1)
+reads _pending_signals (post-callback) and proceeds normally
 ```
 
 ### 16.3 Compilation
 
 If `on_signal_received` is set:
 - Register a worker for the callback function
-- Insert a SIMPLE task before LLM_CHAT_COMPLETE in the DO_WHILE loop that:
-  1. Reads `_pending_signals`
+- Insert a **SIMPLE task + SET_VARIABLE pair** into the DO_WHILE loop body, BEFORE the signal intake INLINE task (Section 4.1):
+  1. SIMPLE task reads `_pending_signals` from workflow variables (via inputParameters wiring)
   2. Calls the callback worker for each signal
-  3. Filters/modifies based on return values
-  4. Writes filtered list back to `_pending_signals`
+  3. Returns filtered/modified list in output
+  4. SET_VARIABLE writes the filtered list back to `_pending_signals`
+- The subsequent signal intake INLINE task then reads the filtered `_pending_signals`
 
-If `on_signal_received` is NOT set (default): no overhead — skip this step entirely.
+If `on_signal_received` is NOT set (default): no overhead — skip this step entirely. The signal intake INLINE task reads `_pending_signals` directly.
 
 ---
 
@@ -1220,9 +1467,17 @@ public SignalReceipt signal(String workflowId, SignalRequest request) {
 
 Lock objects are per-workflow (no global contention). Stale entries are cleaned periodically.
 
-### 17.3 Task Mapper Side
+### 17.3 Signal Intake Side
 
-The task mapper's read-and-clear is inherently serialized (runs inside a single Conductor task execution thread). No additional locking needed.
+The signal intake INLINE + SET_VARIABLE pair runs inside the Conductor workflow execution thread — no concurrent workflow task can interleave. However, `AgentService.signal()` runs on a separate HTTP request thread and calls `updateVariables` independently. This creates a small race window:
+
+1. Intake INLINE reads `_pending_signals = [A, B]`
+2. `AgentService.signal()` appends signal C → `_pending_signals = [A, B, C]`
+3. Intake SET_VARIABLE writes `_pending_signals = []` → signal C is lost
+
+**Mitigation:** This race window is a few milliseconds (the time between the INLINE task execution and the SET_VARIABLE execution). The probability is very low. If it occurs, signal C is lost from `_pending_signals` but was never moved to `_processing` — it effectively vanishes. The sender's `SignalReceipt` shows `status: "queued"`, but `GET /agent/signal/{signalId}/status` will show `disposition: "pending"` with `delivered: false` indefinitely.
+
+**Acceptable trade-off:** The alternative (compare-and-set with retry, or using Conductor's `updateVariables` directly from a system task) adds significant complexity. For v1, we document this as a known edge case. The sender can retry via `get_signal_status()` polling. A future version could use Conductor's upcoming atomic variable operations if available.
 
 ---
 
@@ -1238,7 +1493,7 @@ When an agent has no tools and no guardrails but `signal_mode` is not disabled, 
 
 ```
 DO_WHILE (max_turns=1 OR signal_pending):
-    [Read signals → inject → LLM_CHAT_COMPLETE]
+    [signal_intake INLINE + SET_VARIABLE → LLM_CHAT_COMPLETE]
     Condition: signal_pending ? continue : exit
 ```
 
@@ -1257,8 +1512,8 @@ Agent(signal_mode="disabled", ...)  # No signal support, no DO_WHILE wrapper
 | Phase | What | Files |
 |---|---|---|
 | **1. Storage + REST** | Signal endpoint, variable storage, limits, SSE events | `AgentService.java`, `AgentController.java`, `AgentStreamRegistry.java` |
-| **2. Injection** | Task mapper reads signals, injects messages | `AgentChatCompleteTaskMapper` or equivalent |
-| **3. Accept/Reject** | Ephemeral tools, enrichment routing, disposition scripts | `JavaScriptBuilder.java`, `ToolCompiler.java` |
+| **2. Injection** | Pre-LLM signal intake INLINE + SET_VARIABLE, task mapper reads `_signal_injection` | `JavaScriptBuilder.java`, `AgentCompiler.java`, `AgentChatCompleteTaskMapper.java` |
+| **3. Accept/Reject** | Enrichment routing, disposition scripts, post-fork merge + implicit acceptance | `JavaScriptBuilder.java`, `ToolCompiler.java` |
 | **4. Urgent** | Pause flag, event listener hook, auto-resume | `AgentEventListener.java` |
 | **5. Propagation** | Sub-workflow discovery, recursive signaling | `AgentService.java` |
 | **6. signal_tool()** | SDK function, enrichment routing, name resolution | `tool.py`, `ToolCompiler.java`, `AgentController.java` |
