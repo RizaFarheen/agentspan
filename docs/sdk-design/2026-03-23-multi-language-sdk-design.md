@@ -1123,25 +1123,158 @@ The resulting Conductor workflow must have **individual tasks per tool, per LLM 
 | OpenAI Agents SDK | From `agent.model` | From `agent.tools` (with schemas) | From `agent.handoffs` |
 | Google ADK | From `agent.model` | From `agent.tools` (FunctionTool) | From `agent.subAgents` |
 
-#### When full extraction is not possible
+#### When extraction fails
 
-Some framework constructs cannot be fully decomposed (e.g., custom LangGraph StateGraph with complex conditional routing, or framework-internal state management). In these cases:
+If the SDK cannot extract model, tools, or instructions from a framework agent, it must **throw an error** explaining what couldn't be extracted and how the user can fix it. No fallback to a black-box task.
 
-1. **Extract what you can** — model, tools, instructions, simple sub-agents
-2. **For unextractable logic** — register tool workers that encapsulate the framework-specific behavior. Each worker is still a separate Conductor task (not a single black-box), giving visibility and retry capability at the node level.
-3. **Never wrap the entire agent in one task** — even for complex graphs, each node should be its own Conductor task.
+```
+Error: Cannot extract model from LangGraph CompiledStateGraph.
+The graph has no detectable LLM node. Either:
+  1. Use createReactAgent() which exposes the model
+  2. Create a native agentspan Agent with your tools instead
+```
+
+#### Vercel AI SDK: handled by superset tools, NOT framework detection
+
+The Vercel AI SDK has **no agent class** — `generateText()` is a function, not an object. There is nothing to detect or extract. Instead, Vercel AI SDK users use **native agentspan Agent** with AI SDK `tool()` objects, which the superset tool system auto-detects and converts:
+
+```typescript
+import { tool } from 'ai';
+import { Agent, AgentRuntime } from '@agentspan/sdk';
+
+const weatherTool = tool({
+  description: 'Get weather',
+  parameters: z.object({ city: z.string() }),
+  execute: async ({ city }) => ({ city, temp: 72 }),
+});
+
+// Native Agent — superset tool system handles AI SDK tool() objects
+const agent = new Agent({
+  name: 'weather_agent',
+  model: 'openai/gpt-4o-mini',
+  tools: [weatherTool],  // auto-converted from Zod to JSON Schema
+});
+
+const result = await runtime.run(agent, 'What is the weather?');
+// Compiles to: LLM_CHAT_COMPLETE + SIMPLE task for weather tool
+```
+
+This produces a full agentspan workflow — NOT a passthrough. The LLM call is a `LLM_CHAT_COMPLETE` system task, the tool is a `SIMPLE` task with a local worker.
 
 #### Detection (duck-typing, no hard imports)
 
-SDKs detect framework agents via property/method signatures without importing framework packages:
+SDKs detect framework agents via property/method signatures without importing framework packages. **Vercel AI SDK is NOT detected** — it uses native Agent with superset tools instead.
 
 | Framework | Detection signature |
 |-----------|-------------------|
-| Vercel AI SDK | Has `generate()` + `stream()` + `tools` |
 | LangGraph.js | Has `invoke()` + (`getGraph()` or `nodes` Map) |
 | LangChain.js | Has `invoke()` + `lc_namespace` |
 | OpenAI Agents SDK | Has `name` + `instructions` + `model` + `tools` + `handoffs` |
 | Google ADK | Has `model` + `instruction` + ADK-specific properties |
+
+#### Framework-Specific Extraction: LangGraph
+
+**Full extraction (create_react_agent, simple tool-calling graphs):**
+
+`createReactAgent({ llm, tools })` and similar patterns expose model + tools as extractable properties. The SDK:
+1. Finds the LLM node (walks `graph.nodes`, looks for objects with `.model_name` or model attributes)
+2. Extracts tools from `ToolNode.tools_by_name`
+3. Extracts system prompt from graph configuration
+4. Produces `AgentConfig` with `model` + `tools[]` → compiles to `LLM_CHAT_COMPLETE` + `SIMPLE` tasks
+
+**Graph-structure extraction (custom StateGraph):**
+
+Custom `StateGraph` with explicit nodes and edges:
+1. Each node function → becomes a `SIMPLE` Conductor task with its own worker
+2. Simple edges → sequential task flow
+3. Conditional edges → `SWITCH` tasks (see routing below)
+4. LLM nodes (nodes that reference an LLM variable) → split into prep (SIMPLE) + `LLM_CHAT_COMPLETE` + finish (SIMPLE)
+5. Subgraph nodes → recursively compiled as `SUB_WORKFLOW`
+
+**Conditional routing in TypeScript:**
+
+Python extracts router logic via bytecode inspection (`co_names`). TypeScript cannot do this — functions are opaque. Two approaches:
+
+1. **Static analysis of return values:** If the conditional edge mapping is provided (e.g., `{ "escalate": "escalate_node", "respond": "respond_node" }`), the routing targets are known. The router function itself becomes a SIMPLE task worker that returns the route key. The server compiles this as a SWITCH: router worker → SWITCH on result → branch tasks.
+
+2. **When routing can't be extracted:** The SDK throws an error with guidance:
+   ```
+   Error: Cannot extract conditional routing from StateGraph node 'classify'.
+   Consider using createReactAgent() or express routing as an agentspan Agent
+   with strategy='router'.
+   ```
+
+**LangGraph memory (MemorySaver/checkpointer):**
+
+LangGraph's `MemorySaver` is framework-specific state persistence. When detected:
+- Map to agentspan `ConversationMemory` if the checkpointer stores message history
+- If the checkpointer does framework-specific state management that doesn't map to agentspan memory, throw an error with guidance to use agentspan's native memory system
+
+**What MUST succeed (no errors allowed):**
+- `createReactAgent({ llm, tools })` — always fully extractable
+- `createReactAgent({ llm, tools, prompt })` — always fully extractable
+- Simple `StateGraph` with function nodes + simple edges — always extractable
+- `StateGraph` with conditional edges and explicit target mapping — extractable (router becomes SIMPLE worker)
+
+**What MAY fail with a clear error:**
+- `StateGraph` with `Send` API (dynamic fan-out) — complex; error with guidance
+- Graphs with custom `channel_write`/`channel_read` — framework-internal; error with guidance
+
+#### Framework-Specific Extraction: LangChain
+
+**AgentExecutor extraction:**
+
+`AgentExecutor` wraps an LLM agent + tools:
+1. Extract model from `executor.agent` (typically `ChatOpenAI` or similar)
+2. Extract tools from `executor.tools` — each has `.name`, `.description`, `.args_schema`
+3. Extract system prompt from the agent's prompt template
+4. Produces `AgentConfig` with `model` + `tools[]` → compiles to `LLM_CHAT_COMPLETE` + `SIMPLE` tasks
+
+**RunnableSequence extraction (chains):**
+
+A `RunnableSequence` is a pipeline of steps. Each step is a `Runnable`:
+1. Each `RunnableLambda` (wraps a function) → becomes a `SIMPLE` Conductor task with a worker. The function is extractable as a property on the Runnable, and each step is its own task — this IS genuine decomposition, not a black box.
+2. Each `ChatOpenAI` call → becomes a `LLM_CHAT_COMPLETE` task
+3. Each `StructuredOutputParser` → becomes a post-processing SIMPLE task
+4. The chain sequence → maps to agentspan `strategy: 'sequential'`
+
+**What MUST succeed:**
+- `AgentExecutor.from_agent_and_tools({ agent, tools })` — always fully extractable
+- `createOpenAIFunctionsAgent` + `AgentExecutor` — always fully extractable
+- Simple `RunnableSequence` of prompt → LLM → parser — always extractable
+
+**What MAY fail with a clear error:**
+- Custom `Runnable` subclasses with no extractable function — error with guidance
+- Chains using `RunnablePassthrough` with complex merging — error with guidance
+
+#### Framework-Specific Extraction: OpenAI Agents SDK
+
+**Fully extractable via public properties — no special handling needed:**
+
+The `Agent` class exposes everything as public properties:
+- `.model` → `AgentConfig.model` (prefix with `openai/` if needed)
+- `.instructions` → `AgentConfig.instructions`
+- `.tools` → `AgentConfig.tools[]` (each tool has `.name`, `.description`, `.params_json_schema`, callable)
+- `.handoffs` → `AgentConfig.agents[]` with `strategy: 'handoff'` (recursive extraction)
+- `.output_type` → `AgentConfig.outputType`
+- `.input_guardrails` / `.output_guardrails` → `AgentConfig.guardrails[]`
+- `.model_settings` → `temperature`, `maxTokens`
+
+The generic serializer walks these properties. The server's `OpenAINormalizer` maps the raw config to `AgentConfig`. **No framework-specific serializer needed.**
+
+#### Framework-Specific Extraction: Google ADK
+
+**Fully extractable via public properties — no special handling needed:**
+
+The `LlmAgent` class exposes everything:
+- `.model` → `AgentConfig.model` (prefix with `google_gemini/` if needed)
+- `.instruction` → `AgentConfig.instructions`
+- `.tools` → `AgentConfig.tools[]` (each `FunctionTool` has `.name`, `.description`, `.parameters`, `.execute`)
+- `.subAgents` → `AgentConfig.agents[]` (recursive extraction)
+- `.generateContentConfig` → temperature, maxTokens
+- `.outputKey` → metadata
+
+The generic serializer walks these properties. The server's `GoogleADKNormalizer` maps the raw config to `AgentConfig`. **No framework-specific serializer needed.**
 
 #### Framework packages as optional dependencies
 
