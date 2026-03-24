@@ -231,3 +231,13 @@ export { discoverAgents } from './discovery.js';
 
 // ── Tracing ─────────────────────────────────────────────
 export { isTracingEnabled } from './tracing.js';
+
+// ── Framework Integration ───────────────────────────────
+export { detectFramework } from './frameworks/detect.js';
+export { pushEvent, SUPPORTED_EVENT_TYPES } from './frameworks/event-push.js';
+export type { FrameworkWorkerFn } from './frameworks/vercel-ai.js';
+export { makeVercelAIWorker } from './frameworks/vercel-ai.js';
+export { makeLangGraphWorker } from './frameworks/langgraph.js';
+export { makeLangChainWorker } from './frameworks/langchain.js';
+export { makeOpenAIAgentsWorker } from './frameworks/openai-agents.js';
+export { makeGoogleADKWorker } from './frameworks/google-adk.js';

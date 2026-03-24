@@ -5,6 +5,7 @@ import type {
   DeploymentInfo,
   RunOptions,
   ToolDef,
+  FrameworkId,
 } from './types.js';
 import { AgentAPIError, AgentspanError } from './errors.js';
 import { AgentConfig } from './config.js';
@@ -16,16 +17,12 @@ import { WorkerManager } from './worker.js';
 import { AgentStream } from './stream.js';
 import { makeAgentResult } from './result.js';
 import { TERMINAL_STATUSES } from './result.js';
-
-// ── Framework detection stub ────────────────────────────
-
-/**
- * Stub for framework detection. Returns null (no framework detected).
- * Will be replaced by actual detection in a future chunk.
- */
-function detectFramework(_agent: unknown): null {
-  return null;
-}
+import { detectFramework } from './frameworks/detect.js';
+import { makeVercelAIWorker } from './frameworks/vercel-ai.js';
+import { makeLangGraphWorker } from './frameworks/langgraph.js';
+import { makeLangChainWorker } from './frameworks/langchain.js';
+import { makeOpenAIAgentsWorker } from './frameworks/openai-agents.js';
+import { makeGoogleADKWorker } from './frameworks/google-adk.js';
 
 // ── AgentHandle ─────────────────────────────────────────
 
@@ -75,17 +72,20 @@ export class AgentRuntime {
 
   /**
    * Run an agent synchronously: start, register workers, stream events, return result.
+   * Accepts native Agent instances or framework agent objects (Vercel AI, LangGraph, etc.).
    */
-  async run(agent: Agent, prompt: string, options?: RunOptions): Promise<AgentResult> {
+  async run(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentResult> {
     const framework = detectFramework(agent);
     if (framework !== null) {
       return this._runFramework(agent, prompt, framework, options);
     }
 
+    // Native Agent path — safe to cast since detectFramework returned null for non-Agent
+    const nativeAgent = agent as Agent;
     const correlationId = generateCorrelationId();
 
     // Serialize agent config
-    const payload = this.serializer.serialize(agent, prompt, {
+    const payload = this.serializer.serialize(nativeAgent, prompt, {
       sessionId: options?.sessionId,
       media: options?.media,
       idempotencyKey: options?.idempotencyKey,
@@ -96,7 +96,7 @@ export class AgentRuntime {
     }
 
     // Register workers for all tools
-    await this._registerAllWorkers(agent);
+    await this._registerAllWorkers(nativeAgent);
     this.workerManager.startPolling();
 
     try {
@@ -154,16 +154,18 @@ export class AgentRuntime {
 
   /**
    * Start an agent asynchronously. Returns a handle for interaction.
+   * Accepts native Agent instances or framework agent objects.
    */
-  async start(agent: Agent, prompt: string, options?: RunOptions): Promise<AgentHandle> {
+  async start(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentHandle> {
     const framework = detectFramework(agent);
     if (framework !== null) {
-      throw new AgentspanError('Framework not yet implemented');
+      return this._startFramework(agent, prompt, framework, options);
     }
 
+    const nativeAgent = agent as Agent;
     const correlationId = generateCorrelationId();
 
-    const payload = this.serializer.serialize(agent, prompt, {
+    const payload = this.serializer.serialize(nativeAgent, prompt, {
       sessionId: options?.sessionId,
       media: options?.media,
       idempotencyKey: options?.idempotencyKey,
@@ -174,7 +176,7 @@ export class AgentRuntime {
     }
 
     // Register workers
-    await this._registerAllWorkers(agent);
+    await this._registerAllWorkers(nativeAgent);
     this.workerManager.startPolling();
 
     // Start agent
@@ -256,14 +258,18 @@ export class AgentRuntime {
 
   /**
    * Start an agent and return a connected AgentStream.
+   * Accepts native Agent instances or framework agent objects.
    */
-  async stream(agent: Agent, prompt: string, options?: RunOptions): Promise<AgentStream> {
+  async stream(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentStream> {
     const framework = detectFramework(agent);
     if (framework !== null) {
-      throw new AgentspanError('Framework not yet implemented');
+      throw new AgentspanError(
+        'Framework streaming is not yet supported. Use run() for framework agents.',
+      );
     }
 
-    const payload = this.serializer.serialize(agent, prompt, {
+    const nativeAgent = agent as Agent;
+    const payload = this.serializer.serialize(nativeAgent, prompt, {
       sessionId: options?.sessionId,
       media: options?.media,
       idempotencyKey: options?.idempotencyKey,
@@ -274,7 +280,7 @@ export class AgentRuntime {
     }
 
     // Register workers
-    await this._registerAllWorkers(agent);
+    await this._registerAllWorkers(nativeAgent);
     this.workerManager.startPolling();
 
     // Start agent
@@ -479,15 +485,258 @@ export class AgentRuntime {
   }
 
   /**
-   * Stub for framework execution — throws for now.
+   * Derive a worker name from a framework agent object.
+   */
+  private _deriveWorkerName(agent: object, frameworkId: FrameworkId): string {
+    const a = agent as Record<string, unknown>;
+    if (typeof a.id === 'string' && a.id.length > 0) return a.id;
+    if (typeof a.name === 'string' && a.name.length > 0) return a.name;
+    if (agent.constructor && agent.constructor.name !== 'Object') {
+      return agent.constructor.name;
+    }
+    return `${frameworkId}_agent`;
+  }
+
+  /**
+   * Get the appropriate worker factory for a given framework.
+   */
+  private _getWorkerFactory(frameworkId: FrameworkId) {
+    switch (frameworkId) {
+      case 'vercel_ai':
+        return makeVercelAIWorker;
+      case 'langgraph':
+        return makeLangGraphWorker;
+      case 'langchain':
+        return makeLangChainWorker;
+      case 'openai':
+        return makeOpenAIAgentsWorker;
+      case 'google_adk':
+        return makeGoogleADKWorker;
+      default:
+        throw new AgentspanError(`Unsupported framework: ${frameworkId}`);
+    }
+  }
+
+  /**
+   * Run a framework agent via passthrough worker pattern.
+   *
+   * 1. Get worker factory based on frameworkId
+   * 2. Generate worker name from agent
+   * 3. Build passthrough worker function
+   * 4. Register task def with 600s timeout
+   * 5. Add worker to WorkerManager
+   * 6. Start polling
+   * 7. POST /agent/start with framework config
+   * 8. Wait for result via polling
    */
   private async _runFramework(
-    _agent: Agent,
-    _prompt: string,
-    _framework: unknown,
-    _options?: RunOptions,
+    agent: object,
+    prompt: string,
+    frameworkId: FrameworkId,
+    options?: RunOptions,
   ): Promise<AgentResult> {
-    throw new AgentspanError('Framework not yet implemented');
+    const correlationId = generateCorrelationId();
+    const workerName = this._deriveWorkerName(agent, frameworkId);
+    const factory = this._getWorkerFactory(frameworkId);
+    const workerFn = factory(
+      agent,
+      workerName,
+      this.config.serverUrl,
+      this.authHeaders,
+    );
+
+    // Register task definition with 600s timeout (passthrough workers)
+    await this.workerManager.registerTaskDef(workerName, {
+      timeoutSeconds: 600,
+    });
+
+    // Add worker that bridges the WorkerManager's handler interface
+    this.workerManager.addWorker(workerName, async (inputData) => {
+      const workflowInstanceId = (inputData['__workflowInstanceId__'] as string) ?? '';
+      // Strip internal keys before passing to framework worker
+      const cleanInput = { ...inputData };
+      delete cleanInput['__workflowInstanceId__'];
+      delete cleanInput['__toolContext__'];
+      delete cleanInput['_agent_state'];
+      delete cleanInput['method'];
+      delete cleanInput['__agentspan_ctx__'];
+
+      const result = await workerFn(cleanInput, workflowInstanceId);
+      return result.outputData;
+    });
+
+    this.workerManager.startPolling();
+
+    try {
+      // POST /agent/start with framework-specific payload
+      const startPayload = {
+        framework: frameworkId,
+        rawConfig: {
+          name: workerName,
+          _worker_name: workerName,
+        },
+        prompt,
+        sessionId: options?.sessionId,
+      };
+
+      const startResponse = await this._httpRequest(
+        'POST',
+        '/agent/start',
+        startPayload,
+        options?.signal,
+      );
+
+      const workflowId = startResponse.workflowId as string;
+
+      // Create SSE stream to drain events and wait for completion
+      const sseUrl = `${this.config.serverUrl}/agent/${workflowId}/sse`;
+      const agentStream = new AgentStream(
+        sseUrl,
+        this.authHeaders,
+        workflowId,
+        async (body) => this._respond(workflowId, body, options?.signal),
+        this.config.serverUrl,
+      );
+
+      // Drain all events
+      const events: AgentEvent[] = [];
+      for await (const event of agentStream) {
+        events.push(event);
+      }
+
+      // Build result from stream
+      const result = await agentStream.getResult();
+      (result as unknown as Record<string, unknown>).correlationId = correlationId;
+
+      return result;
+    } finally {
+      this.workerManager.stopPolling();
+    }
+  }
+
+  /**
+   * Start a framework agent asynchronously. Returns a handle for interaction.
+   */
+  private async _startFramework(
+    agent: object,
+    prompt: string,
+    frameworkId: FrameworkId,
+    options?: RunOptions,
+  ): Promise<AgentHandle> {
+    const correlationId = generateCorrelationId();
+    const workerName = this._deriveWorkerName(agent, frameworkId);
+    const factory = this._getWorkerFactory(frameworkId);
+    const workerFn = factory(
+      agent,
+      workerName,
+      this.config.serverUrl,
+      this.authHeaders,
+    );
+
+    // Register task definition with 600s timeout
+    await this.workerManager.registerTaskDef(workerName, {
+      timeoutSeconds: 600,
+    });
+
+    // Add worker
+    this.workerManager.addWorker(workerName, async (inputData) => {
+      const workflowInstanceId = (inputData['__workflowInstanceId__'] as string) ?? '';
+      const cleanInput = { ...inputData };
+      delete cleanInput['__workflowInstanceId__'];
+      delete cleanInput['__toolContext__'];
+      delete cleanInput['_agent_state'];
+      delete cleanInput['method'];
+      delete cleanInput['__agentspan_ctx__'];
+
+      const result = await workerFn(cleanInput, workflowInstanceId);
+      return result.outputData;
+    });
+
+    this.workerManager.startPolling();
+
+    // POST /agent/start with framework-specific payload
+    const startPayload = {
+      framework: frameworkId,
+      rawConfig: {
+        name: workerName,
+        _worker_name: workerName,
+      },
+      prompt,
+      sessionId: options?.sessionId,
+    };
+
+    const startResponse = await this._httpRequest(
+      'POST',
+      '/agent/start',
+      startPayload,
+      options?.signal,
+    );
+
+    const workflowId = startResponse.workflowId as string;
+
+    const handle: AgentHandle = {
+      workflowId,
+      correlationId,
+
+      getStatus: () => this._getStatus(workflowId, options?.signal),
+
+      wait: async (pollIntervalMs = 500) => {
+        while (true) {
+          const status = await this._getStatus(workflowId, options?.signal);
+          if (TERMINAL_STATUSES.has(status.status)) {
+            return makeAgentResult({
+              output: status.output,
+              workflowId,
+              correlationId,
+              status: status.status,
+            });
+          }
+          await sleep(pollIntervalMs);
+        }
+      },
+
+      respond: (output) => this._respond(workflowId, output, options?.signal),
+
+      approve: (output?) =>
+        this._respond(workflowId, { approved: true, ...output }, options?.signal),
+
+      reject: (reason?) =>
+        this._respond(workflowId, { approved: false, reason }, options?.signal),
+
+      send: (message) =>
+        this._respond(workflowId, { message }, options?.signal),
+
+      pause: () =>
+        this._httpRequest('PUT', `/workflow/${workflowId}/pause`, undefined, options?.signal).then(
+          () => {},
+        ),
+
+      resume: () =>
+        this._httpRequest('PUT', `/workflow/${workflowId}/resume`, undefined, options?.signal).then(
+          () => {},
+        ),
+
+      cancel: () =>
+        this._httpRequest(
+          'DELETE',
+          `/workflow/${workflowId}`,
+          undefined,
+          options?.signal,
+        ).then(() => {}),
+
+      stream: () => {
+        const sseUrl = `${this.config.serverUrl}/agent/${workflowId}/sse`;
+        return new AgentStream(
+          sseUrl,
+          this.authHeaders,
+          workflowId,
+          async (body) => this._respond(workflowId, body, options?.signal),
+          this.config.serverUrl,
+        );
+      },
+    };
+
+    return handle;
   }
 }
 
@@ -512,22 +761,25 @@ export function configure(options: AgentConfigOptions): AgentRuntime {
 
 /**
  * Run an agent using the singleton runtime.
+ * Accepts native Agent instances or framework agent objects.
  */
-export function run(agent: Agent, prompt: string, options?: RunOptions): Promise<AgentResult> {
+export function run(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentResult> {
   return getRuntime().run(agent, prompt, options);
 }
 
 /**
  * Start an agent using the singleton runtime.
+ * Accepts native Agent instances or framework agent objects.
  */
-export function start(agent: Agent, prompt: string, options?: RunOptions): Promise<AgentHandle> {
+export function start(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentHandle> {
   return getRuntime().start(agent, prompt, options);
 }
 
 /**
  * Stream an agent using the singleton runtime.
+ * Accepts native Agent instances or framework agent objects.
  */
-export function stream(agent: Agent, prompt: string, options?: RunOptions): Promise<AgentStream> {
+export function stream(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentStream> {
   return getRuntime().stream(agent, prompt, options);
 }
 
