@@ -1,372 +1,364 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeLangGraphWorker } from '../../../src/frameworks/langgraph.js';
-import * as eventPush from '../../../src/frameworks/event-push.js';
+import { describe, it, expect } from 'vitest';
+import { serializeLangGraph } from '../../../src/frameworks/langgraph-serializer.js';
+import { ConfigurationError } from '../../../src/errors.js';
 
-// Mock pushEvent to track calls
-vi.mock('../../../src/frameworks/event-push.js', () => ({
-  pushEvent: vi.fn(),
-  SUPPORTED_EVENT_TYPES: new Set([
-    'thinking', 'tool_call', 'tool_result',
-    'context_condensed', 'subagent_start', 'subagent_stop',
-  ]),
-}));
+describe('serializeLangGraph', () => {
+  describe('full extraction (createReactAgent-style)', () => {
+    it('extracts model and tools from graph with ToolNode', () => {
+      function searchWeb(query: string) { return `results for ${query}`; }
+      function calculate(expr: string) { return eval(expr); }
 
-describe('makeLangGraphWorker', () => {
-  const serverUrl = 'http://localhost:8080/api';
-  const headers = { Authorization: 'Bearer test-key' };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  describe('dual-stream mode', () => {
-    it('processes updates and values chunks from dual-stream', async () => {
       const mockGraph = {
-        invoke: vi.fn(),
-        getGraph: vi.fn(),
-        stream: vi.fn().mockImplementation(async function* () {
-          // Yield [mode, chunk] tuples
-          yield ['updates', {
-            agent: {
-              messages: [
-                {
-                  role: 'ai',
-                  content: 'Thinking...',
-                  tool_calls: [
-                    { name: 'search', args: { query: 'test' } },
-                  ],
+        name: 'research_agent',
+        invoke: () => {},
+        getGraph: () => {},
+        nodes: new Map<string, unknown>([
+          ['__start__', {}],
+          ['agent', {
+            bound: {
+              first: {
+                model_name: 'gpt-4o',
+                constructor: { name: 'ChatOpenAI' },
+              },
+            },
+          }],
+          ['tools', {
+            bound: {
+              tools_by_name: {
+                search_web: {
+                  name: 'search_web',
+                  description: 'Search the web',
+                  func: searchWeb,
+                  params_json_schema: {
+                    type: 'object',
+                    properties: { query: { type: 'string' } },
+                  },
                 },
-              ],
+                calculate: {
+                  name: 'calculate',
+                  description: 'Evaluate a math expression',
+                  func: calculate,
+                  params_json_schema: {
+                    type: 'object',
+                    properties: { expr: { type: 'string' } },
+                  },
+                },
+              },
             },
-          }];
-          yield ['updates', {
-            tools: {
-              messages: [
-                { role: 'tool', name: 'search', content: 'Found results' },
-              ],
+          }],
+          ['__end__', {}],
+        ]),
+      };
+
+      const [config, workers] = serializeLangGraph(mockGraph);
+
+      // Config should have model and tools
+      expect(config.name).toBe('research_agent');
+      expect(config.model).toBe('openai/gpt-4o');
+      expect(Array.isArray(config.tools)).toBe(true);
+      const tools = config.tools as Record<string, unknown>[];
+      expect(tools).toHaveLength(2);
+      expect(tools[0]._worker_ref).toBe('search_web');
+      expect(tools[0].description).toBe('Search the web');
+      expect(tools[1]._worker_ref).toBe('calculate');
+
+      // Workers should contain the extracted tool functions
+      expect(workers).toHaveLength(2);
+      expect(workers[0].name).toBe('search_web');
+      expect(workers[0].func).toBe(searchWeb);
+      expect(workers[1].name).toBe('calculate');
+      expect(workers[1].func).toBe(calculate);
+    });
+
+    it('extracts model with provider inference from class name', () => {
+      const mockGraph = {
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['__start__', {}],
+          ['agent', {
+            bound: {
+              first: {
+                model_name: 'claude-3-sonnet',
+                constructor: { name: 'ChatAnthropic' },
+              },
             },
-          }];
-          yield ['values', {
-            messages: [
-              { role: 'user', content: 'Hello' },
-              { role: 'ai', content: 'The final answer is 42' },
-            ],
-          }];
-        }),
+          }],
+          ['tools', {
+            bound: {
+              tools_by_name: {
+                my_tool: {
+                  name: 'my_tool',
+                  description: 'A tool',
+                  func: () => {},
+                  params_json_schema: { type: 'object', properties: {} },
+                },
+              },
+            },
+          }],
+          ['__end__', {}],
+        ]),
       };
 
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'Hello' }, 'wf-123');
-
-      // Verify stream was called with correct args
-      expect(mockGraph.stream).toHaveBeenCalledTimes(1);
-      const streamArgs = mockGraph.stream.mock.calls[0];
-      expect(streamArgs[1]).toEqual(
-        expect.objectContaining({
-          streamMode: ['updates', 'values'],
-        }),
-      );
-
-      // Verify events were pushed
-      // Update 1: thinking event for 'agent' node + tool_call for search
-      expect(eventPush.pushEvent).toHaveBeenCalledWith(
-        'wf-123',
-        { type: 'thinking', content: '[agent]' },
-        serverUrl,
-        headers,
-      );
-      expect(eventPush.pushEvent).toHaveBeenCalledWith(
-        'wf-123',
-        { type: 'tool_call', toolName: 'search', args: { query: 'test' } },
-        serverUrl,
-        headers,
-      );
-
-      // Update 2: thinking event for 'tools' node + tool_result
-      expect(eventPush.pushEvent).toHaveBeenCalledWith(
-        'wf-123',
-        { type: 'thinking', content: '[tools]' },
-        serverUrl,
-        headers,
-      );
-      expect(eventPush.pushEvent).toHaveBeenCalledWith(
-        'wf-123',
-        { type: 'tool_result', toolName: 'search', result: 'Found results' },
-        serverUrl,
-        headers,
-      );
-
-      // Verify final result extracted from last AI message
-      expect(result).toEqual({
-        status: 'COMPLETED',
-        outputData: { result: 'The final answer is 42' },
-      });
+      const [config] = serializeLangGraph(mockGraph);
+      expect(config.model).toBe('anthropic/claude-3-sonnet');
     });
 
-    it('passes session_id as thread_id in config', async () => {
+    it('uses model name as-is when it already includes provider', () => {
       const mockGraph = {
-        invoke: vi.fn(),
-        getGraph: vi.fn(),
-        stream: vi.fn().mockImplementation(async function* () {
-          yield ['values', { messages: [{ role: 'ai', content: 'OK' }] }];
-        }),
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['agent', {
+            bound: {
+              model: 'google/gemini-2.0-flash',
+            },
+          }],
+          ['tools', {
+            bound: {
+              tools_by_name: {
+                t: { name: 't', description: 'd', func: () => {}, params_json_schema: { type: 'object' } },
+              },
+            },
+          }],
+        ]),
       };
 
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      await worker({ prompt: 'Hello', session_id: 'session-abc' }, 'wf-456');
-
-      const streamArgs = mockGraph.stream.mock.calls[0];
-      expect(streamArgs[1]).toEqual(
-        expect.objectContaining({
-          configurable: { thread_id: 'session-abc' },
-          streamMode: ['updates', 'values'],
-        }),
-      );
-    });
-
-    it('handles stream with only values (no updates)', async () => {
-      const mockGraph = {
-        invoke: vi.fn(),
-        getGraph: vi.fn(),
-        stream: vi.fn().mockImplementation(async function* () {
-          yield ['values', { output: 'Final result' }];
-        }),
-      };
-
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'Hello' }, 'wf-values');
-
-      expect(result).toEqual({
-        status: 'COMPLETED',
-        outputData: { result: 'Final result' },
-      });
-      expect(eventPush.pushEvent).not.toHaveBeenCalled();
+      const [config] = serializeLangGraph(mockGraph);
+      expect(config.model).toBe('google/gemini-2.0-flash');
     });
   });
 
-  describe('invoke fallback', () => {
-    it('falls back to invoke when stream fails', async () => {
+  describe('graph-structure (custom StateGraph)', () => {
+    it('extracts nodes and edges from a custom graph', () => {
+      function planStep(state: any) { return state; }
+      function executeStep(state: any) { return state; }
+
       const mockGraph = {
-        invoke: vi.fn().mockResolvedValue({
-          messages: [
-            { role: 'ai', content: 'Fallback response' },
-          ],
-        }),
-        getGraph: vi.fn(),
-        stream: vi.fn().mockImplementation(() => {
-          throw new Error('Stream not supported');
-        }),
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['__start__', {}],
+          ['plan', {
+            bound: { func: planStep },
+          }],
+          ['execute', {
+            bound: { func: executeStep },
+          }],
+          ['__end__', {}],
+        ]),
+        builder: {
+          edges: new Set([['__start__', 'plan'], ['plan', 'execute'], ['execute', '__end__']]),
+        },
       };
 
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'Hello' }, 'wf-fallback');
+      const [config, workers] = serializeLangGraph(mockGraph);
 
-      expect(mockGraph.invoke).toHaveBeenCalledTimes(1);
-      expect(result).toEqual({
-        status: 'COMPLETED',
-        outputData: { result: 'Fallback response' },
-      });
+      // Should produce graph-structure config
+      expect(config._graph).toBeDefined();
+      const graph = config._graph as Record<string, unknown>;
+      expect(Array.isArray(graph.nodes)).toBe(true);
+      expect(Array.isArray(graph.edges)).toBe(true);
+
+      const nodes = graph.nodes as Record<string, unknown>[];
+      expect(nodes).toHaveLength(2);
+      expect(nodes[0].name).toBe('plan');
+      expect(nodes[1].name).toBe('execute');
+
+      const edges = graph.edges as Record<string, string>[];
+      expect(edges.length).toBeGreaterThanOrEqual(2);
+
+      // Workers for each node
+      expect(workers).toHaveLength(2);
+      expect(workers[0].func).toBe(planStep);
+      expect(workers[1].func).toBe(executeStep);
     });
 
-    it('uses invoke when stream method is not available', async () => {
+    it('extracts conditional edges with router workers', () => {
+      function processStep(state: any) { return state; }
+      function routeDecision(state: any) { return 'approve'; }
+
       const mockGraph = {
-        invoke: vi.fn().mockResolvedValue({
-          messages: [
-            { role: 'ai', content: 'Invoke response' },
-          ],
-        }),
-        getGraph: vi.fn(),
-        // No stream method
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['__start__', {}],
+          ['process', {
+            bound: { func: processStep },
+          }],
+          ['__end__', {}],
+        ]),
+        builder: {
+          edges: new Set([['__start__', 'process']]),
+          branches: {
+            process: {
+              default: {
+                path: { func: routeDecision },
+                ends: { approve: '__end__', reject: 'process' },
+              },
+            },
+          },
+        },
       };
 
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'Hello' }, 'wf-no-stream');
+      const [config, workers] = serializeLangGraph(mockGraph);
 
-      expect(mockGraph.invoke).toHaveBeenCalledTimes(1);
-      expect(result).toEqual({
-        status: 'COMPLETED',
-        outputData: { result: 'Invoke response' },
-      });
-    });
-  });
+      const graph = config._graph as Record<string, unknown>;
+      const conditionalEdges = graph.conditional_edges as Record<string, unknown>[];
+      expect(conditionalEdges).toHaveLength(1);
+      expect(conditionalEdges[0].source).toBe('process');
+      expect(conditionalEdges[0]._router_ref).toContain('router');
 
-  describe('input format detection', () => {
-    it('uses messages format when graph has messages channel', async () => {
-      const mockGraph = {
-        invoke: vi.fn().mockResolvedValue({ output: 'ok' }),
-        getGraph: vi.fn(),
-        builder: { channels: { messages: {} } },
-      };
-
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      await worker({ prompt: 'Hello' }, 'wf-msg');
-
-      expect(mockGraph.invoke).toHaveBeenCalledWith(
-        { messages: [{ role: 'user', content: 'Hello' }] },
-        {},
-      );
-    });
-
-    it('uses simple input format when no messages channel', async () => {
-      const mockGraph = {
-        invoke: vi.fn().mockResolvedValue({ output: 'ok' }),
-        getGraph: vi.fn(),
-      };
-
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      await worker({ prompt: 'Hello' }, 'wf-simple');
-
-      expect(mockGraph.invoke).toHaveBeenCalledWith(
-        { input: 'Hello' },
-        {},
-      );
-    });
-  });
-
-  describe('output extraction', () => {
-    it('extracts output from last AI message', async () => {
-      const mockGraph = {
-        invoke: vi.fn().mockResolvedValue({
-          messages: [
-            { role: 'user', content: 'Hello' },
-            { role: 'ai', content: 'Hi there!' },
-          ],
-        }),
-        getGraph: vi.fn(),
-      };
-
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'Hello' }, 'wf-extract');
-
-      expect(result.outputData.result).toBe('Hi there!');
-    });
-
-    it('extracts output from assistant role message', async () => {
-      const mockGraph = {
-        invoke: vi.fn().mockResolvedValue({
-          messages: [
-            { role: 'user', content: 'Hello' },
-            { role: 'assistant', content: 'Hi from assistant!' },
-          ],
-        }),
-        getGraph: vi.fn(),
-      };
-
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'Hello' }, 'wf-asst');
-
-      expect(result.outputData.result).toBe('Hi from assistant!');
-    });
-
-    it('extracts output from output key when no messages', async () => {
-      const mockGraph = {
-        invoke: vi.fn().mockResolvedValue({ output: 'Direct output' }),
-        getGraph: vi.fn(),
-      };
-
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'Hello' }, 'wf-output');
-
-      expect(result.outputData.result).toBe('Direct output');
-    });
-
-    it('serializes full state when no messages or output key', async () => {
-      const mockGraph = {
-        invoke: vi.fn().mockResolvedValue({ counter: 5, status: 'done' }),
-        getGraph: vi.fn(),
-      };
-
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'Hello' }, 'wf-full');
-
-      expect(result.outputData.result).toBe(JSON.stringify({ counter: 5, status: 'done' }));
-    });
-
-    it('returns empty string for null state', async () => {
-      const mockGraph = {
-        invoke: vi.fn().mockResolvedValue(null),
-        getGraph: vi.fn(),
-      };
-
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'Hello' }, 'wf-null');
-
-      expect(result.outputData.result).toBe('');
+      // Workers include the node + the router
+      expect(workers).toHaveLength(2);
+      const routerWorker = workers.find((w) => w.name.includes('router'));
+      expect(routerWorker).toBeDefined();
+      expect(routerWorker!.func).toBe(routeDecision);
     });
   });
 
-  describe('error handling', () => {
-    it('propagates errors from invoke', async () => {
+  describe('model-only (no tools)', () => {
+    it('produces config with model but no tools array', () => {
       const mockGraph = {
-        invoke: vi.fn().mockRejectedValue(new Error('Graph execution failed')),
-        getGraph: vi.fn(),
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['agent', {
+            bound: {
+              first: {
+                model_name: 'gpt-4o-mini',
+                constructor: { name: 'ChatOpenAI' },
+              },
+            },
+          }],
+          ['__end__', {}],
+        ]),
       };
 
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      await expect(worker({ prompt: 'test' }, 'wf-err')).rejects.toThrow('Graph execution failed');
-    });
-
-    it('handles empty prompt', async () => {
-      const mockGraph = {
-        invoke: vi.fn().mockResolvedValue({ output: 'ok' }),
-        getGraph: vi.fn(),
-      };
-
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({}, 'wf-empty');
-
-      expect(mockGraph.invoke).toHaveBeenCalledWith({ input: '' }, {});
-      expect(result.status).toBe('COMPLETED');
+      const [config, workers] = serializeLangGraph(mockGraph);
+      expect(config.model).toBe('openai/gpt-4o-mini');
+      expect(config.tools).toEqual([]);
+      expect(workers).toHaveLength(0);
     });
   });
 
-  describe('event mapping from updates', () => {
-    it('pushes thinking event for each node in updates', async () => {
+  describe('error cases', () => {
+    it('throws ConfigurationError when no model or tools found', () => {
       const mockGraph = {
-        invoke: vi.fn(),
-        getGraph: vi.fn(),
-        stream: vi.fn().mockImplementation(async function* () {
-          yield ['updates', {
-            planner: { messages: [] },
-            executor: { messages: [] },
-          }];
-          yield ['values', { output: 'done' }];
-        }),
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['__start__', {}],
+          ['__end__', {}],
+        ]),
       };
 
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      await worker({ prompt: 'test' }, 'wf-nodes');
-
-      expect(eventPush.pushEvent).toHaveBeenCalledWith(
-        'wf-nodes',
-        { type: 'thinking', content: '[planner]' },
-        serverUrl,
-        headers,
-      );
-      expect(eventPush.pushEvent).toHaveBeenCalledWith(
-        'wf-nodes',
-        { type: 'thinking', content: '[executor]' },
-        serverUrl,
-        headers,
-      );
+      expect(() => serializeLangGraph(mockGraph)).toThrow(ConfigurationError);
     });
 
-    it('handles single-stream mode items (non-tuple)', async () => {
+    it('throws ConfigurationError for empty graph', () => {
       const mockGraph = {
-        invoke: vi.fn(),
-        getGraph: vi.fn(),
-        stream: vi.fn().mockImplementation(async function* () {
-          // Single-stream mode: yields state directly
-          yield { messages: [{ role: 'ai', content: 'Intermediate' }] };
-          yield { messages: [{ role: 'ai', content: 'Final' }] };
-        }),
+        invoke: () => {},
+        nodes: new Map<string, unknown>(),
       };
 
-      const worker = makeLangGraphWorker(mockGraph, 'test-worker', serverUrl, headers);
-      const result = await worker({ prompt: 'test' }, 'wf-single');
+      expect(() => serializeLangGraph(mockGraph)).toThrow(ConfigurationError);
+    });
 
-      // Last item should be treated as final state
-      expect(result.outputData.result).toBe('Final');
+    it('throws ConfigurationError when nodes is not a Map', () => {
+      const mockGraph = {
+        invoke: () => {},
+        nodes: { agent: {} },
+      };
+
+      expect(() => serializeLangGraph(mockGraph)).toThrow(ConfigurationError);
+    });
+  });
+
+  describe('tool schema extraction', () => {
+    it('extracts schema from params_json_schema', () => {
+      const schema = { type: 'object', properties: { q: { type: 'string' } } };
+      const mockGraph = {
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['agent', { bound: { model: 'gpt-4o' } }],
+          ['tools', {
+            bound: {
+              tools_by_name: {
+                search: {
+                  name: 'search',
+                  description: 'Search',
+                  func: () => {},
+                  params_json_schema: schema,
+                },
+              },
+            },
+          }],
+        ]),
+      };
+
+      const [config] = serializeLangGraph(mockGraph);
+      const tools = config.tools as Record<string, unknown>[];
+      expect(tools[0].parameters).toEqual(schema);
+    });
+
+    it('falls back to empty schema when no schema property exists', () => {
+      const mockGraph = {
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['agent', { bound: { model: 'gpt-4o' } }],
+          ['tools', {
+            bound: {
+              tools_by_name: {
+                bare_tool: {
+                  name: 'bare_tool',
+                  description: 'No schema',
+                  func: () => {},
+                },
+              },
+            },
+          }],
+        ]),
+      };
+
+      const [config] = serializeLangGraph(mockGraph);
+      const tools = config.tools as Record<string, unknown>[];
+      expect(tools[0].parameters).toEqual({ type: 'object', properties: {} });
+    });
+  });
+
+  describe('name derivation', () => {
+    it('uses graph.name when available', () => {
+      const mockGraph = {
+        name: 'my_custom_graph',
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['agent', { bound: { model: 'gpt-4o' } }],
+          ['tools', {
+            bound: {
+              tools_by_name: {
+                t: { name: 't', description: '', func: () => {}, params_json_schema: { type: 'object' } },
+              },
+            },
+          }],
+        ]),
+      };
+
+      const [config] = serializeLangGraph(mockGraph);
+      expect(config.name).toBe('my_custom_graph');
+    });
+
+    it('defaults to langgraph_agent when no name', () => {
+      const mockGraph = {
+        invoke: () => {},
+        nodes: new Map<string, unknown>([
+          ['agent', { bound: { model: 'gpt-4o' } }],
+          ['tools', {
+            bound: {
+              tools_by_name: {
+                t: { name: 't', description: '', func: () => {}, params_json_schema: { type: 'object' } },
+              },
+            },
+          }],
+        ]),
+      };
+
+      const [config] = serializeLangGraph(mockGraph);
+      expect(config.name).toBe('langgraph_agent');
     });
   });
 });

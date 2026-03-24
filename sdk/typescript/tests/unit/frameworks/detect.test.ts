@@ -22,51 +22,6 @@ describe('detectFramework', () => {
     });
   });
 
-  describe('Vercel AI SDK detection', () => {
-    it('detects object with generate(), stream(), and tools property', () => {
-      const mockVercelAgent = {
-        generate: () => {},
-        stream: () => {},
-        tools: { search: {} },
-      };
-      expect(detectFramework(mockVercelAgent)).toBe('vercel_ai');
-    });
-
-    it('detects when tools is an array', () => {
-      const mockVercelAgent = {
-        generate: () => {},
-        stream: () => {},
-        tools: [{ name: 'search' }],
-      };
-      expect(detectFramework(mockVercelAgent)).toBe('vercel_ai');
-    });
-
-    it('does not detect when tools is null', () => {
-      const mock = {
-        generate: () => {},
-        stream: () => {},
-        tools: null,
-      };
-      expect(detectFramework(mock)).not.toBe('vercel_ai');
-    });
-
-    it('does not detect when generate is missing', () => {
-      const mock = {
-        stream: () => {},
-        tools: { search: {} },
-      };
-      expect(detectFramework(mock)).not.toBe('vercel_ai');
-    });
-
-    it('does not detect when stream is missing', () => {
-      const mock = {
-        generate: () => {},
-        tools: { search: {} },
-      };
-      expect(detectFramework(mock)).not.toBe('vercel_ai');
-    });
-  });
-
   describe('LangGraph detection', () => {
     it('detects object with invoke() and getGraph()', () => {
       const mockGraph = {
@@ -261,18 +216,6 @@ describe('detectFramework', () => {
   });
 
   describe('priority ordering', () => {
-    it('Vercel AI takes priority over LangGraph when both shapes match', () => {
-      // An object that has generate/stream/tools AND invoke/getGraph
-      const mock = {
-        generate: () => {},
-        stream: () => {},
-        tools: { search: {} },
-        invoke: () => {},
-        getGraph: () => {},
-      };
-      expect(detectFramework(mock)).toBe('vercel_ai');
-    });
-
     it('LangGraph takes priority over LangChain when both shapes match', () => {
       // An object that has invoke/getGraph AND lc_namespace
       const mock = {

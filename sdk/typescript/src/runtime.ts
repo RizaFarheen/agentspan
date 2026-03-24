@@ -18,11 +18,9 @@ import { AgentStream } from './stream.js';
 import { makeAgentResult } from './result.js';
 import { TERMINAL_STATUSES } from './result.js';
 import { detectFramework } from './frameworks/detect.js';
-import { makeVercelAIWorker } from './frameworks/vercel-ai.js';
-import { makeLangGraphWorker } from './frameworks/langgraph.js';
-import { makeLangChainWorker } from './frameworks/langchain.js';
-import { makeOpenAIAgentsWorker } from './frameworks/openai-agents.js';
-import { makeGoogleADKWorker } from './frameworks/google-adk.js';
+import { serializeFrameworkAgent } from './frameworks/serializer.js';
+import { serializeLangGraph } from './frameworks/langgraph-serializer.js';
+import { serializeLangChain } from './frameworks/langchain-serializer.js';
 
 // ── AgentHandle ─────────────────────────────────────────
 
@@ -498,36 +496,31 @@ export class AgentRuntime {
   }
 
   /**
-   * Get the appropriate worker factory for a given framework.
+   * Serialize a framework agent into (rawConfig, workers) using extraction.
    */
-  private _getWorkerFactory(frameworkId: FrameworkId) {
+  private _serializeFramework(agent: object, frameworkId: FrameworkId) {
     switch (frameworkId) {
-      case 'vercel_ai':
-        return makeVercelAIWorker;
       case 'langgraph':
-        return makeLangGraphWorker;
+        return serializeLangGraph(agent);
       case 'langchain':
-        return makeLangChainWorker;
+        return serializeLangChain(agent);
       case 'openai':
-        return makeOpenAIAgentsWorker;
       case 'google_adk':
-        return makeGoogleADKWorker;
+        return serializeFrameworkAgent(agent);
       default:
         throw new AgentspanError(`Unsupported framework: ${frameworkId}`);
     }
   }
 
   /**
-   * Run a framework agent via passthrough worker pattern.
+   * Run a framework agent via extraction.
    *
-   * 1. Get worker factory based on frameworkId
-   * 2. Generate worker name from agent
-   * 3. Build passthrough worker function
-   * 4. Register task def with 600s timeout
-   * 5. Add worker to WorkerManager
-   * 6. Start polling
-   * 7. POST /agent/start with framework config
-   * 8. Wait for result via polling
+   * 1. Serialize the framework agent into rawConfig + WorkerInfo[]
+   * 2. Register task definitions for each extracted worker
+   * 3. Add workers to WorkerManager
+   * 4. Start polling
+   * 5. POST /agent/start with extracted rawConfig
+   * 6. Wait for result via SSE stream
    */
   private async _runFramework(
     agent: object,
@@ -536,45 +529,34 @@ export class AgentRuntime {
     options?: RunOptions,
   ): Promise<AgentResult> {
     const correlationId = generateCorrelationId();
-    const workerName = this._deriveWorkerName(agent, frameworkId);
-    const factory = this._getWorkerFactory(frameworkId);
-    const workerFn = factory(
-      agent,
-      workerName,
-      this.config.serverUrl,
-      this.authHeaders,
-    );
+    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId);
 
-    // Register task definition with 600s timeout (passthrough workers)
-    await this.workerManager.registerTaskDef(workerName, {
-      timeoutSeconds: 600,
-    });
-
-    // Add worker that bridges the WorkerManager's handler interface
-    this.workerManager.addWorker(workerName, async (inputData) => {
-      const workflowInstanceId = (inputData['__workflowInstanceId__'] as string) ?? '';
-      // Strip internal keys before passing to framework worker
-      const cleanInput = { ...inputData };
-      delete cleanInput['__workflowInstanceId__'];
-      delete cleanInput['__toolContext__'];
-      delete cleanInput['_agent_state'];
-      delete cleanInput['method'];
-      delete cleanInput['__agentspan_ctx__'];
-
-      const result = await workerFn(cleanInput, workflowInstanceId);
-      return result.outputData;
-    });
+    // Register task definitions and add workers for each extracted tool
+    for (const worker of workers) {
+      await this.workerManager.registerTaskDef(worker.name, {
+        timeoutSeconds: 600,
+      });
+      if (worker.func) {
+        const fn = worker.func;
+        this.workerManager.addWorker(worker.name, async (inputData) => {
+          const cleanInput = { ...inputData };
+          delete cleanInput['__workflowInstanceId__'];
+          delete cleanInput['__toolContext__'];
+          delete cleanInput['_agent_state'];
+          delete cleanInput['method'];
+          delete cleanInput['__agentspan_ctx__'];
+          return fn(cleanInput);
+        });
+      }
+    }
 
     this.workerManager.startPolling();
 
     try {
-      // POST /agent/start with framework-specific payload
+      // POST /agent/start with extracted config
       const startPayload = {
         framework: frameworkId,
-        rawConfig: {
-          name: workerName,
-          _worker_name: workerName,
-        },
+        rawConfig,
         prompt,
         sessionId: options?.sessionId,
       };
@@ -624,43 +606,33 @@ export class AgentRuntime {
     options?: RunOptions,
   ): Promise<AgentHandle> {
     const correlationId = generateCorrelationId();
-    const workerName = this._deriveWorkerName(agent, frameworkId);
-    const factory = this._getWorkerFactory(frameworkId);
-    const workerFn = factory(
-      agent,
-      workerName,
-      this.config.serverUrl,
-      this.authHeaders,
-    );
+    const [rawConfig, workers] = this._serializeFramework(agent, frameworkId);
 
-    // Register task definition with 600s timeout
-    await this.workerManager.registerTaskDef(workerName, {
-      timeoutSeconds: 600,
-    });
-
-    // Add worker
-    this.workerManager.addWorker(workerName, async (inputData) => {
-      const workflowInstanceId = (inputData['__workflowInstanceId__'] as string) ?? '';
-      const cleanInput = { ...inputData };
-      delete cleanInput['__workflowInstanceId__'];
-      delete cleanInput['__toolContext__'];
-      delete cleanInput['_agent_state'];
-      delete cleanInput['method'];
-      delete cleanInput['__agentspan_ctx__'];
-
-      const result = await workerFn(cleanInput, workflowInstanceId);
-      return result.outputData;
-    });
+    // Register task definitions and add workers for each extracted tool
+    for (const worker of workers) {
+      await this.workerManager.registerTaskDef(worker.name, {
+        timeoutSeconds: 600,
+      });
+      if (worker.func) {
+        const fn = worker.func;
+        this.workerManager.addWorker(worker.name, async (inputData) => {
+          const cleanInput = { ...inputData };
+          delete cleanInput['__workflowInstanceId__'];
+          delete cleanInput['__toolContext__'];
+          delete cleanInput['_agent_state'];
+          delete cleanInput['method'];
+          delete cleanInput['__agentspan_ctx__'];
+          return fn(cleanInput);
+        });
+      }
+    }
 
     this.workerManager.startPolling();
 
-    // POST /agent/start with framework-specific payload
+    // POST /agent/start with extracted config
     const startPayload = {
       framework: frameworkId,
-      rawConfig: {
-        name: workerName,
-        _worker_name: workerName,
-      },
+      rawConfig,
       prompt,
       sessionId: options?.sessionId,
     };

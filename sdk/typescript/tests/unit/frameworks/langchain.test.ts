@@ -1,218 +1,322 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeLangChainWorker } from '../../../src/frameworks/langchain.js';
-import * as eventPush from '../../../src/frameworks/event-push.js';
+import { describe, it, expect } from 'vitest';
+import { serializeLangChain } from '../../../src/frameworks/langchain-serializer.js';
+import { ConfigurationError } from '../../../src/errors.js';
 
-// Mock pushEvent to track calls
-vi.mock('../../../src/frameworks/event-push.js', () => ({
-  pushEvent: vi.fn(),
-  SUPPORTED_EVENT_TYPES: new Set([
-    'thinking', 'tool_call', 'tool_result',
-    'context_condensed', 'subagent_start', 'subagent_stop',
-  ]),
-}));
+describe('serializeLangChain', () => {
+  describe('full extraction', () => {
+    it('extracts model and tools from AgentExecutor', () => {
+      function searchFn(query: string) { return `results for ${query}`; }
 
-describe('makeLangChainWorker', () => {
-  const serverUrl = 'http://localhost:8080/api';
-  const headers = { Authorization: 'Bearer test-key' };
+      const mockExecutor = {
+        name: 'my_langchain_agent',
+        invoke: () => {},
+        lc_namespace: ['langchain', 'agents'],
+        agent: {
+          llm: {
+            model_name: 'gpt-4o',
+            constructor: { name: 'ChatOpenAI' },
+          },
+        },
+        tools: [
+          {
+            name: 'search',
+            description: 'Search the internet for information',
+            func: searchFn,
+            params_json_schema: {
+              type: 'object',
+              properties: { query: { type: 'string' } },
+            },
+          },
+        ],
+      };
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+      const [config, workers] = serializeLangChain(mockExecutor);
 
-  it('calls executor.invoke with input and callback handler', async () => {
-    const mockExecutor = {
-      invoke: vi.fn().mockResolvedValue({ output: 'Agent response' }),
-      lc_namespace: ['langchain', 'agents'],
-    };
+      expect(config.name).toBe('my_langchain_agent');
+      expect(config.model).toBe('openai/gpt-4o');
+      const tools = config.tools as Record<string, unknown>[];
+      expect(tools).toHaveLength(1);
+      expect(tools[0]._worker_ref).toBe('search');
+      expect(tools[0].description).toBe('Search the internet for information');
 
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    const result = await worker({ prompt: 'Hello' }, 'wf-123');
+      expect(workers).toHaveLength(1);
+      expect(workers[0].name).toBe('search');
+      expect(workers[0].func).toBe(searchFn);
+    });
 
-    expect(mockExecutor.invoke).toHaveBeenCalledTimes(1);
-    const [input, config] = mockExecutor.invoke.mock.calls[0];
-    expect(input).toEqual({ input: 'Hello' });
-    expect(config.callbacks).toBeDefined();
-    expect(config.callbacks).toHaveLength(1);
-  });
+    it('extracts model from agent.llm_chain.llm path', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: {
+          llm_chain: {
+            llm: {
+              model_name: 'claude-3-sonnet',
+              constructor: { name: 'ChatAnthropic' },
+            },
+          },
+        },
+        tools: [
+          {
+            name: 'calc',
+            description: 'Calculator',
+            func: () => {},
+            params_json_schema: { type: 'object', properties: {} },
+          },
+        ],
+      };
 
-  it('returns COMPLETED status with output from result.output', async () => {
-    const mockExecutor = {
-      invoke: vi.fn().mockResolvedValue({ output: 'The answer' }),
-      lc_namespace: ['langchain'],
-    };
+      const [config] = serializeLangChain(mockExecutor);
+      expect(config.model).toBe('anthropic/claude-3-sonnet');
+    });
 
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    const result = await worker({ prompt: 'test' }, 'wf-456');
+    it('extracts model from agent.runnable.first path', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: {
+          runnable: {
+            first: {
+              model: 'gpt-4',
+              constructor: { name: 'ChatOpenAI' },
+            },
+          },
+        },
+        tools: [
+          {
+            name: 'tool1',
+            description: 'Tool one',
+            func: () => {},
+            params_json_schema: { type: 'object', properties: {} },
+          },
+        ],
+      };
 
-    expect(result).toEqual({
-      status: 'COMPLETED',
-      outputData: { result: 'The answer' },
+      const [config] = serializeLangChain(mockExecutor);
+      expect(config.model).toBe('openai/gpt-4');
+    });
+
+    it('extracts model from top-level llm property', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        llm: {
+          model_name: 'gemini-pro',
+          constructor: { name: 'ChatGoogleGenerativeAI' },
+        },
+        tools: [
+          {
+            name: 'tool1',
+            description: 'Tool',
+            func: () => {},
+            params_json_schema: { type: 'object', properties: {} },
+          },
+        ],
+      };
+
+      const [config] = serializeLangChain(mockExecutor);
+      expect(config.model).toBe('google/gemini-pro');
+    });
+
+    it('extracts multiple tools with schemas', () => {
+      function tool1Fn() { return 'a'; }
+      function tool2Fn() { return 'b'; }
+
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
+        tools: [
+          {
+            name: 'search',
+            description: 'Search the web',
+            func: tool1Fn,
+            params_json_schema: { type: 'object', properties: { q: { type: 'string' } } },
+          },
+          {
+            name: 'calculate',
+            description: 'Do math',
+            func: tool2Fn,
+            params_json_schema: { type: 'object', properties: { expr: { type: 'string' } } },
+          },
+        ],
+      };
+
+      const [config, workers] = serializeLangChain(mockExecutor);
+      const tools = config.tools as Record<string, unknown>[];
+      expect(tools).toHaveLength(2);
+      expect(workers).toHaveLength(2);
+      expect(workers[0].func).toBe(tool1Fn);
+      expect(workers[1].func).toBe(tool2Fn);
     });
   });
 
-  it('extracts result from result.result key when output is missing', async () => {
-    const mockExecutor = {
-      invoke: vi.fn().mockResolvedValue({ result: 'Alt result' }),
-      lc_namespace: ['langchain'],
-    };
+  describe('tool callable extraction', () => {
+    it('extracts from func property', () => {
+      const fn = () => 'result';
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
+        tools: [
+          { name: 'tool', description: 'A tool', func: fn, params_json_schema: { type: 'object' } },
+        ],
+      };
 
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    const result = await worker({ prompt: 'test' }, 'wf-alt');
+      const [, workers] = serializeLangChain(mockExecutor);
+      expect(workers[0].func).toBe(fn);
+    });
 
-    expect(result.outputData.result).toBe('Alt result');
+    it('extracts from _run method', () => {
+      const runFn = () => 'result';
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
+        tools: [
+          { name: 'tool', description: 'A tool', _run: runFn, params_json_schema: { type: 'object' } },
+        ],
+      };
+
+      const [, workers] = serializeLangChain(mockExecutor);
+      expect(workers[0].func).toBe(runFn);
+    });
+
+    it('produces no worker when tool has no callable', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
+        tools: [
+          { name: 'remote_tool', description: 'Remote only', params_json_schema: { type: 'object' } },
+        ],
+      };
+
+      const [config, workers] = serializeLangChain(mockExecutor);
+      const tools = config.tools as Record<string, unknown>[];
+      expect(tools).toHaveLength(1);
+      expect(tools[0]._worker_ref).toBe('remote_tool');
+      // No local worker since there's no callable
+      expect(workers).toHaveLength(0);
+    });
   });
 
-  it('serializes result when output is not a string', async () => {
-    const mockExecutor = {
-      invoke: vi.fn().mockResolvedValue({ data: [1, 2, 3] }),
-      lc_namespace: ['langchain'],
-    };
+  describe('error cases', () => {
+    it('throws ConfigurationError when no model found', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        tools: [{ name: 'tool', func: () => {} }],
+      };
 
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    const result = await worker({ prompt: 'test' }, 'wf-obj');
+      expect(() => serializeLangChain(mockExecutor)).toThrow(ConfigurationError);
+    });
 
-    expect(result.outputData.result).toBe(JSON.stringify({ data: [1, 2, 3] }));
+    it('throws ConfigurationError when no tools found', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
+        tools: [],
+      };
+
+      expect(() => serializeLangChain(mockExecutor)).toThrow(ConfigurationError);
+    });
+
+    it('throws ConfigurationError when tools is not an array', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
+      };
+
+      expect(() => serializeLangChain(mockExecutor)).toThrow(ConfigurationError);
+    });
+
+    it('error message includes model status', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
+        tools: [],
+      };
+
+      expect(() => serializeLangChain(mockExecutor)).toThrow(/Tools: 0/);
+    });
   });
 
-  it('stringifies non-object results', async () => {
-    const mockExecutor = {
-      invoke: vi.fn().mockResolvedValue('Plain string result'),
-      lc_namespace: ['langchain'],
-    };
+  describe('name derivation', () => {
+    it('uses executor.name when available', () => {
+      const mockExecutor = {
+        name: 'custom_agent',
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
+        tools: [
+          { name: 't', description: '', func: () => {}, params_json_schema: { type: 'object' } },
+        ],
+      };
 
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    const result = await worker({ prompt: 'test' }, 'wf-str');
+      const [config] = serializeLangChain(mockExecutor);
+      expect(config.name).toBe('custom_agent');
+    });
 
-    expect(result.outputData.result).toBe('Plain string result');
+    it('defaults to langchain_agent when no name', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o', constructor: { name: 'ChatOpenAI' } } },
+        tools: [
+          { name: 't', description: '', func: () => {}, params_json_schema: { type: 'object' } },
+        ],
+      };
+
+      const [config] = serializeLangChain(mockExecutor);
+      expect(config.name).toBe('langchain_agent');
+    });
   });
 
-  it('callback handler pushes thinking event on handleLLMStart', async () => {
-    let capturedHandler: any;
+  describe('provider inference', () => {
+    it('infers openai from gpt- prefix', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gpt-4o-mini' } },
+        tools: [
+          { name: 't', description: '', func: () => {}, params_json_schema: { type: 'object' } },
+        ],
+      };
 
-    const mockExecutor = {
-      invoke: vi.fn().mockImplementation(async (input: any, config: any) => {
-        capturedHandler = config.callbacks[0];
-        // Simulate LangChain calling the callbacks
-        capturedHandler.handleLLMStart({}, ['prompt']);
-        return { output: 'Done' };
-      }),
-      lc_namespace: ['langchain'],
-    };
+      const [config] = serializeLangChain(mockExecutor);
+      expect(config.model).toBe('openai/gpt-4o-mini');
+    });
 
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    await worker({ prompt: 'test' }, 'wf-llm');
+    it('infers anthropic from claude in model name', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'claude-3-opus' } },
+        tools: [
+          { name: 't', description: '', func: () => {}, params_json_schema: { type: 'object' } },
+        ],
+      };
 
-    expect(eventPush.pushEvent).toHaveBeenCalledWith(
-      'wf-llm',
-      { type: 'thinking', content: 'LLM reasoning...' },
-      serverUrl,
-      headers,
-    );
-  });
+      const [config] = serializeLangChain(mockExecutor);
+      expect(config.model).toBe('anthropic/claude-3-opus');
+    });
 
-  it('callback handler pushes tool_call event on handleToolStart', async () => {
-    let capturedHandler: any;
+    it('infers google from gemini in model name', () => {
+      const mockExecutor = {
+        invoke: () => {},
+        lc_namespace: ['langchain'],
+        agent: { llm: { model_name: 'gemini-2.0-flash' } },
+        tools: [
+          { name: 't', description: '', func: () => {}, params_json_schema: { type: 'object' } },
+        ],
+      };
 
-    const mockExecutor = {
-      invoke: vi.fn().mockImplementation(async (_input: any, config: any) => {
-        capturedHandler = config.callbacks[0];
-        capturedHandler.handleToolStart(
-          { name: 'calculator' },
-          JSON.stringify({ expression: '2+2' }),
-        );
-        return { output: 'Done' };
-      }),
-      lc_namespace: ['langchain'],
-    };
-
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    await worker({ prompt: 'test' }, 'wf-tool');
-
-    expect(eventPush.pushEvent).toHaveBeenCalledWith(
-      'wf-tool',
-      {
-        type: 'tool_call',
-        toolName: 'calculator',
-        args: { expression: '2+2' },
-      },
-      serverUrl,
-      headers,
-    );
-  });
-
-  it('callback handler handles non-JSON tool input', async () => {
-    let capturedHandler: any;
-
-    const mockExecutor = {
-      invoke: vi.fn().mockImplementation(async (_input: any, config: any) => {
-        capturedHandler = config.callbacks[0];
-        capturedHandler.handleToolStart({ name: 'search' }, 'plain text query');
-        return { output: 'Done' };
-      }),
-      lc_namespace: ['langchain'],
-    };
-
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    await worker({ prompt: 'test' }, 'wf-plain');
-
-    expect(eventPush.pushEvent).toHaveBeenCalledWith(
-      'wf-plain',
-      {
-        type: 'tool_call',
-        toolName: 'search',
-        args: { input: 'plain text query' },
-      },
-      serverUrl,
-      headers,
-    );
-  });
-
-  it('callback handler pushes tool_result event on handleToolEnd', async () => {
-    let capturedHandler: any;
-
-    const mockExecutor = {
-      invoke: vi.fn().mockImplementation(async (_input: any, config: any) => {
-        capturedHandler = config.callbacks[0];
-        capturedHandler.handleToolEnd('Tool output result');
-        return { output: 'Done' };
-      }),
-      lc_namespace: ['langchain'],
-    };
-
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    await worker({ prompt: 'test' }, 'wf-tresult');
-
-    expect(eventPush.pushEvent).toHaveBeenCalledWith(
-      'wf-tresult',
-      { type: 'tool_result', result: 'Tool output result' },
-      serverUrl,
-      headers,
-    );
-  });
-
-  it('propagates errors from executor.invoke', async () => {
-    const mockExecutor = {
-      invoke: vi.fn().mockRejectedValue(new Error('Chain failed')),
-      lc_namespace: ['langchain'],
-    };
-
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    await expect(worker({ prompt: 'test' }, 'wf-err')).rejects.toThrow('Chain failed');
-  });
-
-  it('handles empty prompt', async () => {
-    const mockExecutor = {
-      invoke: vi.fn().mockResolvedValue({ output: 'ok' }),
-      lc_namespace: ['langchain'],
-    };
-
-    const worker = makeLangChainWorker(mockExecutor, 'test-worker', serverUrl, headers);
-    const result = await worker({}, 'wf-empty');
-
-    expect(mockExecutor.invoke).toHaveBeenCalledWith(
-      { input: '' },
-      expect.any(Object),
-    );
-    expect(result.status).toBe('COMPLETED');
+      const [config] = serializeLangChain(mockExecutor);
+      expect(config.model).toBe('google/gemini-2.0-flash');
+    });
   });
 });

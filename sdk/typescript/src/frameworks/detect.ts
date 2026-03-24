@@ -3,12 +3,11 @@
  *
  * Detection order (priority):
  * 1. agent instanceof Agent → null (native agentspan)
- * 2. .generate() + .stream() + .tools → 'vercel_ai'
- * 3. .invoke() + (.getGraph() OR .nodes Map) → 'langgraph'
- * 4. .invoke() + .lc_namespace → 'langchain'
- * 5. .name + .instructions + .model + .tools + .handoffs → 'openai'
- * 6. .model + .instruction + ADK-specific props → 'google_adk'
- * 7. Otherwise → null
+ * 2. .invoke() + (.getGraph() OR .nodes Map) → 'langgraph'
+ * 3. .invoke() + .lc_namespace → 'langchain'
+ * 4. .name + .instructions + .model + .tools + .handoffs → 'openai'
+ * 5. .model + .instruction + ADK-specific props → 'google_adk'
+ * 6. Otherwise → null
  *
  * All detection uses duck-typing — no imports of framework packages.
  */
@@ -17,17 +16,6 @@ import { Agent } from '../agent.js';
 import type { FrameworkId } from '../types.js';
 
 // ── Private detection helpers ───────────────────────────
-
-/**
- * Vercel AI SDK: ToolLoopAgent has .generate(), .stream(), and .tools property.
- */
-function hasGenerateAndStreamAndTools(obj: any): boolean {
-  return (
-    typeof obj?.generate === 'function' &&
-    typeof obj?.stream === 'function' &&
-    obj?.tools != null
-  );
-}
 
 /**
  * LangGraph.js: CompiledStateGraph has .invoke() and either .getGraph() or .nodes (Map).
@@ -103,21 +91,18 @@ export function detectFramework(agent: unknown): FrameworkId | null {
   // 1. Native agentspan Agent — not a framework
   if (agent instanceof Agent) return null;
 
-  // 2. Vercel AI SDK: ToolLoopAgent has .generate() + .stream() + .tools
-  if (hasGenerateAndStreamAndTools(agent)) return 'vercel_ai';
-
-  // 3. LangGraph.js: CompiledStateGraph has .invoke() + .getGraph() or .nodes
+  // 2. LangGraph.js: CompiledStateGraph has .invoke() + .getGraph() or .nodes
   if (hasInvokeAndGetGraph(agent)) return 'langgraph';
 
-  // 4. LangChain.js: AgentExecutor/Runnable has .invoke() + .lc_namespace
+  // 3. LangChain.js: AgentExecutor/Runnable has .invoke() + .lc_namespace
   if (hasInvokeAndLcNamespace(agent)) return 'langchain';
 
-  // 5. OpenAI Agents: has .name + .instructions + .model + .tools + .handoffs
+  // 4. OpenAI Agents: has .name + .instructions + .model + .tools + .handoffs
   if (hasOpenAIAgentMarkers(agent)) return 'openai';
 
-  // 6. Google ADK: LlmAgent with .model + .instruction + ADK-specific properties
+  // 5. Google ADK: LlmAgent with .model + .instruction + ADK-specific properties
   if (hasADKMarkers(agent)) return 'google_adk';
 
-  // 7. Unknown — not a recognized framework
+  // 6. Unknown — not a recognized framework
   return null;
 }

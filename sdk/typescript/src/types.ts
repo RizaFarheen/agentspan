@@ -104,7 +104,6 @@ export type ToolType =
  * Supported framework identifiers for auto-detection.
  */
 export type FrameworkId =
-  | 'vercel_ai'
   | 'langgraph'
   | 'langchain'
   | 'openai'

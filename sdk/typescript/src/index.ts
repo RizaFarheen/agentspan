@@ -234,10 +234,7 @@ export { isTracingEnabled } from './tracing.js';
 
 // ── Framework Integration ───────────────────────────────
 export { detectFramework } from './frameworks/detect.js';
-export { pushEvent, SUPPORTED_EVENT_TYPES } from './frameworks/event-push.js';
-export type { FrameworkWorkerFn } from './frameworks/vercel-ai.js';
-export { makeVercelAIWorker } from './frameworks/vercel-ai.js';
-export { makeLangGraphWorker } from './frameworks/langgraph.js';
-export { makeLangChainWorker } from './frameworks/langchain.js';
-export { makeOpenAIAgentsWorker } from './frameworks/openai-agents.js';
-export { makeGoogleADKWorker } from './frameworks/google-adk.js';
+export type { WorkerInfo } from './frameworks/serializer.js';
+export { serializeFrameworkAgent } from './frameworks/serializer.js';
+export { serializeLangGraph } from './frameworks/langgraph-serializer.js';
+export { serializeLangChain } from './frameworks/langchain-serializer.js';
