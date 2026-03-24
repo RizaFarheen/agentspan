@@ -433,6 +433,9 @@ export class WorkerManager {
       // Strip internal keys
       const cleanedInput = stripInternalKeys(inputData);
 
+      // Inject workflowInstanceId so framework passthrough workers can push events
+      cleanedInput['__workflowInstanceId__'] = task.workflowInstanceId;
+
       // If ToolContext has state, inject it into the handler context
       if (toolContext) {
         cleanedInput['__toolContext__'] = toolContext;

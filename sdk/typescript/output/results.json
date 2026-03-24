@@ -1,155 +1,165 @@
 {
-  "timestamp": "2026-03-24T20:21:31.568Z",
+  "timestamp": "2026-03-24T22:16:16.849Z",
   "results": [
     {
-      "example": "openai/04-handoffs",
-      "status": "PASS",
-      "duration": 16.954,
+      "example": "langchain/02-react-with-tools",
+      "status": "FAIL",
+      "duration": 1.849,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"I'm sorry to hear that your product arrived damaged. To process your refund for order ORD-002, you'll need to contact the customer service team of the store or website where you made the purchase. Here are some general steps you can follow:\\n\\n1. **Contact Customer Support**: Reach out to the customer service department through their designated channel, which could be via email, phone, or live chat.\\n\\n2. **Provide Details**: Share your order number (ORD-002), describe the issue, and, if possible, include photos of the damaged product for verification.\\n\\n3. **Follow Instructions**: The customer service team will likely provide you with specific instructions on how to proceed with the refund or return process.\\n\\n4. **Keep Records**: Keep a record of all communications and confirmations regarding your refund request.\\n\\nIf you have any specific questions about the refund policy or need assistance finding the customer service contact information, feel free to ask for more guidance.\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "openai/05-guardrails",
-      "status": "PASS",
-      "duration": 16.996,
+      "example": "langchain/08-multi-tool-agent",
+      "status": "FAIL",
+      "duration": 1.785,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"I'm sorry, but I can't assist with account balances or any other personal financial information.\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "openai/03-structured-output",
-      "status": "PASS",
-      "duration": 17.104,
+      "example": "langchain/06-chat-history",
+      "status": "FAIL",
+      "duration": 1.847,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"Certainly! Here are three sci-fi movies that delve into the concept of artificial intelligence:\\n\\n1. **\\\"Ex Machina\\\" (2014)** - This film explores the boundaries between human and machine, as a young programmer is selected to participate in a ground-breaking experiment in synthetic intelligence by evaluating the human qualities of a highly advanced humanoid A.I.\\n\\n2. **\\\"Blade Runner 2049\\\" (2017)** - A sequel to the 1982 classic, this movie continues to explore the philosophical and ethical implications of creating A.I. in the form of replicants, synthetic humans who struggle with their identity, memories, and societal place.\\n\\n3. **\\\"Her\\\" (2013)** - This film presents a more intimate and emotional exploration of A.I., where a lonely writer develops a deepening relationship with an advanced operating system designed to meet his needs, raising questions about love, connection, and the essence of consciousness.\\n\\nThese films offer unique perspectives on A.I., its potential, and its implications for humanity.\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "openai/02-function-tools",
-      "status": "PASS",
-      "duration": 17.127,
+      "example": "langchain/04-structured-output",
+      "status": "FAIL",
+      "duration": 1.888,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"I'm unable to provide real-time information such as the current weather. For the most accurate and up-to-date weather information in San Francisco, I recommend checking a reliable weather website or app.\\n\\nRegarding the population of San Francisco, as of the 2020 U.S. Census, it was approximately 873,965. To find the square root of that number, we calculate:\\n\\n\\\\[\\n\\\\sqrt{873965} \\\\approx 934.75\\n\\\\]\\n\\nSo, the square root of 873,965 is approximately 934.75.\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "openai/01-basic-agent",
-      "status": "PASS",
-      "duration": 17.158,
+      "example": "langchain/03-custom-tools",
+      "status": "FAIL",
+      "duration": 1.931,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"Hello! A fun fact about TypeScript is that it was developed and maintained by Microsoft, with its first version released in 2012. TypeScript is essentially a superset of JavaScript, meaning it's built on top of JavaScript and adds static type definitions. This helps developers catch potential errors during development, as it allows for better code quality and maintainability by providing features such as type checking and interfaces.\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "openai/08-agent-as-tool",
-      "status": "PASS",
-      "duration": 17.047,
+      "example": "langchain/05-prompt-templates",
+      "status": "FAIL",
+      "duration": 1.964,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"This review provides a balanced analysis of the new laptop, highlighting both positive and negative aspects.\\n\\nPositives:\\n- The reviewer is very satisfied with the display, describing it as \\\"amazing,\\\" which suggests that the screen quality, resolution, brightness, or color accuracy might be impressive.\\n- The battery life is also praised, labeled as \\\"wonderful,\\\" indicating that the laptop likely has a long-lasting battery that meets or exceeds the user's needs.\\n\\nNegatives:\\n- The reviewer is unhappy with the keyboard, noting that it \\\"feels terrible.\\\" This likely refers to discomfort or dissatisfaction with the tactile experience, key travel, layout, or material quality.\\n- The trackpad is criticized as \\\"the worst I've used,\\\" suggesting significant issues such as poor responsiveness, accuracy, size, or ease of use.\\n\\nOverall, the review suggests that while the laptop excels in visual and battery performance, it falls short in terms of input devices. Potential buyers might prioritize different features based on their needs, but those who require a comfortable typing and navigation experience may reconsider or look for external peripherals as solutions.\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "openai/07-streaming",
-      "status": "PASS",
-      "duration": 17.073,
+      "example": "langchain/07-memory-agent",
+      "status": "FAIL",
+      "duration": 1.936,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"I don't have a return policy myself, but typically, return policies for electronics vary by retailer. Generally, you can expect the following:\\n\\n1. **Time Frame:** Most retailers offer a 14 to 30-day return period from the date of purchase.\\n\\n2. **Condition:** Electronics usually need to be returned in their original condition, with all accessories, packaging, and any included manuals.\\n\\n3. **Restocking Fees:** Some retailers charge a restocking fee for electronics returns, especially if the item is not defective.\\n\\n4. **Receipt Requirement:** A proof of purchase, like a receipt or order confirmation, is often required.\\n\\n5. **Exceptions:** Certain items, such as opened software or personalized electronics, might not be returnable.\\n\\nIt's always best to check the specific retailer's return policy, as details can differ significantly.\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "openai/06-model-settings",
-      "status": "PASS",
-      "duration": 32.106,
+      "example": "langchain/01-hello-world",
+      "status": "FAIL",
+      "duration": 2.065,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"In a quiet attic studio, a robot delicately dipped its brush into vibrant hues, each stroke a testament to its evolving understanding of art. As the sunlight streamed through the dusty window, the once mechanical mind began to grasp the essence of creativity, capturing the human spirit in vivid colors on canvas.\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "openai/09-dynamic-instructions",
-      "status": "PASS",
-      "duration": 16.84,
+      "example": "langchain/10-web-search-agent",
+      "status": "FAIL",
+      "duration": 1.365,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"I'm unable to access or display personal data, such as your to-do list. However, I can guide you on how to add tasks and manage your to-do lists using various apps or methods. If you're using an app like Todoist, Microsoft To Do, or Google Keep, you can simply add a new task with a high priority marker. If you're writing it down, you could add it as follows:\\n\\n1. **Prepare demo for Friday** (High Priority)\\n\\nLet me know if there's anything else you'd like to know!\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     },
     {
-      "example": "openai/10-multi-model",
-      "status": "PASS",
-      "duration": 16.869,
+      "example": "langchain/09-math-calculator",
+      "status": "FAIL",
+      "duration": 1.414,
       "checks": {
-        "workflowCompleted": true,
+        "workflowCompleted": false,
         "noUnhandledErrors": true,
         "toolAudit": [],
         "allToolsSucceeded": true,
-        "llmEngaged": true,
-        "outputNonEmpty": true
+        "llmEngaged": false,
+        "outputNonEmpty": false
       },
-      "output": "{\n  \"result\": \"To provide you with an example of authenticating with an API using Python, I'll demonstrate how you can use the `requests` library to authenticate with an API that requires a token-based authentication method, which is quite common:\\n\\n```python\\nimport requests\\n\\n# Replace the following URL with the actual endpoint URL of the API you want to access\\napi_url = \\\"https://api.example.com/data\\\"\\n\\n# This would typically be provided by the API provider and is unique to your account\\napi_token = \\\"your_api_token_here\\\"\\n\\n# Headers, including the Authorization header, using the token\\nheaders = {\\n    \\\"Authorization\\\": f\\\"Bearer {api_token}\\\",\\n    \\\"Content-Type\\\": \\\"application/json\\\"\\n}\\n\\n# Make a GET request to the API endpoint\\nresponse = requests.get(api_url, headers=headers)\\n\\n# Check if the request was successful\\nif response.status_code == 200:\\n    # Parse the JSON response if the request was successful\\n    data = response.json()\\n    print(\\\"Data retrieved successfully:\\\", data)\\nelse:\\n    print(f\\\"Failed to retrieve data: {response.status_code} - {response.text}\\\")\\n```\\n\\n### Instructions:\\n\\n1. **Install Requests Library**: Ensure you have the `requests` library installed. You can install it using pip:\\n\\n   ```sh\\n   pip install requests\\n   ```\\n\\n2. **API Endpoint**: Replace `\\\"https://api.example.com/data\\\"` with the actual API endpoint you intend to access.\\n\\n3. **API Token**: Replace `\\\"your_api_token_here\\\"` with your actual API token. This token is usually obtained from the service you’re interfacing with, often found in your account settings on their developer portal.\\n\\n4. **Handling Other Authentication Methods**: If the API uses a different form of authentication (e.g., Basic Auth, OAuth2), you'll need to adjust the code accordingly. For example, Basic Auth can be done as follows:\\n\\n   ```python\\n   from requests.auth import HTTPBasicAuth\\n\\n   # Replace with your username and password\\n   username = \\\"your_username\\\"\\n   password = \\\"your_password\\\"\\n\\n   response = requests.get(api_url, auth=HTTPBasicAuth(username, password))\\n   ```\\n\\n5. **Error Handling**: Modify the error handling logic as necessary to meet your needs, particularly in production code, where you'll want more robust error reporting and management.\\n\\nThis example should be a good starting point for integrating with most RESTful APIs that require authenticated access. For more complex authentication mechanisms like OAuth2, consider using libraries such as `requests-oauthlib`.\",\n  \"finishReason\": \"STOP\"\n}",
-      "events": []
+      "output": "",
+      "events": [],
+      "error": "ConfigurationError: Cannot extract from LangGraph graph. No model or tools detected. Use createReactAgent() or create a native agentspan Agent.\n    at serializeLangGraph (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/frameworks/langgraph-serializer.ts:51:9)\n    at AgentRuntime._serializeFramework (/Users/viren/workspace/github/agentspan-dev/branches/agentspan-branch/sdk/typescript/src/runtime.ts:504:16)\n    at AgentRuntime._runFramework (/Users/viren/wo"
     }
   ]
 }
