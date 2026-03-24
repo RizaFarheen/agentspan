@@ -4,9 +4,6 @@
  * Demonstrates mixing Vercel AI SDK tool() with agentspan native tool()
  * in the same agent. Both tool formats share the same shape (Zod parameters
  * + execute function) so they can co-exist in a single tool set.
- *
- * Path 1: Native generateText with mixed tools.
- * Path 2: Agentspan passthrough with the same mixed tools.
  */
 
 import { generateText, tool as aiTool } from 'ai';
@@ -57,8 +54,6 @@ console.log('Native tool def:', getToolDef(nativeSearchTool).name);
 console.log('Vercel tool def:', JSON.stringify(getToolDef(calculatorTool)));
 
 // ── Combined tool set (Vercel AI format) ─────────────────
-// Both agentspan and Vercel AI tools have { parameters, execute, description }
-// so they interop directly in a Vercel AI tool set.
 const tools = {
   native_search: aiTool({
     description: 'Search using native agentspan tool format.',
@@ -71,51 +66,36 @@ const tools = {
 const prompt = 'Search for quantum computing and also calculate 2 + 2.';
 const system = 'You are a helpful assistant. Use the available tools to answer.';
 
-// ── Path 1: Native Vercel AI SDK ─────────────────────────
+// ── Wrap as a duck-typed agent for agentspan ─────────────
+const vercelAgent = {
+  id: 'mixed_tools_agent',
+  tools,
+  generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
+    const result = await generateText({
+      model,
+      system,
+      prompt: opts.prompt,
+      tools,
+      maxSteps: 5,
+      onStepFinish: opts.onStepFinish,
+    });
+    return {
+      text: result.text,
+      toolCalls: result.steps.flatMap(s => s.toolCalls),
+      toolResults: result.steps.flatMap(s => s.toolResults),
+      finishReason: result.finishReason,
+    };
+  },
+  stream: async function* () { yield { type: 'finish' as const }; },
+};
+
+// ── Run on agentspan ─────────────────────────────────────
 async function main() {
-  console.log('\n=== Native Vercel AI SDK ===');
-  const nativeResult = await generateText({
-    model,
-    system,
-    prompt,
-    tools,
-    maxSteps: 5,
-  });
-  console.log('Output:', nativeResult.text);
-  console.log(
-    'Tool calls:',
-    nativeResult.steps.flatMap(s => s.toolCalls).map(tc => `${tc.toolName}(${JSON.stringify(tc.args)})`),
-  );
-
-  // ── Path 2: Agentspan passthrough ────────────────────────
-  const vercelAgent = {
-    id: 'mixed_tools_agent',
-    tools,
-    generate: async (opts: { prompt: string; onStepFinish?: (step: any) => void }) => {
-      const result = await generateText({
-        model,
-        system,
-        prompt: opts.prompt,
-        tools,
-        maxSteps: 5,
-        onStepFinish: opts.onStepFinish,
-      });
-      return {
-        text: result.text,
-        toolCalls: result.steps.flatMap(s => s.toolCalls),
-        toolResults: result.steps.flatMap(s => s.toolResults),
-        finishReason: result.finishReason,
-      };
-    },
-    stream: async function* () { yield { type: 'finish' as const }; },
-  };
-
-  console.log('\n=== Agentspan Passthrough ===');
   const runtime = new AgentRuntime();
   try {
-    const agentspanResult = await runtime.run(vercelAgent, prompt);
-    console.log('Output:', JSON.stringify(agentspanResult.output));
-    console.log('Status:', agentspanResult.status);
+    const result = await runtime.run(vercelAgent, prompt);
+    console.log('Status:', result.status);
+    result.printResult();
   } finally {
     await runtime.shutdown();
   }

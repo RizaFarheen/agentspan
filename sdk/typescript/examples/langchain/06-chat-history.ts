@@ -5,7 +5,7 @@
  *   - Accumulating HumanMessage/AIMessage pairs across turns
  *   - ChatOpenAI responding with full conversation context
  *   - Multi-turn conversation where the model recalls prior information
- *   - Running natively and via AgentRuntime
+ *   - Running via AgentRuntime
  *
  * Requires: OPENAI_API_KEY environment variable
  */
@@ -51,8 +51,6 @@ class ChatWithHistory {
 
 // ── Wrap as runnable for Agentspan ─────────────────────────
 
-// For the Agentspan path, we use a separate ChatWithHistory instance
-// to demonstrate independent execution.
 function createAgentRunnable() {
   const chat = new ChatWithHistory();
 
@@ -74,39 +72,22 @@ async function main() {
     "What's my name and what am I learning about?",
   ];
 
-  // ── Path 1: Native LangChain execution ───────────────────
-  console.log('=== Native LangChain Execution ===');
-  const nativeChat = new ChatWithHistory();
-
-  for (let i = 0; i < turns.length; i++) {
-    console.log(`\n--- Turn ${i + 1} ---`);
-    console.log(`User: ${turns[i]}`);
-    const response = await nativeChat.chat(turns[i]);
-    console.log(`Assistant: ${response}`);
-    console.log(`(History: ${nativeChat.getHistoryLength()} messages)`);
-  }
-
-  // ── Path 2: Agentspan runtime execution ──────────────────
-  console.log('\n\n=== Agentspan Runtime Execution ===');
+  // ── Run on agentspan ──────────────────────────────────────
   const runtime = new AgentRuntime();
-  const { runnable, chat: agentspanChat } = createAgentRunnable();
+  const { runnable, chat } = createAgentRunnable();
 
-  for (let i = 0; i < turns.length; i++) {
-    console.log(`\n--- Turn ${i + 1} ---`);
-    console.log(`User: ${turns[i]}`);
-    const result = await runtime.run(runnable, turns[i]);
-    console.log(`Status: ${result.status}`);
-    result.printResult();
-    console.log(`(History: ${agentspanChat.getHistoryLength()} messages)`);
+  try {
+    for (let i = 0; i < turns.length; i++) {
+      console.log(`\n--- Turn ${i + 1} ---`);
+      console.log(`User: ${turns[i]}`);
+      const result = await runtime.run(runnable, turns[i]);
+      console.log(`Status: ${result.status}`);
+      result.printResult();
+      console.log(`(History: ${chat.getHistoryLength()} messages)`);
+    }
+  } finally {
+    await runtime.shutdown();
   }
-
-  // ── Compare ──────────────────────────────────────────────
-  console.log('\n=== Comparison ===');
-  console.log('Both paths maintained real conversation history with ChatOpenAI.');
-  console.log(`Native history:    ${nativeChat.getHistoryLength()} messages`);
-  console.log(`Agentspan history: ${agentspanChat.getHistoryLength()} messages`);
-
-  await runtime.shutdown();
 }
 
 main().catch(console.error);

@@ -5,8 +5,7 @@
  *   - Simulated web search tool returning structured results (mock data)
  *   - Page fetch tool returning mock content
  *   - ChatOpenAI reasoning about search results and summarizing
- *   - Real LLM combining multiple search results into a coherent answer
- *   - Running natively and via AgentRuntime
+ *   - Running via AgentRuntime
  *
  * NOTE: This example uses mock search/fetch results for reproducibility.
  * For production, integrate Tavily, SerpAPI, or Brave Search.
@@ -142,26 +141,16 @@ const agentRunnable = new RunnableLambda({
 });
 
 async function main() {
-  const runtime = new AgentRuntime();
-
   const userPrompt = 'Search for information about LangGraph and summarize what you find.';
 
-  // ── Path 1: Native ───────────────────────────────────────
-  console.log('=== Native LangChain Execution ===');
-  const nativeResult = await runSearchAgent(userPrompt);
-  console.log('Result:', nativeResult);
-
-  // ── Path 2: Agentspan ────────────────────────────────────
-  console.log('\n=== Agentspan Runtime Execution ===');
-  const agentspanResult = await runtime.run(agentRunnable, userPrompt);
-  console.log(`Status: ${agentspanResult.status}`);
-  agentspanResult.printResult();
-
-  // ── Compare ──────────────────────────────────────────────
-  console.log('\n=== Comparison ===');
-  console.log('Both paths used real OpenAI to reason over search results and produce summaries.');
-
-  await runtime.shutdown();
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agentRunnable, userPrompt);
+    console.log('Status:', result.status);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch(console.error);

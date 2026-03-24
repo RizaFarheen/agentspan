@@ -162,14 +162,12 @@ function detectErrors(stdout: string, stderr: string): boolean {
  * @param examplePath - Absolute or relative path to the .ts example file
  * @param env - Environment variables to pass to the subprocess
  * @param timeout - Timeout in seconds
- * @param native - If true, set AGENTSPAN_NATIVE_MODE=1
  * @returns ExecutionResult with parsed output, events, and status
  */
 export async function executeExample(
   examplePath: string,
   env: Record<string, string>,
   timeout: number,
-  native?: boolean,
 ): Promise<ExecutionResult> {
   const exampleName = path
     .basename(examplePath, '.ts')
@@ -192,10 +190,6 @@ export async function executeExample(
     ...process.env as Record<string, string>,
     ...env,
   };
-
-  if (native) {
-    resolvedEnv['AGENTSPAN_NATIVE_MODE'] = '1';
-  }
 
   return new Promise<ExecutionResult>((resolve) => {
     let stdout = '';

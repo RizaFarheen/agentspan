@@ -8,14 +8,12 @@
  *   - Configuring model settings for fine-tuned LLM behavior
  *   - Low temperature for deterministic responses
  *   - High temperature for creative responses
- *   - Max tokens limit
  *
  * Requirements:
- *   - OPENAI_API_KEY for the native path
  *   - AGENTSPAN_SERVER_URL for the Agentspan path
  */
 
-import { Agent, run, setTracingDisabled } from '@openai/agents';
+import { Agent, setTracingDisabled } from '@openai/agents';
 import { AgentRuntime } from '@agentspan/sdk';
 
 setTracingDisabled(true);
@@ -48,50 +46,28 @@ const preciseAgent = new Agent({
   },
 });
 
-// ── Path 1: Native OpenAI Agents SDK execution ─────────────────────
-console.log('=== Path 1: Native OpenAI Agents SDK ===\n');
+// ── Run on agentspan ──────────────────────────────────────────────
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    console.log('--- Creative Agent (temp=0.9) ---');
+    const creativeResult = await runtime.run(
+      creativeAgent,
+      'Write a two-sentence story about a robot learning to paint.',
+    );
+    console.log('Status:', creativeResult.status);
+    creativeResult.printResult();
 
-console.log('--- Creative Agent (temp=0.9) ---');
-try {
-  const creativeResult = await run(
-    creativeAgent,
-    'Write a two-sentence story about a robot learning to paint.',
-  );
-  console.log('Creative output:', creativeResult.finalOutput);
-} catch (err: any) {
-  console.log('Native path error (need OPENAI_API_KEY):', err.message);
+    console.log('\n--- Precise Agent (temp=0.1) ---');
+    const preciseResult = await runtime.run(
+      preciseAgent,
+      'Review this Python code: `data = eval(user_input)`',
+    );
+    console.log('Status:', preciseResult.status);
+    preciseResult.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
-console.log('\n--- Precise Agent (temp=0.1) ---');
-try {
-  const preciseResult = await run(
-    preciseAgent,
-    'Review this Python code: `data = eval(user_input)`',
-  );
-  console.log('Precise output:', preciseResult.finalOutput);
-} catch (err: any) {
-  console.log('Native path error (need OPENAI_API_KEY):', err.message);
-}
-
-// ── Path 2: Agentspan passthrough ──────────────────────────────────
-console.log('\n=== Path 2: Agentspan Passthrough ===\n');
-const runtime = new AgentRuntime();
-try {
-  console.log('--- Creative Agent ---');
-  const creativeAgentspanResult = await runtime.run(
-    creativeAgent,
-    'Write a two-sentence story about a robot learning to paint.',
-  );
-  console.log('Agentspan output:', creativeAgentspanResult.output);
-
-  console.log('\n--- Precise Agent ---');
-  const preciseAgentspanResult = await runtime.run(
-    preciseAgent,
-    'Review this Python code: `data = eval(user_input)`',
-  );
-  console.log('Agentspan output:', preciseAgentspanResult.output);
-} catch (err: any) {
-  console.log('Agentspan path error (need AGENTSPAN_SERVER_URL):', err.message);
-} finally {
-  await runtime.shutdown();
-}
+main().catch(console.error);

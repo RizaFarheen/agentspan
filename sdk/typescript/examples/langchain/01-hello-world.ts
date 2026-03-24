@@ -4,8 +4,7 @@
  * Demonstrates:
  *   - Creating a real ChatOpenAI model with ChatPromptTemplate
  *   - Piping prompt -> model -> StringOutputParser into a RunnableSequence
- *   - Running the chain natively and via AgentRuntime
- *   - Comparing the two results
+ *   - Running the chain via AgentRuntime
  *
  * Requires: OPENAI_API_KEY environment variable
  */
@@ -31,25 +30,15 @@ async function main() {
 
   const userPrompt = 'Introduce yourself and tell me one interesting fact about large language models.';
 
-  // ── Path 1: Native LangChain execution ───────────────────
-  console.log('=== Native LangChain Execution ===');
-  const nativeResult = await chain.invoke({ input: userPrompt });
-  console.log('Result:', nativeResult);
-
-  // ── Path 2: Agentspan runtime execution ──────────────────
-  console.log('\n=== Agentspan Runtime Execution ===');
+  // ── Run on agentspan ──────────────────────────────────────
   const runtime = new AgentRuntime();
-  const agentspanResult = await runtime.run(chain, userPrompt);
-  console.log(`Status: ${agentspanResult.status}`);
-  agentspanResult.printResult();
-
-  // ── Compare ──────────────────────────────────────────────
-  console.log('\n=== Comparison ===');
-  console.log(`Native length:     ${nativeResult.length} chars`);
-  console.log(`Agentspan length:  ${String(agentspanResult.output).length} chars`);
-  console.log('Both paths produced valid LLM responses.');
-
-  await runtime.shutdown();
+  try {
+    const result = await runtime.run(chain, userPrompt);
+    console.log('Status:', result.status);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch(console.error);

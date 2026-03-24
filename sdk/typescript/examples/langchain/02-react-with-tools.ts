@@ -5,7 +5,7 @@
  *   - Binding DynamicStructuredTool instances to ChatOpenAI via bindTools()
  *   - Manual tool-calling loop (no full AgentExecutor needed)
  *   - Country information lookup tools: population, capital, currency
- *   - Running natively and via AgentRuntime
+ *   - Running via AgentRuntime
  *
  * Requires: OPENAI_API_KEY environment variable
  */
@@ -103,7 +103,7 @@ async function runAgentLoop(prompt: string): Promise<string> {
   return 'Agent reached maximum iterations.';
 }
 
-// ── Wrap as a LangChain-compatible runnable for Agentspan ──
+// ── Wrap as runnable for Agentspan ─────────────────────────
 
 const agentRunnable = new RunnableLambda({
   func: async (input: { input: string }) => {
@@ -115,23 +115,15 @@ const agentRunnable = new RunnableLambda({
 async function main() {
   const userPrompt = 'What is the capital and currency of Japan, and what is its population?';
 
-  // ── Path 1: Native execution ─────────────────────────────
-  console.log('=== Native LangChain Execution ===');
-  const nativeResult = await runAgentLoop(userPrompt);
-  console.log('Result:', nativeResult);
-
-  // ── Path 2: Agentspan runtime execution ──────────────────
-  console.log('\n=== Agentspan Runtime Execution ===');
+  // ── Run on agentspan ──────────────────────────────────────
   const runtime = new AgentRuntime();
-  const agentspanResult = await runtime.run(agentRunnable, userPrompt);
-  console.log(`Status: ${agentspanResult.status}`);
-  agentspanResult.printResult();
-
-  // ── Compare ──────────────────────────────────────────────
-  console.log('\n=== Comparison ===');
-  console.log('Both paths used real OpenAI tool-calling with live data lookups.');
-
-  await runtime.shutdown();
+  try {
+    const result = await runtime.run(agentRunnable, userPrompt);
+    console.log('Status:', result.status);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch(console.error);

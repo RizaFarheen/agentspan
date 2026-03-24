@@ -9,7 +9,6 @@
 
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { HumanMessage } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
@@ -70,26 +69,9 @@ const PROMPT =
   "What is the square root of 256? Also, how many words are in 'the quick brown fox'? And what is today's date?";
 
 // ---------------------------------------------------------------------------
-// Run
+// Run on agentspan
 // ---------------------------------------------------------------------------
 async function main() {
-  // ── Path 1: Native ──
-  console.log('=== Native LangGraph execution ===');
-  const nativeResult = await graph.invoke({
-    messages: [new HumanMessage(PROMPT)],
-  });
-  for (const msg of nativeResult.messages) {
-    const role = msg.constructor.name;
-    if (msg.tool_calls && msg.tool_calls.length > 0) {
-      console.log(`  ${role}: [tool_calls]`, JSON.stringify(msg.tool_calls.map((tc: any) => tc.name)));
-    } else {
-      const content = typeof msg.content === 'string' ? msg.content.slice(0, 200) : JSON.stringify(msg.content);
-      console.log(`  ${role}: ${content}`);
-    }
-  }
-
-  // ── Path 2: Agentspan ──
-  console.log('\n=== Agentspan passthrough execution ===');
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(graph, PROMPT);

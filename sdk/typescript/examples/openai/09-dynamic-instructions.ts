@@ -10,11 +10,10 @@
  *   - Function tools alongside dynamic instructions
  *
  * Requirements:
- *   - OPENAI_API_KEY for the native path
  *   - AGENTSPAN_SERVER_URL for the Agentspan path
  */
 
-import { Agent, run, tool, setTracingDisabled } from '@openai/agents';
+import { Agent, tool, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
 import { AgentRuntime } from '@agentspan/sdk';
 
@@ -92,23 +91,16 @@ const agent = new Agent({
 
 const prompt = "Show me my todo list and add 'Prepare demo for Friday' as high priority.";
 
-// ── Path 1: Native OpenAI Agents SDK execution ─────────────────────
-console.log('=== Path 1: Native OpenAI Agents SDK ===\n');
-try {
-  const nativeResult = await run(agent, prompt);
-  console.log('Native output:', nativeResult.finalOutput);
-} catch (err: any) {
-  console.log('Native path error (need OPENAI_API_KEY):', err.message);
+// ── Run on agentspan ──────────────────────────────────────────────
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, prompt);
+    console.log('Status:', result.status);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
-// ── Path 2: Agentspan passthrough ──────────────────────────────────
-console.log('\n=== Path 2: Agentspan Passthrough ===\n');
-const runtime = new AgentRuntime();
-try {
-  const agentspanResult = await runtime.run(agent, prompt);
-  console.log('Agentspan output:', agentspanResult.output);
-} catch (err: any) {
-  console.log('Agentspan path error (need AGENTSPAN_SERVER_URL):', err.message);
-} finally {
-  await runtime.shutdown();
-}
+main().catch(console.error);

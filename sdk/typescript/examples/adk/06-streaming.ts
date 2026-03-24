@@ -3,16 +3,14 @@
  *
  * Demonstrates:
  *   - Streaming events from a Google ADK agent
- *   - Native path: iterating over InMemoryRunner.runAsync() events
  *   - Agentspan path: runtime.stream() with event types
  *
  * Requirements:
  *   - npm install @google/adk zod
- *   - GOOGLE_API_KEY or GOOGLE_GENAI_API_KEY for native path
  *   - AGENTSPAN_SERVER_URL for agentspan path
  */
 
-import { LlmAgent, FunctionTool, InMemoryRunner, InMemorySessionService } from '@google/adk';
+import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
@@ -61,53 +59,9 @@ const agent = new LlmAgent({
   tools: [searchDocumentation],
 });
 
-// ── Path 1: Native ADK (streaming events) ───────────────────────────
+// ── Run on agentspan (streaming) ───────────────────────────────────
 
-async function runNative() {
-  console.log('=== Native ADK (streaming events) ===');
-  const sessionService = new InMemorySessionService();
-  const runner = new InMemoryRunner({ agent, appName: 'streaming', sessionService });
-  const session = await sessionService.createSession({ appName: 'streaming', userId: 'user1' });
-
-  const message = { role: 'user' as const, parts: [{ text: 'How do I authenticate with the API?' }] };
-
-  try {
-    console.log('Events:');
-    for await (const event of runner.runAsync({
-      userId: 'user1',
-      sessionId: session.id,
-      newMessage: message,
-    })) {
-      const author = event?.author ?? 'unknown';
-      const parts = event?.content?.parts ?? [];
-      const textParts = parts.filter((p: any) => typeof p?.text === 'string');
-      const funcParts = parts.filter((p: any) => p?.functionCall);
-      const respParts = parts.filter((p: any) => p?.functionResponse);
-
-      if (funcParts.length > 0) {
-        for (const p of funcParts) {
-          console.log(`  [${author}] tool_call: ${p.functionCall.name}(${JSON.stringify(p.functionCall.args)})`);
-        }
-      } else if (respParts.length > 0) {
-        for (const p of respParts) {
-          console.log(`  [${author}] tool_result: ${p.functionResponse.name} -> ${JSON.stringify(p.functionResponse.response).slice(0, 100)}`);
-        }
-      } else if (textParts.length > 0) {
-        for (const p of textParts) {
-          console.log(`  [${author}] text: ${p.text.slice(0, 150)}`);
-        }
-      }
-    }
-    console.log('\nStream complete.');
-  } catch (err: any) {
-    console.log('Native path error (expected without GOOGLE_API_KEY):', err.message?.slice(0, 200));
-  }
-}
-
-// ── Path 2: Agentspan (streaming) ───────────────────────────────────
-
-async function runAgentspan() {
-  console.log('\n=== Agentspan (streaming) ===');
+async function main() {
   const runtime = new AgentRuntime();
   try {
     const streamHandle = await runtime.stream(
@@ -139,18 +93,9 @@ async function runAgentspan() {
 
     const final = await streamHandle.getResult();
     console.log(`\nStatus: ${final.status}`);
-  } catch (err: any) {
-    console.log('Agentspan path error:', err.message?.slice(0, 200));
   } finally {
     await runtime.shutdown();
   }
-}
-
-// ── Run ──────────────────────────────────────────────────────────────
-
-async function main() {
-  await runNative();
-  await runAgentspan();
 }
 
 main().catch(console.error);

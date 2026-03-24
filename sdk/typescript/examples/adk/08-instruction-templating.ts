@@ -8,11 +8,10 @@
  *
  * Requirements:
  *   - npm install @google/adk zod
- *   - GOOGLE_API_KEY or GOOGLE_GENAI_API_KEY for native path
  *   - AGENTSPAN_SERVER_URL for agentspan path
  */
 
-import { LlmAgent, FunctionTool, InMemoryRunner, InMemorySessionService } from '@google/adk';
+import { LlmAgent, FunctionTool } from '@google/adk';
 import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
@@ -87,72 +86,20 @@ const agent = new LlmAgent({
   tools: [getUserPreferences, searchTutorials],
 });
 
-// ── Path 1: Native ADK ──────────────────────────────────────────────
+// ── Run on agentspan ───────────────────────────────────────────────
 
-async function runNative() {
-  console.log('=== Native ADK ===');
-  console.log('Agent instruction (template):', agent.instruction);
-
-  const sessionService = new InMemorySessionService();
-  const runner = new InMemoryRunner({ agent, appName: 'instruction-template', sessionService });
-
-  // Create session with state variables for template resolution
-  const session = await sessionService.createSession({
-    appName: 'instruction-template',
-    userId: 'user1',
-    state: {
-      user_name: 'Alice',
-      expertise_level: 'beginner',
-    },
-  });
-
-  const prompt = 'I want to learn Python. What tutorials do you recommend?';
-  const message = { role: 'user' as const, parts: [{ text: prompt }] };
-
-  try {
-    let lastText = '';
-    for await (const event of runner.runAsync({
-      userId: 'user1',
-      sessionId: session.id,
-      newMessage: message,
-    })) {
-      const parts = event?.content?.parts;
-      if (Array.isArray(parts)) {
-        for (const part of parts) {
-          if (typeof part?.text === 'string') lastText = part.text;
-        }
-      }
-    }
-    console.log('Response:', lastText?.slice(0, 500) || '(no response)');
-  } catch (err: any) {
-    console.log('Native path error (expected without GOOGLE_API_KEY):', err.message?.slice(0, 200));
-  }
-}
-
-// ── Path 2: Agentspan ───────────────────────────────────────────────
-
-async function runAgentspan() {
-  console.log('\n=== Agentspan ===');
+async function main() {
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(
       agent,
       'I want to learn Python. What tutorials do you recommend?',
     );
-    console.log(`Status: ${result.status}`);
+    console.log('Status:', result.status);
     result.printResult();
-  } catch (err: any) {
-    console.log('Agentspan path error:', err.message?.slice(0, 200));
   } finally {
     await runtime.shutdown();
   }
-}
-
-// ── Run ──────────────────────────────────────────────────────────────
-
-async function main() {
-  await runNative();
-  await runAgentspan();
 }
 
 main().catch(console.error);

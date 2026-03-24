@@ -5,7 +5,7 @@
  *   - A suite of math tools: arithmetic, quadratic, circle, prime factorization, statistics
  *   - ChatOpenAI selecting the right tool for each problem
  *   - Multiple sequential queries using the same agent pattern
- *   - Running natively and via AgentRuntime
+ *   - Running via AgentRuntime
  *
  * Requires: OPENAI_API_KEY environment variable
  */
@@ -191,22 +191,17 @@ async function main() {
     'Give me statistics for: 12, 45, 23, 67, 34, 89, 11, 55',
   ];
 
-  for (const problem of problems) {
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`Problem: ${problem}`);
-
-    // ── Path 1: Native ─────────────────────────────────────
-    console.log('\n--- Native LangChain ---');
-    const nativeResult = await runMathAgent(problem);
-    console.log('Result:', nativeResult);
-
-    // ── Path 2: Agentspan ──────────────────────────────────
-    console.log('\n--- Agentspan Runtime ---');
-    const agentspanResult = await runtime.run(agentRunnable, problem);
-    agentspanResult.printResult();
+  try {
+    for (const problem of problems) {
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`Problem: ${problem}`);
+      const result = await runtime.run(agentRunnable, problem);
+      console.log('Status:', result.status);
+      result.printResult();
+    }
+  } finally {
+    await runtime.shutdown();
   }
-
-  await runtime.shutdown();
 }
 
 main().catch(console.error);

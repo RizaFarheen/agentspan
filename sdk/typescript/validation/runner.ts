@@ -7,7 +7,7 @@
  *   npx tsx validation/runner.ts --config runs.toml --group SMOKE_TEST
  *   npx tsx validation/runner.ts --config runs.toml --judge --report
  *   npx tsx validation/runner.ts --config runs.toml --dry-run
- *   npx tsx validation/runner.ts --config runs.toml --run smoke,vercel_native
+ *   npx tsx validation/runner.ts --config runs.toml --run smoke
  */
 
 import * as fs from 'node:fs';
@@ -32,7 +32,6 @@ interface CliArgs {
   judge: boolean;
   report: boolean;
   dryRun: boolean;
-  native: boolean;
   outputDir: string;
 }
 
@@ -41,7 +40,6 @@ function parseCliArgs(argv: string[]): CliArgs {
     judge: false,
     report: false,
     dryRun: false,
-    native: false,
     outputDir: 'output',
   };
 
@@ -65,9 +63,6 @@ function parseCliArgs(argv: string[]): CliArgs {
         break;
       case '--dry-run':
         args.dryRun = true;
-        break;
-      case '--native':
-        args.native = true;
         break;
       case '--output-dir':
         args.outputDir = argv[++i];
@@ -175,7 +170,6 @@ async function runSingle(
         examplePath,
         env,
         timeout,
-        runConfig.native ?? cliArgs.native,
       );
     } catch (err) {
       const duration = (Date.now() - startTime) / 1000;
@@ -273,7 +267,6 @@ async function main(): Promise<void> {
     console.error('  --judge             Enable LLM judge scoring');
     console.error('  --report            Generate HTML report');
     console.error('  --dry-run           List examples without executing');
-    console.error('  --native            Force native framework execution');
     console.error('  --output-dir <dir>  Output directory (default: output)');
     process.exit(1);
   }

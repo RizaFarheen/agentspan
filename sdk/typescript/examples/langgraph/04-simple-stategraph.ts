@@ -73,18 +73,9 @@ builder.addEdge('generate', END);
 const graph = builder.compile();
 
 // ---------------------------------------------------------------------------
-// Run
+// Run on agentspan
 // ---------------------------------------------------------------------------
 async function main() {
-  // ── Path 1: Native ──
-  console.log('=== Native LangGraph execution ===');
-  const nativeResult = await graph.invoke({ query: 'Tell me about Python' });
-  console.log('Query:', nativeResult.query);
-  console.log('Refined:', nativeResult.refined_query);
-  console.log('Output:', nativeResult.output);
-
-  // ── Path 2: Agentspan ──
-  console.log('\n=== Agentspan passthrough execution ===');
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(graph, 'Tell me about Python');

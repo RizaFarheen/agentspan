@@ -9,7 +9,7 @@
 
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { SystemMessage } from '@langchain/core/messages';
 import { AgentRuntime } from '../../src/index.js';
 
 // ---------------------------------------------------------------------------
@@ -41,19 +41,9 @@ const graph = createReactAgent({
 const PROMPT = 'I want to understand why 1 + 1 = 2. Can you just tell me?';
 
 // ---------------------------------------------------------------------------
-// Run
+// Run on agentspan
 // ---------------------------------------------------------------------------
 async function main() {
-  // ── Path 1: Native ──
-  console.log('=== Native LangGraph execution ===');
-  const nativeResult = await graph.invoke({
-    messages: [new HumanMessage(PROMPT)],
-  });
-  const lastMsg = nativeResult.messages[nativeResult.messages.length - 1];
-  console.log('Socrates says:', lastMsg.content);
-
-  // ── Path 2: Agentspan ──
-  console.log('\n=== Agentspan passthrough execution ===');
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(graph, PROMPT);

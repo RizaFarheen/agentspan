@@ -6,14 +6,12 @@
  *   - Using PromptTemplate for parameterized system prompts (persona, domain, style)
  *   - RunnableSequence with template composition
  *   - DynamicStructuredTool for domain-specific lookup
- *   - Running natively and via AgentRuntime
+ *   - Running via AgentRuntime
  *
  * Requires: OPENAI_API_KEY environment variable
  */
 
 import { ChatOpenAI } from '@langchain/openai';
-import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { HumanMessage, AIMessage, ToolMessage, SystemMessage } from '@langchain/core/messages';
 import { RunnableLambda } from '@langchain/core/runnables';
@@ -111,20 +109,6 @@ async function runPersonaAgent(prompt: string): Promise<string> {
   return 'Agent reached maximum iterations.';
 }
 
-// ── Also demonstrate a simple prompt template chain ──────
-
-async function runSimpleTemplateChain(topic: string, style: string): Promise<string> {
-  const prompt = ChatPromptTemplate.fromMessages([
-    ['system', 'You are an expert consultant. Your communication style is {style}. Keep answers under 3 sentences.'],
-    ['human', 'Explain {topic} briefly.'],
-  ]);
-
-  const model = new ChatOpenAI({ modelName: 'gpt-4o-mini', temperature: 0.3 });
-  const chain = prompt.pipe(model).pipe(new StringOutputParser());
-
-  return chain.invoke({ topic, style });
-}
-
 // ── Wrap for Agentspan ───────────────────────────────────
 
 const agentRunnable = new RunnableLambda({
@@ -135,29 +119,16 @@ const agentRunnable = new RunnableLambda({
 });
 
 async function main() {
-  const runtime = new AgentRuntime();
-
-  // ── Demo 1: Simple prompt template chain ─────────────────
-  console.log('=== Simple Prompt Template Chain ===');
-  const simpleResult = await runSimpleTemplateChain('ETL pipelines', 'concise and technical');
-  console.log('Result:', simpleResult);
-
-  // ── Demo 2: Persona agent with tools ─────────────────────
   const userPrompt = 'What tool should I use for batch processing, and can you explain ETL?';
 
-  console.log('\n=== Native LangChain Execution ===');
-  const nativeResult = await runPersonaAgent(userPrompt);
-  console.log('Result:', nativeResult);
-
-  console.log('\n=== Agentspan Runtime Execution ===');
-  const agentspanResult = await runtime.run(agentRunnable, userPrompt);
-  console.log(`Status: ${agentspanResult.status}`);
-  agentspanResult.printResult();
-
-  console.log('\n=== Comparison ===');
-  console.log('Both paths used real OpenAI with parameterized persona prompts and tools.');
-
-  await runtime.shutdown();
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agentRunnable, userPrompt);
+    console.log('Status:', result.status);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch(console.error);

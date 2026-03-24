@@ -7,14 +7,13 @@
  * Demonstrates:
  *   - Defining specialist agents with tools
  *   - A triage agent that routes to the correct specialist via handoffs
- *   - Running natively and via Agentspan passthrough
+ *   - Running via Agentspan passthrough
  *
  * Requirements:
- *   - OPENAI_API_KEY for the native path
  *   - AGENTSPAN_SERVER_URL for the Agentspan path
  */
 
-import { Agent, run, tool, handoff, setTracingDisabled } from '@openai/agents';
+import { Agent, tool, setTracingDisabled } from '@openai/agents';
 import { z } from 'zod';
 import { AgentRuntime } from '@agentspan/sdk';
 
@@ -108,24 +107,16 @@ const triageAgent = new Agent({
 
 const prompt = "I'd like a refund for order ORD-002, the product arrived damaged.";
 
-// ── Path 1: Native OpenAI Agents SDK execution ─────────────────────
-console.log('=== Path 1: Native OpenAI Agents SDK ===\n');
-try {
-  const nativeResult = await run(triageAgent, prompt);
-  console.log('Final agent:', nativeResult.lastAgent.name);
-  console.log('Native output:', nativeResult.finalOutput);
-} catch (err: any) {
-  console.log('Native path error (need OPENAI_API_KEY):', err.message);
+// ── Run on agentspan ──────────────────────────────────────────────
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(triageAgent, prompt);
+    console.log('Status:', result.status);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
-// ── Path 2: Agentspan passthrough ──────────────────────────────────
-console.log('\n=== Path 2: Agentspan Passthrough ===\n');
-const runtime = new AgentRuntime();
-try {
-  const agentspanResult = await runtime.run(triageAgent, prompt);
-  console.log('Agentspan output:', agentspanResult.output);
-} catch (err: any) {
-  console.log('Agentspan path error (need AGENTSPAN_SERVER_URL):', err.message);
-} finally {
-  await runtime.shutdown();
-}
+main().catch(console.error);

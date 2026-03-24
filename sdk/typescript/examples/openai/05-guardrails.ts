@@ -7,20 +7,16 @@
  * Demonstrates:
  *   - Input guardrails that validate user messages before processing
  *   - Output guardrails that validate agent responses
- *   - Running natively and via Agentspan passthrough
+ *   - Running via Agentspan passthrough
  *
  * Requirements:
- *   - OPENAI_API_KEY for the native path
  *   - AGENTSPAN_SERVER_URL for the Agentspan path
  */
 
 import {
   Agent,
-  run,
   tool,
   setTracingDisabled,
-  InputGuardrailTripwireTriggered,
-  OutputGuardrailTripwireTriggered,
 } from '@openai/agents';
 import type { InputGuardrail, OutputGuardrail, GuardrailFunctionOutput } from '@openai/agents';
 import { z } from 'zod';
@@ -130,39 +126,16 @@ const agent = new Agent({
   outputGuardrails: [checkOutputSafety],
 });
 
-// ── Path 1: Native OpenAI Agents SDK execution ─────────────────────
-console.log('=== Path 1: Native OpenAI Agents SDK ===\n');
-
-// Safe input -- should pass guardrails
-console.log('--- Safe input ---');
-try {
-  const safeResult = await run(agent, "What's the balance on account ACC-100?");
-  console.log('Native output:', safeResult.finalOutput);
-} catch (err: any) {
-  console.log('Native path error:', err.message);
-}
-
-// Unsafe input with PII -- should trip guardrail
-console.log('\n--- Unsafe input (PII) ---');
-try {
-  const unsafeResult = await run(agent, 'My SSN is 123-45-6789, check my balance.');
-  console.log('Native output:', unsafeResult.finalOutput);
-} catch (err: any) {
-  if (err instanceof InputGuardrailTripwireTriggered) {
-    console.log('Input guardrail triggered (expected):', err.message);
-  } else {
-    console.log('Native path error:', err.message);
+// ── Run on agentspan ──────────────────────────────────────────────
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agent, "What's the balance on account ACC-100?");
+    console.log('Status:', result.status);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
   }
 }
 
-// ── Path 2: Agentspan passthrough ──────────────────────────────────
-console.log('\n=== Path 2: Agentspan Passthrough ===\n');
-const runtime = new AgentRuntime();
-try {
-  const agentspanResult = await runtime.run(agent, "What's the balance on account ACC-100?");
-  console.log('Agentspan output:', agentspanResult.output);
-} catch (err: any) {
-  console.log('Agentspan path error (need AGENTSPAN_SERVER_URL):', err.message);
-} finally {
-  await runtime.shutdown();
-}
+main().catch(console.error);

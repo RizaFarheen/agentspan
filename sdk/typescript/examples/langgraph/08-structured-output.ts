@@ -1,15 +1,14 @@
 /**
- * Structured Output -- createReactAgent with withStructuredOutput for typed data.
+ * Structured Output -- createReactAgent with responseFormat for typed data.
  *
  * Demonstrates:
- *   - Using withStructuredOutput on the LLM for typed JSON responses
+ *   - Using responseFormat on createReactAgent for typed JSON responses
  *   - Defining a Zod schema for the expected output shape
  *   - Parsing and accessing structured fields from the result
  */
 
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
-import { HumanMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 import { AgentRuntime } from '../../src/index.js';
 
@@ -38,35 +37,9 @@ const graph = createReactAgent({
 const PROMPT = 'Write a review for the movie Inception (2010).';
 
 // ---------------------------------------------------------------------------
-// Run
+// Run on agentspan
 // ---------------------------------------------------------------------------
 async function main() {
-  // ── Path 1: Native ──
-  console.log('=== Native LangGraph execution ===');
-  const nativeResult = await graph.invoke({
-    messages: [new HumanMessage(PROMPT)],
-  });
-
-  // With responseFormat, the last message contains structured output
-  // and structuredResponse holds the parsed object
-  if (nativeResult.structuredResponse) {
-    const review = nativeResult.structuredResponse;
-    console.log('Title:', review.title);
-    console.log('Rating:', review.rating, '/ 10');
-    console.log('Pros:');
-    for (const pro of review.pros) console.log('  +', pro);
-    console.log('Cons:');
-    for (const con of review.cons) console.log('  -', con);
-    console.log('Summary:', review.summary);
-    console.log('Recommended:', review.recommended);
-  } else {
-    // Fallback: print last message
-    const lastMsg = nativeResult.messages[nativeResult.messages.length - 1];
-    console.log('Response:', lastMsg.content);
-  }
-
-  // ── Path 2: Agentspan ──
-  console.log('\n=== Agentspan passthrough execution ===');
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(graph, PROMPT);

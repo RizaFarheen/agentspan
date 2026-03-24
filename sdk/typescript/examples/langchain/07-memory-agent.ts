@@ -5,8 +5,7 @@
  *   - In-memory user profile store keyed by userId
  *   - DynamicStructuredTool for saving and retrieving user preferences
  *   - ChatOpenAI with tool-calling to manage user profiles
- *   - Personalized responses based on remembered user data
- *   - Running natively and via AgentRuntime
+ *   - Running via AgentRuntime
  *
  * Requires: OPENAI_API_KEY environment variable
  */
@@ -131,28 +130,22 @@ async function main() {
     `What do you know about user ${userId}?`,
   ];
 
-  for (const msg of interactions) {
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`User: ${msg}`);
+  try {
+    for (const msg of interactions) {
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`User: ${msg}`);
+      const result = await runtime.run(agentRunnable, msg);
+      console.log('Status:', result.status);
+      result.printResult();
+      console.log('-'.repeat(60));
+    }
 
-    // ── Path 1: Native ─────────────────────────────────────
-    console.log('\n--- Native LangChain ---');
-    const nativeResult = await runMemoryAgent(msg);
-    console.log('Result:', nativeResult);
-
-    // ── Path 2: Agentspan ──────────────────────────────────
-    console.log('\n--- Agentspan Runtime ---');
-    const agentspanResult = await runtime.run(agentRunnable, msg);
-    agentspanResult.printResult();
-
-    console.log('-'.repeat(60));
+    // Show final profile state
+    console.log('\n=== Final Profile State ===');
+    console.log(JSON.stringify(userProfiles, null, 2));
+  } finally {
+    await runtime.shutdown();
   }
-
-  // Show final profile state
-  console.log('\n=== Final Profile State ===');
-  console.log(JSON.stringify(userProfiles, null, 2));
-
-  await runtime.shutdown();
 }
 
 main().catch(console.error);

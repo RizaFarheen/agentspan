@@ -5,7 +5,7 @@
  *   - DynamicStructuredTool with Zod schemas for unit conversion, formatting, percentage
  *   - ChatOpenAI with bindTools() for structured tool invocation
  *   - Manual tool-calling loop with multiple queries
- *   - Running natively and via AgentRuntime
+ *   - Running via AgentRuntime
  *
  * Requires: OPENAI_API_KEY environment variable
  */
@@ -133,22 +133,17 @@ async function main() {
     'What percentage is 37 of 185?',
   ];
 
-  for (const query of queries) {
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`Q: ${query}`);
-
-    // ── Path 1: Native ─────────────────────────────────────
-    console.log('\n--- Native LangChain ---');
-    const nativeResult = await runAgentLoop(query);
-    console.log('Result:', nativeResult);
-
-    // ── Path 2: Agentspan ──────────────────────────────────
-    console.log('\n--- Agentspan Runtime ---');
-    const agentspanResult = await runtime.run(agentRunnable, query);
-    agentspanResult.printResult();
+  try {
+    for (const query of queries) {
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`Q: ${query}`);
+      const result = await runtime.run(agentRunnable, query);
+      console.log('Status:', result.status);
+      result.printResult();
+    }
+  } finally {
+    await runtime.shutdown();
   }
-
-  await runtime.shutdown();
 }
 
 main().catch(console.error);

@@ -4,9 +4,6 @@
  * Demonstrates using wrapLanguageModel to apply middleware that
  * intercepts and transforms LLM calls. The middleware logs requests
  * and can block calls containing PII patterns.
- *
- * Path 1: Native generateText with wrapped model.
- * Path 2: Agentspan passthrough with the same wrapped model.
  */
 
 import {
@@ -70,17 +67,7 @@ const prompts = [
   },
 ];
 
-// ── Path 1: Native Vercel AI SDK with middleware ─────────
-for (const { label, text } of prompts) {
-  console.log(`\n=== Native: ${label} ===`);
-  const result = await generateText({
-    model: wrappedModel,
-    prompt: text,
-  });
-  console.log('Output:', result.text.slice(0, 200) + (result.text.length > 200 ? '...' : ''));
-}
-
-// ── Path 2: Agentspan passthrough ────────────────────────
+// ── Wrap as a duck-typed agent for agentspan ─────────────
 const vercelAgent = {
   id: 'middleware_agent',
   tools: {},
@@ -99,15 +86,19 @@ const vercelAgent = {
   stream: async function* () { yield { type: 'finish' as const }; },
 };
 
-console.log('\n\n=== Agentspan Passthrough ===');
-const runtime = new AgentRuntime();
-try {
-  for (const { label, text } of prompts) {
-    console.log(`\n--- ${label} ---`);
-    const agentspanResult = await runtime.run(vercelAgent, text);
-    console.log('Output:', JSON.stringify(agentspanResult.output).slice(0, 200));
-    console.log('Status:', agentspanResult.status);
+// ── Run on agentspan ─────────────────────────────────────
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    for (const { label, text } of prompts) {
+      console.log(`\n--- ${label} ---`);
+      const result = await runtime.run(vercelAgent, text);
+      console.log('Status:', result.status);
+      result.printResult();
+    }
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

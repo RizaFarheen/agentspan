@@ -5,7 +5,7 @@
  *   - Combining tools from different domains: time, currency, flight info
  *   - ChatOpenAI with bindTools() selecting and chaining multiple tool calls
  *   - Real LLM reasoning about which tools to use
- *   - Running natively and via AgentRuntime
+ *   - Running via AgentRuntime
  *
  * Requires: OPENAI_API_KEY environment variable
  */
@@ -150,29 +150,19 @@ const agentRunnable = new RunnableLambda({
 });
 
 async function main() {
-  const runtime = new AgentRuntime();
-
   const userPrompt =
     "I'm an American planning to travel from New York to Tokyo. " +
     'What time is it there right now, how long is the flight, ' +
     'and how much is 500 USD in JPY?';
 
-  // ── Path 1: Native ───────────────────────────────────────
-  console.log('=== Native LangChain Execution ===');
-  const nativeResult = await runTravelAgent(userPrompt);
-  console.log('Result:', nativeResult);
-
-  // ── Path 2: Agentspan ────────────────────────────────────
-  console.log('\n=== Agentspan Runtime Execution ===');
-  const agentspanResult = await runtime.run(agentRunnable, userPrompt);
-  console.log(`Status: ${agentspanResult.status}`);
-  agentspanResult.printResult();
-
-  // ── Compare ──────────────────────────────────────────────
-  console.log('\n=== Comparison ===');
-  console.log('Both paths used real OpenAI tool-calling with 3 travel tools.');
-
-  await runtime.shutdown();
+  const runtime = new AgentRuntime();
+  try {
+    const result = await runtime.run(agentRunnable, userPrompt);
+    console.log('Status:', result.status);
+    result.printResult();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 main().catch(console.error);

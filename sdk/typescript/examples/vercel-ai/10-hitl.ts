@@ -2,11 +2,8 @@
  * Vercel AI SDK -- Human-in-the-Loop (HITL)
  *
  * Demonstrates a Vercel AI SDK agent that pauses for human approval
- * before executing sensitive actions. Uses a tool without an execute
- * function (requires human confirmation) and a risk assessment tool.
- *
- * Path 1: Native generateText with HITL simulation.
- * Path 2: Agentspan passthrough with HITL via runtime.
+ * before executing sensitive actions. Uses a risk assessment tool
+ * and an execution tool with simulated approval logic.
  */
 
 import { generateText, tool } from 'ai';
@@ -91,34 +88,7 @@ const testCases = [
   { label: 'High risk (should be rejected)', prompt: 'Delete all records from the staging database.' },
 ];
 
-// ── Path 1: Native Vercel AI SDK ─────────────────────────
-for (const { label, prompt } of testCases) {
-  console.log(`\n=== Native: ${label} ===`);
-  const result = await generateText({
-    model,
-    system,
-    prompt,
-    tools,
-    maxSteps: 5,
-  });
-
-  const riskResults = result.steps
-    .flatMap(s => s.toolResults)
-    .filter(tr => tr.toolName === 'assessRisk');
-  const actionResults = result.steps
-    .flatMap(s => s.toolResults)
-    .filter(tr => tr.toolName === 'executeAction');
-
-  if (riskResults.length > 0) {
-    console.log('Risk assessment:', JSON.stringify(riskResults[0].result));
-  }
-  if (actionResults.length > 0) {
-    console.log('Action result:', JSON.stringify(actionResults[0].result));
-  }
-  console.log('Response:', result.text.slice(0, 200) + (result.text.length > 200 ? '...' : ''));
-}
-
-// ── Path 2: Agentspan passthrough ────────────────────────
+// ── Wrap as a duck-typed agent for agentspan ─────────────
 const vercelAgent = {
   id: 'hitl_agent',
   tools,
@@ -151,15 +121,19 @@ const vercelAgent = {
   stream: async function* () { yield { type: 'finish' as const }; },
 };
 
-console.log('\n\n=== Agentspan Passthrough ===');
-const runtime = new AgentRuntime();
-try {
-  for (const { label, prompt } of testCases) {
-    console.log(`\n--- ${label} ---`);
-    const result = await runtime.run(vercelAgent, prompt);
-    console.log('Output:', JSON.stringify(result.output).slice(0, 200));
-    console.log('Status:', result.status);
+// ── Run on agentspan ─────────────────────────────────────
+async function main() {
+  const runtime = new AgentRuntime();
+  try {
+    for (const { label, prompt } of testCases) {
+      console.log(`\n--- ${label} ---`);
+      const result = await runtime.run(vercelAgent, prompt);
+      console.log('Status:', result.status);
+      result.printResult();
+    }
+  } finally {
+    await runtime.shutdown();
   }
-} finally {
-  await runtime.shutdown();
 }
+
+main().catch(console.error);

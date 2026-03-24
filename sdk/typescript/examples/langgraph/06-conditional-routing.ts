@@ -96,19 +96,9 @@ builder.addEdge('neutral', END);
 const graph = builder.compile();
 
 // ---------------------------------------------------------------------------
-// Run
+// Run on agentspan
 // ---------------------------------------------------------------------------
 async function main() {
-  // ── Path 1: Native ──
-  console.log('=== Native LangGraph execution ===');
-  const nativeResult = await graph.invoke({
-    text: "I just got promoted at work and I'm thrilled!",
-  });
-  console.log('Sentiment:', nativeResult.sentiment);
-  console.log('Response:', nativeResult.response);
-
-  // ── Path 2: Agentspan ──
-  console.log('\n=== Agentspan passthrough execution ===');
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(

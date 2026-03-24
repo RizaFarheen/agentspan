@@ -5,7 +5,7 @@
  *   - Using ChatOpenAI.withStructuredOutput() with Zod schemas
  *   - Extracting typed Person and Event data from unstructured text
  *   - RunnableSequence with prompt template and structured output
- *   - Running natively and via AgentRuntime
+ *   - Running via AgentRuntime
  *
  * Requires: OPENAI_API_KEY environment variable
  */
@@ -123,26 +123,20 @@ async function main() {
       'and significant price reductions across the API.',
   ];
 
-  for (const text of texts) {
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`Text: ${text.slice(0, 80)}...`);
+  try {
+    for (const text of texts) {
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`Text: ${text.slice(0, 80)}...`);
 
-    const queryText = `Extract all information from this text: ${text}`;
-
-    // ── Path 1: Native ─────────────────────────────────────
-    console.log('\n--- Native LangChain ---');
-    const nativeResult = await extractAll(text);
-    console.log(nativeResult);
-
-    // ── Path 2: Agentspan ──────────────────────────────────
-    console.log('\n--- Agentspan Runtime ---');
-    const agentspanResult = await runtime.run(agentRunnable, queryText);
-    agentspanResult.printResult();
-
-    console.log('-'.repeat(60));
+      const queryText = `Extract all information from this text: ${text}`;
+      const result = await runtime.run(agentRunnable, queryText);
+      console.log('Status:', result.status);
+      result.printResult();
+      console.log('-'.repeat(60));
+    }
+  } finally {
+    await runtime.shutdown();
   }
-
-  await runtime.shutdown();
 }
 
 main().catch(console.error);
