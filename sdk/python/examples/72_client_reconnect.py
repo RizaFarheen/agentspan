@@ -1,0 +1,252 @@
+# Copyright (c) 2025 Agentspan
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
+"""Client Reconnect — hard-kill the SDK process and resume later.
+
+Demonstrates:
+    - Starting a workflow and saving its workflow_id
+    - Reaching a durable HUMAN wait state on the server
+    - Hard-killing the local client process with SIGKILL from another process
+    - Reconnecting later by workflow_id and continuing the same workflow
+
+This proves client-process durability. The local Python process can die, but
+the workflow state remains stored on the Agentspan/Conductor server.
+
+Requirements:
+    - Agentspan server running
+    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in environment
+    - AGENTSPAN_LLM_MODEL set (default: openai/gpt-4o-mini via settings.py)
+    - Provider API key configured on the server (for example OPENAI_API_KEY)
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import signal
+import time
+from pathlib import Path
+
+from agentspan.agents import Agent, AgentRuntime, human_tool
+from settings import settings
+
+DEFAULT_WORKFLOW_FILE = Path("/tmp/agentspan_client_reconnect.workflow_id")
+DEFAULT_CLIENT_PID_FILE = Path("/tmp/agentspan_client_reconnect.pid")
+
+
+ask_release_manager = human_tool(
+    name="ask_release_manager",
+    description=(
+        "Ask the release manager whether a production change is approved to ship. "
+        "Use this before finalizing any release decision."
+    ),
+)
+
+agent = Agent(
+    name="client_reconnect_demo",
+    model=settings.llm_model,
+    tools=[ask_release_manager],
+    instructions=(
+        "You are a careful release coordinator. When asked whether to ship a change, "
+        "you must call ask_release_manager first. After the human responds, explain "
+        "whether the release is approved."
+    ),
+)
+
+
+def save_text(path: Path, value: str) -> None:
+    path.write_text(value + "\n", encoding="utf-8")
+
+
+def load_text(path: Path) -> str:
+    value = path.read_text(encoding="utf-8").strip()
+    if not value:
+        raise ValueError(f"File is empty: {path}")
+    return value
+
+
+def print_status(prefix: str, status: object) -> None:
+    print(
+        f"{prefix} status={status.status} "
+        f"waiting={status.is_waiting} complete={status.is_complete}"
+    )
+
+
+def start_workflow(prompt: str, workflow_file: Path, client_pid_file: Path, timeout_seconds: int) -> None:
+    with AgentRuntime() as runtime:
+        save_text(client_pid_file, str(os.getpid()))
+        handle = runtime.start(agent, prompt)
+        save_text(workflow_file, handle.workflow_id)
+
+        print(f"Client PID: {os.getpid()}")
+        print(f"Workflow ID: {handle.workflow_id}")
+        print(f"Saved workflow ID to: {workflow_file}")
+        print(f"Saved client PID to: {client_pid_file}")
+        print("Waiting for the workflow to reach a durable WAITING state...")
+
+        for second in range(timeout_seconds + 1):
+            status = runtime.get_status(handle.workflow_id)
+            print_status(f"  [{second:02d}s]", status)
+            if status.is_waiting:
+                print()
+                print("Workflow is durably paused on the server.")
+                print("Now hard-kill this client from another terminal with:")
+                print(f"  python {Path(__file__).name} kill-client --pid-file {client_pid_file}")
+                print()
+                break
+            if status.is_complete:
+                print("\nWorkflow completed before it paused.")
+                print(status.output)
+                return
+            time.sleep(1)
+        else:
+            print("\nTimed out waiting for WAITING state.")
+            return
+
+        while True:
+            status = runtime.get_status(handle.workflow_id)
+            print_status("  [hold]", status)
+            time.sleep(2)
+
+
+def kill_client(client_pid_file: Path) -> None:
+    pid = int(load_text(client_pid_file))
+    print(f"Sending SIGKILL to client PID {pid}")
+    os.kill(pid, signal.SIGKILL)
+
+
+def show_status(workflow_id: str, timeout_seconds: int) -> None:
+    with AgentRuntime() as runtime:
+        for second in range(timeout_seconds + 1):
+            status = runtime.get_status(workflow_id)
+            print_status(f"  [{second:02d}s]", status)
+            if status.is_complete:
+                print("\nFinal output:")
+                print(status.output)
+                return
+            time.sleep(1)
+
+        print("\nTimed out waiting for completion.")
+
+
+def resume_workflow(workflow_id: str, timeout_seconds: int, approve: bool) -> None:
+    with AgentRuntime() as runtime:
+        print(f"Reconnected to workflow: {workflow_id}")
+        status = runtime.get_status(workflow_id)
+        print_status("  [initial]", status)
+
+        if status.is_waiting and approve:
+            print("Sending approval from this new process...")
+            runtime.respond(
+                workflow_id,
+                {"response": "Approved. Proceed with the release."},
+            )
+        elif status.is_waiting:
+            print("Workflow is waiting. Re-run with --approve to continue it.")
+            return
+
+        show_status(workflow_id, timeout_seconds)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Hard-kill the client process and reconnect to the same workflow later."
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    start = sub.add_parser(
+        "start",
+        help="Start the workflow, wait for WAITING, then hold so another process can SIGKILL it.",
+    )
+    start.add_argument(
+        "--prompt",
+        default="Ship change CHG-204: rotate the production API gateway certificates.",
+        help="Prompt to send to the agent.",
+    )
+    start.add_argument(
+        "--file",
+        type=Path,
+        default=DEFAULT_WORKFLOW_FILE,
+        help="Path to store workflow_id.",
+    )
+    start.add_argument(
+        "--pid-file",
+        type=Path,
+        default=DEFAULT_CLIENT_PID_FILE,
+        help="Path to store the client PID for kill-client.",
+    )
+    start.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=90,
+        help="How long to wait for WAITING before giving up.",
+    )
+
+    kill = sub.add_parser(
+        "kill-client",
+        help="Send SIGKILL to the saved client PID.",
+    )
+    kill.add_argument(
+        "--pid-file",
+        type=Path,
+        default=DEFAULT_CLIENT_PID_FILE,
+        help="Path containing the client PID.",
+    )
+
+    status = sub.add_parser(
+        "status",
+        help="Query workflow status by workflow_id or saved file.",
+    )
+    status.add_argument("--workflow-id", default="", help="Workflow ID (overrides --file).")
+    status.add_argument(
+        "--file",
+        type=Path,
+        default=DEFAULT_WORKFLOW_FILE,
+        help="Path containing saved workflow_id.",
+    )
+    status.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=30,
+        help="How long to poll before stopping.",
+    )
+
+    resume = sub.add_parser(
+        "resume",
+        help="Reconnect to the saved workflow and optionally approve it.",
+    )
+    resume.add_argument("--workflow-id", default="", help="Workflow ID (overrides --file).")
+    resume.add_argument(
+        "--file",
+        type=Path,
+        default=DEFAULT_WORKFLOW_FILE,
+        help="Path containing saved workflow_id.",
+    )
+    resume.add_argument(
+        "--approve",
+        action="store_true",
+        help="Send approval to the waiting HUMAN task before polling.",
+    )
+    resume.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=90,
+        help="How long to poll before giving up.",
+    )
+
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    if args.command == "start":
+        start_workflow(args.prompt, args.file, args.pid_file, args.timeout_seconds)
+    elif args.command == "kill-client":
+        kill_client(args.pid_file)
+    elif args.command == "status":
+        workflow_id = args.workflow_id or load_text(args.file)
+        show_status(workflow_id, args.timeout_seconds)
+    elif args.command == "resume":
+        workflow_id = args.workflow_id or load_text(args.file)
+        resume_workflow(workflow_id, args.timeout_seconds, args.approve)
