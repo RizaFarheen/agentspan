@@ -85,7 +85,7 @@ Required:
 
 Options:
   --run NAMES           Comma-separated run names to execute
-  --judge               Run cross-run judge after execution
+  --judge               Run LLM judge after execution
   --output-dir DIR      Output directory (default: validation/output/)
   --dry-run             Show plan without executing
   --resume [RUN_DIR]    Resume, skipping completed examples
@@ -108,9 +108,9 @@ Options:
 ## View Results
 
 Each run creates `validation/output/run_{timestamp}_{id}/` containing:
-- Per-run sub-directories with `results.csv` + `outputs/`
+- Per-run sub-directories with `run_results.json` + `preflight.log` + `outputs/`
 - `judge/report.html` — interactive dashboard with score heatmap, side-by-side outputs
-- `judge/results.csv` — per-run scores + baseline comparison
+- `judge/judge_results.json` — per-run scores + baseline comparison
 - `judge/report.md` — markdown summary
 - `meta.json` — timing and run metadata
 

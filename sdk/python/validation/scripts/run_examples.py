@@ -3,7 +3,7 @@
 
 Usage:
     python3 -m validation.scripts.run_examples --config runs.toml
-    python3 -m validation.scripts.run_examples --config runs.toml --run openai-native
+    python3 -m validation.scripts.run_examples --config runs.toml --run openai
     python3 -m validation.scripts.run_examples --config runs.toml --dry-run
     python3 -m validation.scripts.run_examples --config runs.toml --judge
     python3 -m validation.scripts.run_examples --list-groups
@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def main():
     parser.add_argument(
         "--run", type=str, default=None, help="Comma-separated run names to execute"
     )
-    parser.add_argument("--judge", action="store_true", help="Run cross-run judge after execution")
+    parser.add_argument("--judge", action="store_true", help="Score and compare model outputs after execution")
     parser.add_argument(
         "--output-dir", type=str, default=str(SCRIPT_DIR / "output"), help="Output directory"
     )
@@ -54,6 +55,11 @@ def main():
         sys.exit(1)
 
     config = load_toml_config(config_path)
+
+    # Apply global [env] to os.environ (shell env takes priority via setdefault)
+    for k, v in config.env.items():
+        os.environ.setdefault(k, v)
+
     selected = args.run.split(",") if args.run else None
     runs = resolve_runs(config, selected)
 

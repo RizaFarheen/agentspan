@@ -8,7 +8,7 @@ from pathlib import Path
 from jinja2 import Environment, PackageLoader
 
 
-def _cross_score_distribution(rows: list[dict], run_names: list[str]) -> tuple[dict, dict]:
+def _score_distribution(rows: list[dict], run_names: list[str]) -> tuple[dict, dict]:
     """Compute score distribution per run. Returns (dist, max_per_run)."""
     dist: dict[str, dict[int, int]] = {}
     for rn in run_names:
@@ -25,7 +25,7 @@ def _cross_score_distribution(rows: list[dict], run_names: list[str]) -> tuple[d
     return dist, maxes
 
 
-def generate_cross_html_report(
+def generate_judge_html_report(
     rows: list[dict],
     report_path: Path,
     run_names: list[str],
@@ -34,16 +34,16 @@ def generate_cross_html_report(
     meta: dict | None = None,
     run_meta: dict[str, dict] | None = None,
 ) -> None:
-    """Generate cross-run HTML report with side-by-side comparison."""
+    """Generate multi-run comparison HTML report with side-by-side comparison."""
     env = Environment(
         loader=PackageLoader("validation", "templates"),
         autoescape=False,
     )
     env.filters["format_number"] = lambda n: f"{int(n):,}" if n else "0"
-    template = env.get_template("cross_report.html.j2")
+    template = env.get_template("report_template.html.j2")
 
     total_examples = len(rows)
-    score_dist, score_dist_max = _cross_score_distribution(rows, run_names)
+    score_dist, score_dist_max = _score_distribution(rows, run_names)
 
     # Compute averages
     avg_scores: dict[str, float] = {}

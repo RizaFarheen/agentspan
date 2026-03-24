@@ -36,6 +36,7 @@ class MultiRunProgress:
         self._failed: dict[str, int] = {r.name: 0 for r in runs}
         self._finished: dict[str, bool] = {r.name: False for r in runs}
         self._durations: dict[str, float] = {r.name: 0.0 for r in runs}
+        self._server_status: dict[str, str] = {}  # set before examples start
 
         # Per-example × run state: {example_name: {run_name: (status, duration)}}
         self._example_results: dict[str, dict[str, tuple[str, float]]] = {}
@@ -88,6 +89,10 @@ class MultiRunProgress:
                 filled = int(pct * 20)
                 bar_str = "█" * filled + "░" * (20 - filled)
                 bar = Text(f"{bar_str} {done}/{total}")
+            elif name in self._server_status:
+                srv = self._server_status[name]
+                style = "green" if srv.startswith("✓") else "red" if srv.startswith("✗") else "cyan"
+                bar = Text(srv, style=style)
             else:
                 bar = Text("waiting...", style="dim")
 
@@ -138,6 +143,12 @@ class MultiRunProgress:
 
     def stop(self):
         self._live.stop()
+
+    def set_server_status(self, run_name: str, status: str):
+        """Update the server start status shown in the Progress column."""
+        with self._lock:
+            self._server_status[run_name] = status
+            self._live.update(self._build_display())
 
     def set_total(self, run_name: str, total: int, example_names: list[str] | None = None):
         with self._lock:

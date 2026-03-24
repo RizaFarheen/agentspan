@@ -36,6 +36,27 @@ def check_server_health(server_url: str | None = None) -> bool:
         return False
 
 
+def build_resolved_env(
+    model_id: str,
+    server_url: str | None,
+    secondary_model: str | None = None,
+    global_env: dict | None = None,
+    run_env: dict | None = None,
+) -> dict:
+    """Build a per-run env dict without mutating os.environ."""
+    env = os.environ.copy()
+    if global_env:
+        env.update(global_env)
+    if run_env:
+        env.update(run_env)
+    env["AGENTSPAN_LLM_MODEL"] = model_id
+    if server_url:
+        env["AGENTSPAN_SERVER_URL"] = server_url
+    if secondary_model:
+        env["AGENTSPAN_SECONDARY_LLM_MODEL"] = secondary_model
+    return env
+
+
 def run_example(
     example: Example,
     model_name: str,
@@ -45,13 +66,9 @@ def run_example(
     server_url: str | None = None,
     native: bool = False,
     secondary_model: str | None = None,
+    extra_env: dict | None = None,
 ) -> RunResult:
-    env = os.environ.copy()
-    env["AGENTSPAN_LLM_MODEL"] = model_id
-    if server_url:
-        env["AGENTSPAN_SERVER_URL"] = server_url
-    if secondary_model:
-        env["AGENTSPAN_SECONDARY_LLM_MODEL"] = secondary_model
+    env = build_resolved_env(model_id, server_url, secondary_model, run_env=extra_env)
 
     base_name = example.name.split("/")[-1]
     from ..groups import HITL_STDIN

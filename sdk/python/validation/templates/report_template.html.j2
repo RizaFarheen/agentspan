@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cross-Run Report</title>
+<title>Judge Report</title>
 <style>
 :root {
   --bg: #ffffff; --bg2: #f8f9fa; --bg3: #e9ecef;
@@ -152,7 +152,7 @@ tr.avg-row td { background: var(--bg2); }
 <body>
 <div class="container">
   <header>
-    <h1>Cross-Run Report</h1>
+    <h1>Judge Report</h1>
     <div class="controls">
       <input type="text" id="search" placeholder="Search examples..." oninput="filterAll()">
       <select id="scoreFilter" onchange="filterAll()">
@@ -519,7 +519,7 @@ function exportCSV() {
   const blob = new Blob([csv], {type: 'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'cross_run_results.csv';
+  a.download = 'comparison_results.csv';
   a.click();
 }
 

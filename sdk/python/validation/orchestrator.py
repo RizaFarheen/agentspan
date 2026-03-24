@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import signal
+import sys
+import subprocess
 import threading
 import time
 import uuid
@@ -12,10 +13,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
-from .config import SINGLE_RUN_CSV_COLUMNS, Settings
+from .config import Settings
 from .discovery import discover_examples
 from .display import MultiRunProgress, compute_run_summary, print_multi_run_summary
-from .execution import check_server_health, run_examples
+from .execution import run_examples
+from .execution.runner import build_resolved_env
 from .persistence import (
     completed_examples_single,
     failed_examples_single,
@@ -24,9 +26,8 @@ from .persistence import (
 )
 from .reporting import (
     _format_duration,
-    build_single_row,
     update_latest_symlink,
-    write_csv_row,
+    write_run_results_json,
     write_single_output,
 )
 from .toml_config import MultiRunConfig, RunConfig
@@ -61,13 +62,23 @@ def run_all(
 
     signal.signal(signal.SIGINT, _handle_sigint)
 
-    # Assign ports for server (non-native) runs
-    port_assignments: dict[str, int] = {}
-    next_port = 8080
-    for r in runs:
-        if not r.native:
-            port_assignments[r.name] = next_port
-            next_port += 1
+    # Start one shared server for all non-native runs
+    shared_server_url: str | None = None
+    server_pool = None
+    has_server_runs = any(not r.native for r in runs)
+    if has_server_runs:
+        from .execution import ServerPool
+
+        first_server_run = next(r for r in runs if not r.native)
+        port = _parse_port(first_server_run.server_url)
+        server_pool = ServerPool(base_port=port)
+        server_pool.start(
+            {"server": first_server_run.server_url},
+            log_dir=parent_dir / "logs",
+            extra_env=config.env or None,
+        )
+        urls = server_pool.get_server_urls()
+        shared_server_url = urls.get("server", first_server_run.server_url)
 
     # Try rich live progress, fall back to plain print
     try:
@@ -85,42 +96,32 @@ def run_all(
         if use_rich:
             progress.start()
 
-        if len(runs) == 1:
-            summary = _run_single(
-                runs[0],
-                parent_dir,
-                abort_event,
-                port_assignments.get(runs[0].name),
-                resume,
-                retry_failed,
-                progress,
-            )
-            if summary:
-                run_summaries.append(summary)
-        else:
-            with ThreadPoolExecutor(max_workers=len(runs)) as pool:
-                futures = {
-                    pool.submit(
-                        _run_single,
-                        r,
-                        parent_dir,
-                        abort_event,
-                        port_assignments.get(r.name),
-                        resume,
-                        retry_failed,
-                        progress,
-                    ): r
-                    for r in runs
-                }
-                for future in as_completed(futures):
-                    summary = future.result()
-                    if summary:
-                        with summaries_lock:
-                            run_summaries.append(summary)
+        with ThreadPoolExecutor(max_workers=len(runs)) as executor:
+            futures = {
+                executor.submit(
+                    _run_single,
+                    r,
+                    parent_dir,
+                    abort_event,
+                    shared_server_url,
+                    resume,
+                    retry_failed,
+                    progress,
+                    config.env or None,
+                ): r
+                for r in runs
+            }
+            for future in as_completed(futures):
+                summary = future.result()
+                if summary:
+                    with summaries_lock:
+                        run_summaries.append(summary)
     finally:
         signal.signal(signal.SIGINT, original_handler)
         if use_rich:
             progress.stop()
+        if server_pool:
+            server_pool.shutdown()
 
     elapsed = time.monotonic() - start_time
     meta["total_duration_s"] = round(elapsed, 1)
@@ -146,7 +147,13 @@ def run_all(
     if judge_after and not abort_event.is_set():
         from .judge import judge_across_runs
 
-        settings = Settings.from_env()
+        settings = Settings.from_env().with_env_overrides(config.judge.env)
+        if not settings.openai_api_key:
+            print(
+                "ERROR: OPENAI_API_KEY not set for judge. Set it in shell or in [judge.env] in runs.toml.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         judge_across_runs(parent_dir, config.judge, settings)
 
     return parent_dir
@@ -156,16 +163,16 @@ def _run_single(
     run_cfg: RunConfig,
     parent_dir: Path,
     abort_event: threading.Event,
-    port: int | None,
+    shared_server_url: str | None,
     resume: bool,
     retry_failed: bool,
     progress: MultiRunProgress | None,
+    global_env: dict | None = None,
 ) -> dict | None:
     """Execute a single run in its own sub-directory. Returns summary dict."""
     run_dir = parent_dir / run_cfg.name
     outputs_dir = run_dir / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = run_dir / "results.csv"
 
     model_id = run_cfg.model
     model_name = model_id.split("/")[0] if "/" in model_id else model_id
@@ -215,39 +222,28 @@ def _run_single(
     if progress:
         progress.set_total(run_cfg.name, total, [ex.name for ex in examples])
 
-    # Server health check
-    server_url = None
-    pool = None
-    if not run_cfg.native:
-        if port:
-            server_url = f"http://localhost:{port}/api"
-        else:
-            server_url = run_cfg.server_url
+    server_url = shared_server_url if not run_cfg.native else None
 
-        if not check_server_health(server_url):
-            try:
-                from .execution import ServerPool
+    resolved = build_resolved_env(
+        model_id, server_url, run_cfg.secondary_model, global_env, run_cfg.env
+    )
+    _write_preflight_log(run_dir, run_cfg, resolved)
 
-                pool = ServerPool(base_port=port or 8080)
-                pool.start({model_name: model_id}, log_dir=run_dir / "logs")
-                urls = pool.get_server_urls()
-                server_url = urls.get(model_name, server_url)
-            except Exception as e:
-                msg = f"[{run_cfg.name}] Server start failed: {e}"
-                if progress:
-                    progress.log(f"  {msg}")
-                else:
-                    print(f"  {msg}")
-                if pool:
-                    pool.shutdown()
-                return None
-
-    # CSV header
-    columns = SINGLE_RUN_CSV_COLUMNS
-    if not csv_path.exists() or csv_path.stat().st_size == 0:
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=columns)
-            writer.writeheader()
+    # agentspan doctor (non-native only)
+    if server_url:
+        cli_server_url = server_url.rstrip("/").removesuffix("/api")
+        try:
+            result = subprocess.run(
+                ["agentspan", "--server", cli_server_url, "doctor"],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=resolved,
+            )
+            doctor_out = (result.stdout or "") + (result.stderr or "")
+        except FileNotFoundError:
+            doctor_out = "agentspan not found in PATH\n"
+        (run_dir / "doctor.log").write_text(doctor_out)
 
     last_run["run_dir"] = str(run_dir)
     start_time = time.monotonic()
@@ -259,7 +255,6 @@ def _run_single(
 
     def on_complete(sr):
         write_single_output(outputs_dir, sr.example.name, sr.result)
-        write_csv_row(csv_path, columns, build_single_row(sr.example.name, sr.result))
 
         from .persistence import update_last_run_single
 
@@ -273,24 +268,21 @@ def _run_single(
                 f"    [{run_cfg.name}] {sr.example.name:<40s} {status} [{sr.result.duration_s:.1f}s]"
             )
 
-    try:
-        results = run_examples(
-            examples=examples,
-            model_name=model_name,
-            model_id=model_id,
-            timeout=run_cfg.timeout,
-            retries=run_cfg.retries,
-            max_workers=run_cfg.max_workers if run_cfg.parallel else 1,
-            native=run_cfg.native,
-            server_url=server_url,
-            secondary_model=run_cfg.secondary_model,
-            abort_event=abort_event,
-            on_complete=on_complete,
-            on_start=on_start,
-        )
-    finally:
-        if pool:
-            pool.shutdown()
+    results = run_examples(
+        examples=examples,
+        model_name=model_name,
+        model_id=model_id,
+        timeout=run_cfg.timeout,
+        retries=run_cfg.retries,
+        max_workers=run_cfg.max_workers if run_cfg.parallel else 1,
+        native=run_cfg.native,
+        server_url=server_url,
+        secondary_model=run_cfg.secondary_model,
+        abort_event=abort_event,
+        on_complete=on_complete,
+        on_start=on_start,
+        extra_env={**(global_env or {}), **run_cfg.env} or None,
+    )
 
     elapsed = time.monotonic() - start_time
 
@@ -310,7 +302,63 @@ def _run_single(
     run_meta_path = run_dir / "meta.json"
     run_meta_path.write_text(json.dumps(run_meta, indent=2))
 
+    write_run_results_json(run_dir, run_meta, results, last_run)
     save_last_run(last_run, last_run_lock)
 
     summary = compute_run_summary(results, run_cfg.name, model_id)
     return summary
+
+
+def _parse_port(server_url: str) -> int:
+    """Extract port from URL like http://localhost:8080/api. Defaults to 8080."""
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(server_url)
+        return parsed.port or 8080
+    except Exception:
+        return 8080
+
+
+_API_KEY_VARS = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"}
+_CONFIG_VARS = [
+    "AGENTSPAN_SERVER_URL",
+    "JUDGE_LLM_MODEL",
+    "JUDGE_MAX_OUTPUT_CHARS",
+    "JUDGE_MAX_TOKENS",
+    "JUDGE_MAX_CALLS",
+    "JUDGE_RATE_LIMIT",
+]
+
+
+def _write_preflight_log(run_dir: Path, run_cfg: "RunConfig", resolved: dict) -> None:
+    lines = ["=== EFFECTIVE ENV ==="]
+    for k in sorted(_API_KEY_VARS):
+        val = resolved.get(k)
+        lines.append(f"  {k}: {'***set***' if val else '(not set)'}")
+    for k in _CONFIG_VARS:
+        val = resolved.get(k)
+        lines.append(f"  {k}: {val if val is not None else '(not set)'}")
+    lines.append("")
+    lines.append("=== AGENTSPAN_ VARS ===")
+    agentspan_vars = sorted(k for k in resolved if k.startswith("AGENTSPAN_"))
+    if agentspan_vars:
+        for k in agentspan_vars:
+            lines.append(f"  {k}: {resolved[k]}")
+    else:
+        lines.append("  (none)")
+
+    lines.append("")
+    lines.append("=== RUN CONFIG ===")
+    lines.append(f"  name: {run_cfg.name}")
+    lines.append(f"  model: {run_cfg.model}")
+    lines.append(f"  native: {run_cfg.native}")
+    lines.append(f"  group: {run_cfg.group}")
+    run_env = run_cfg.env or {}
+    if run_env:
+        masked = {k: ("***set***" if k in _API_KEY_VARS else v) for k, v in run_env.items()}
+        lines.append(f"  env: {masked}")
+    else:
+        lines.append("  env: (none)")
+
+    (run_dir / "preflight.log").write_text("\n".join(lines) + "\n")

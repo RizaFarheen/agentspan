@@ -1,7 +1,8 @@
-"""Constants, CSV schemas, and settings."""
+"""Constants and settings."""
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,31 +19,6 @@ SUBDIRS = {
     "langchain": "langchain",
 }
 
-# ── Pricing (per 1K tokens) ─────────────────────────────────────────────
-
-MODEL_PRICING = {
-    "openai": {"prompt": 0.0025, "completion": 0.01},
-    "anthropic": {"prompt": 0.003, "completion": 0.015},
-    "adk": {"prompt": 0.0001, "completion": 0.0004},
-}
-
-# ── CSV schema ───────────────────────────────────────────────────────────
-
-SINGLE_RUN_CSV_COLUMNS = [
-    "example",
-    "status",
-    "exit_code",
-    "duration_s",
-    "workflow_id",
-    "tool_calls",
-    "tokens_total",
-    "tokens_prompt",
-    "tokens_completion",
-    "output_length",
-    "has_error",
-    "error_summary",
-]
-
 # ── Settings ─────────────────────────────────────────────────────────────
 
 
@@ -58,6 +34,12 @@ class Settings:
     judge_max_tokens: int = 300
     judge_max_calls: int = 0  # 0 = unlimited
     judge_rate_limit: float = 0.5
+
+    def with_env_overrides(self, env: dict[str, str]) -> "Settings":
+        """Return a copy with values from env dict applied."""
+        if key := env.get("OPENAI_API_KEY"):
+            return dataclasses.replace(self, openai_api_key=key)
+        return self
 
     @classmethod
     def from_env(cls) -> Settings:

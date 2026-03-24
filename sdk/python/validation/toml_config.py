@@ -25,6 +25,7 @@ class RunConfig:
     timeout: int = 300
     retries: int = 0
     server_url: str = "http://localhost:8080/api"
+    env: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -35,6 +36,7 @@ class JudgeConfig:
     max_tokens: int = 300
     rate_limit: float = 0.5
     max_calls: int = 0
+    env: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -47,6 +49,7 @@ class MultiRunConfig:
     runs: dict[str, RunConfig] = field(default_factory=dict)
     judge: JudgeConfig = field(default_factory=JudgeConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
+    env: dict = field(default_factory=dict)
 
 
 _RUN_FIELDS = {f.name for f in RunConfig.__dataclass_fields__.values()}
@@ -62,11 +65,11 @@ def load_toml_config(path: Path) -> MultiRunConfig:
     defaults = raw.get("defaults", {})
     judge_raw = raw.get("judge", {})
     runs_raw = raw.get("runs", {})
-
     display_raw = raw.get("display", {})
+    global_env = raw.get("env", {})
 
     # Warn on unknown top-level keys
-    known_top = {"defaults", "judge", "runs", "display"}
+    known_top = {"defaults", "judge", "runs", "display", "env"}
     for k in raw:
         if k not in known_top:
             warnings.warn(f"Unknown top-level key in config: '{k}'")
@@ -78,7 +81,7 @@ def load_toml_config(path: Path) -> MultiRunConfig:
 
     # Warn on unknown judge keys
     for k in judge_raw:
-        if k not in _JUDGE_FIELDS:
+        if k not in _JUDGE_FIELDS and k != "env":
             warnings.warn(f"Unknown key in [judge]: '{k}'")
 
     # Warn on unknown display keys
@@ -88,6 +91,7 @@ def load_toml_config(path: Path) -> MultiRunConfig:
 
     # Build JudgeConfig + DisplayConfig
     judge = JudgeConfig(**{k: v for k, v in judge_raw.items() if k in _JUDGE_FIELDS})
+    judge.env = judge_raw.get("env", {})
     display = DisplayConfig(**{k: v for k, v in display_raw.items() if k in _DISPLAY_FIELDS})
 
     # Build RunConfigs — merge defaults into each run
@@ -97,16 +101,19 @@ def load_toml_config(path: Path) -> MultiRunConfig:
 
     runs: dict[str, RunConfig] = {}
     for run_name, run_raw in runs_raw.items():
-        # Warn on unknown run keys
+        # Warn on unknown run keys (env is a nested dict, not a scalar field)
         for k in run_raw:
             if k not in _RUN_FIELDS:
                 warnings.warn(f"Unknown key in [runs.{run_name}]: '{k}'")
 
+        run_env = run_raw.get("env", {})
         merged = {**defaults, **run_raw}
         merged["name"] = run_name
-        runs[run_name] = RunConfig(**{k: v for k, v in merged.items() if k in _RUN_FIELDS})
+        rc = RunConfig(**{k: v for k, v in merged.items() if k in _RUN_FIELDS})
+        rc.env = run_env
+        runs[run_name] = rc
 
-    config = MultiRunConfig(runs=runs, judge=judge, display=display)
+    config = MultiRunConfig(runs=runs, judge=judge, display=display, env=global_env)
 
     # Validate baseline_run
     if judge.baseline_run and judge.baseline_run not in runs:
