@@ -7,7 +7,7 @@
  * 3. .invoke() + (.getGraph() OR .nodes Map) → 'langgraph'
  * 4. .invoke() + .lc_namespace → 'langchain'
  * 5. .run() + OpenAI markers → 'openai'
- * 6. .run() + Google/ADK markers → 'google_adk'
+ * 6. .model + .instruction + ADK-specific props → 'google_adk'
  * 7. Otherwise → null
  *
  * All detection uses duck-typing — no imports of framework packages.
@@ -67,18 +67,26 @@ function hasRunAndOpenAIMarkers(obj: any): boolean {
 }
 
 /**
- * Google ADK: has .run(), .model, and Google/ADK-specific markers.
+ * Google ADK: LlmAgent has .model, .instruction, and ADK-specific properties
+ * like .generateContentConfig, .outputKey, .subAgents, .beforeModelCallback.
+ *
+ * Note: The TS ADK LlmAgent does NOT have a .run() method (unlike Python's Agent).
+ * Execution uses InMemoryRunner + InMemorySessionService.
  */
-function hasRunAndADKMarkers(obj: any): boolean {
-  if (typeof obj?.run !== 'function') return false;
-  // Check for Google ADK markers: specific naming patterns, before_* hooks, etc.
-  const hasModel = typeof obj?.model === 'string';
-  const hasADKHint =
-    typeof obj?.before_model_callback === 'function' ||
-    typeof obj?.after_model_callback === 'function' ||
-    typeof obj?.instruction === 'string' ||
-    (hasModel && /^(gemini|models\/)/.test(obj.model));
-  return hasADKHint;
+function hasADKMarkers(obj: any): boolean {
+  if (typeof obj !== 'object' || obj === null) return false;
+  const hasModel = typeof obj.model === 'string';
+  const hasInstruction =
+    typeof obj.instruction === 'string' || typeof obj.instruction === 'function';
+  // ADK-specific properties that distinguish it from other frameworks
+  const hasADKProps =
+    'generateContentConfig' in obj ||
+    'outputKey' in obj ||
+    'beforeModelCallback' in obj ||
+    'afterModelCallback' in obj ||
+    'disallowTransferToParent' in obj ||
+    'includeContents' in obj;
+  return hasModel && (hasInstruction || hasADKProps);
 }
 
 // ── Public API ──────────────────────────────────────────
@@ -103,8 +111,8 @@ export function detectFramework(agent: unknown): FrameworkId | null {
   // 5. OpenAI Agents: has .run() + .tools + .model with OpenAI markers
   if (hasRunAndOpenAIMarkers(agent)) return 'openai';
 
-  // 6. Google ADK: has .run() + .model with Google/ADK markers
-  if (hasRunAndADKMarkers(agent)) return 'google_adk';
+  // 6. Google ADK: LlmAgent with .model + .instruction + ADK-specific properties
+  if (hasADKMarkers(agent)) return 'google_adk';
 
   // 7. Unknown — not a recognized framework
   return null;

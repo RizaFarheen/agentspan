@@ -2,9 +2,12 @@
  * Google ADK passthrough worker factory.
  *
  * Creates a worker function that:
- * 1. Calls agent.run(prompt) with event mapping
+ * 1. Uses InMemoryRunner + InMemorySessionService to execute the ADK agent
  * 2. Pushes events via pushEvent
  * 3. Returns result
+ *
+ * Note: The TS ADK LlmAgent does NOT have a .run() method.
+ * Execution uses InMemoryRunner + InMemorySessionService.
  */
 
 import { pushEvent } from './event-push.js';
@@ -13,7 +16,7 @@ import type { FrameworkWorkerFn } from './vercel-ai.js';
 /**
  * Create a passthrough worker for a Google ADK agent.
  *
- * @param agent - Google ADK agent (duck-typed, has .run() + Google markers)
+ * @param agent - Google ADK LlmAgent instance (duck-typed)
  * @param name - Worker name for task registration
  * @param serverUrl - Agentspan server URL
  * @param headers - Auth headers for event push
@@ -37,25 +40,48 @@ export function makeGoogleADKWorker(
       headers,
     );
 
-    const result = await agent.run(prompt);
+    // Import ADK runner classes dynamically to avoid hard dependency at module level
+    let InMemoryRunner: any;
+    let InMemorySessionService: any;
+    try {
+      const adk = await import('@google/adk');
+      InMemoryRunner = adk.InMemoryRunner;
+      InMemorySessionService = adk.InMemorySessionService;
+    } catch {
+      throw new Error(
+        'Google ADK (@google/adk) is required for ADK agent execution. Install with: npm install @google/adk',
+      );
+    }
 
-    // Extract output from result
-    let output: string;
-    if (result && typeof result === 'object') {
-      const r = result as Record<string, unknown>;
-      // Google ADK typically returns { output, ... } or { response, ... }
-      output =
-        typeof r.output === 'string'
-          ? r.output
-          : typeof r.response === 'string'
-            ? r.response
-            : typeof r.text === 'string'
-              ? r.text
-              : JSON.stringify(r);
-    } else if (typeof result === 'string') {
-      output = result;
-    } else {
-      output = String(result ?? '');
+    const sessionService = new InMemorySessionService();
+    const runner = new InMemoryRunner({
+      agent,
+      appName: name,
+      sessionService,
+    });
+
+    const session = await sessionService.createSession({
+      appName: name,
+      userId: 'agentspan-user',
+    });
+
+    const content = { role: 'user', parts: [{ text: prompt }] };
+
+    let output = '';
+    for await (const event of runner.runAsync({
+      userId: 'agentspan-user',
+      sessionId: session.id,
+      newMessage: content,
+    })) {
+      // ADK events have various shapes; extract text from the last model response
+      const parts = event?.content?.parts;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (typeof part?.text === 'string') {
+            output = part.text;
+          }
+        }
+      }
     }
 
     return {

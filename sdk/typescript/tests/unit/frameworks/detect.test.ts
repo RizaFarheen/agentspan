@@ -175,53 +175,50 @@ describe('detectFramework', () => {
   });
 
   describe('Google ADK detection', () => {
-    it('detects object with run() and before_model_callback', () => {
+    it('detects object with model and beforeModelCallback', () => {
       const mockAgent = {
-        run: () => {},
         model: 'gemini-pro',
-        before_model_callback: () => {},
+        beforeModelCallback: () => {},
       };
       expect(detectFramework(mockAgent)).toBe('google_adk');
     });
 
-    it('detects object with run() and after_model_callback', () => {
+    it('detects object with model and afterModelCallback', () => {
       const mockAgent = {
-        run: () => {},
         model: 'gemini-pro',
-        after_model_callback: () => {},
+        afterModelCallback: () => {},
       };
       expect(detectFramework(mockAgent)).toBe('google_adk');
     });
 
-    it('detects object with run() and instruction string', () => {
+    it('detects object with model and instruction string', () => {
       const mockAgent = {
-        run: () => {},
         model: 'gemini-pro',
         instruction: 'You are a helpful assistant',
       };
       expect(detectFramework(mockAgent)).toBe('google_adk');
     });
 
-    it('detects object with run() and gemini model prefix', () => {
+    it('detects object with model and generateContentConfig', () => {
       const mockAgent = {
-        run: () => {},
         model: 'gemini-2.0-flash',
+        generateContentConfig: { temperature: 0.5 },
       };
       expect(detectFramework(mockAgent)).toBe('google_adk');
     });
 
-    it('detects object with run() and models/ prefix', () => {
+    it('detects object with model and outputKey', () => {
       const mockAgent = {
-        run: () => {},
         model: 'models/gemini-pro',
+        outputKey: 'result',
       };
       expect(detectFramework(mockAgent)).toBe('google_adk');
     });
 
-    it('does not detect when run is missing', () => {
+    it('does not detect when model is missing', () => {
       const mock = {
-        model: 'gemini-pro',
-        before_model_callback: () => {},
+        instruction: 'You are helpful',
+        beforeModelCallback: () => {},
       };
       expect(detectFramework(mock)).not.toBe('google_adk');
     });
