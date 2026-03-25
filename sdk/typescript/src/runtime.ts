@@ -661,10 +661,12 @@ export class AgentRuntime {
           let result: unknown = {};
           for (const handler of handlers) {
             const fn = (handler as Record<string, unknown>)[methodName] as Function;
-            const kwargs: Record<string, unknown> = {};
-            if (messages !== null) kwargs.messages = messages;
-            if (llmResult !== null) kwargs.llmResult = llmResult;
-            result = await fn.call(handler, kwargs);
+            // Pass server data matching CallbackHandler method signatures:
+            // before/after_agent: (agentName, data)
+            // before/after_model: (agentName, messages|response)
+            // before/after_tool:  (agentName, toolName, data)
+            const data = messages ?? llmResult;
+            result = await fn.call(handler, agentName, data);
           }
           return typeof result === 'object' && result !== null ? result : {};
         } catch {

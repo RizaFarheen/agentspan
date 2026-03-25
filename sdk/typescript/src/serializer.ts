@@ -280,13 +280,19 @@ export class AgentConfigSerializer {
 
   /**
    * Serialize a guardrail to wire format (per spec §5.4).
+   * Normalizes RegexGuardrail/LLMGuardrail instances via toGuardrailDef().
    */
   serializeGuardrail(guard: unknown): Record<string, unknown> {
     if (guard == null || typeof guard !== 'object') {
       return {};
     }
 
-    const g = guard as Record<string, unknown>;
+    // Normalize class instances (RegexGuardrail, LLMGuardrail) via toGuardrailDef()
+    let g = guard as Record<string, unknown>;
+    if (typeof g.toGuardrailDef === 'function') {
+      g = (g.toGuardrailDef as () => Record<string, unknown>)();
+    }
+
     const result: Record<string, unknown> = {};
 
     // Copy known fields
