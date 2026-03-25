@@ -18,6 +18,7 @@ import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
 import org.conductoross.conductor.ai.providers.mistral.MistralAIConfiguration;
 import org.conductoross.conductor.ai.providers.openai.OpenAIConfiguration;
+import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.perplexity.PerplexityAIConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +57,8 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         Map.entry("perplexity",  "PERPLEXITY_API_KEY"),
         Map.entry("huggingface", "HUGGINGFACE_API_KEY"),
         Map.entry("azureopenai", "AZURE_OPENAI_API_KEY"),
-        Map.entry("gemini",      "GEMINI_API_KEY")
+        Map.entry("gemini",        "GEMINI_API_KEY"),
+        Map.entry("google_gemini", "GEMINI_API_KEY")
     );
 
     private final CredentialResolutionService resolutionService;
@@ -81,16 +83,20 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         }
 
         // Try per-user credential resolution
+        log.info("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
+        log.info("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
         if (userApiKey != null) {
             try {
                 AIModel model = createModelWithKey(provider, userApiKey);
                 if (model != null) {
-                    log.debug("Per-user AIModel created for provider '{}'", provider);
+                    log.info("Per-user AIModel created for provider '{}'", provider);
+                    // Register in provider map so Conductor's executor can find it
+                    getProviderToLLM().put(provider.toLowerCase(), model);
                     return model;
                 }
             } catch (Exception e) {
-                log.warn("Failed to create per-user AIModel for '{}': {}", provider, e.getMessage());
+                log.warn("Failed to create per-user AIModel for '{}': {}", provider, e.getMessage(), e);
             }
         }
 
@@ -122,12 +128,15 @@ public class AgentspanAIModelProvider extends AIModelProvider {
                 .orElse(null);
         }
 
-        if (userId == null) return null;
+        // Fall back to anonymous user (OSS / no-auth mode)
+        if (userId == null) {
+            userId = "00000000-0000-0000-0000-000000000000";
+        }
 
         try {
             return resolutionService.resolve(userId, envVarName);
         } catch (Exception e) {
-            log.debug("Per-user key not found for provider '{}': {}", provider, e.getMessage());
+            log.debug("Credential not found for provider '{}': {}", provider, e.getMessage());
             return null;
         }
     }
@@ -158,9 +167,25 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Create a fresh AIModel instance with a per-user API key.
-     * Follows the Orkes ModelConfigurationProvider pattern.
+     * Resolve any named credential for the current user.
      */
+    private String resolveUserCredential(String credentialName) {
+        String userId = extractUserIdFromTaskContext();
+        if (userId == null) {
+            userId = RequestContextHolder.get()
+                .map(ctx -> ctx.getUser().getId())
+                .orElse(null);
+        }
+        if (userId == null) {
+            userId = "00000000-0000-0000-0000-000000000000";
+        }
+        try {
+            return resolutionService.resolve(userId, credentialName);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /**
      * Create a fresh AIModel instance with a per-user API key.
      * Uses the server-wide model's base URL/endpoint config as defaults,
@@ -193,8 +218,33 @@ public class AgentspanAIModelProvider extends AIModelProvider {
                 yield c;
             }
             case "perplexity" -> new PerplexityAIConfiguration(apiKey, null);
+            case "gemini", "google_gemini" -> null; // Handled below
             default -> null;
         };
-        return config != null ? config.get() : null;
+
+        if (config != null) {
+            return config.get();
+        }
+
+        // Gemini with API key: use REST transport (AI Studio), not gRPC (Vertex AI)
+        String providerLower = provider.toLowerCase();
+        if (providerLower.equals("gemini") || providerLower.equals("google_gemini")) {
+            return createGeminiApiKeyModel(apiKey);
+        }
+
+        return null;
+    }
+
+    /**
+     * Create a Gemini model using API key auth via REST transport.
+     * This avoids the Vertex AI gRPC path which requires IAM credentials.
+     */
+    private AIModel createGeminiApiKeyModel(String apiKey) {
+        String projectId = resolveUserCredential("GOOGLE_CLOUD_PROJECT");
+        var config = new GeminiVertexConfiguration();
+        config.setApiKey(apiKey);
+        config.setProjectId(projectId != null ? projectId : "google-ai-studio");
+        config.setLocation("us-central1");
+        return new GeminiApiKeyModel(config, apiKey);
     }
 }
