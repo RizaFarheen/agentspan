@@ -18,6 +18,7 @@ import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
 import org.conductoross.conductor.ai.providers.mistral.MistralAIConfiguration;
 import org.conductoross.conductor.ai.providers.openai.OpenAIConfiguration;
+import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.perplexity.PerplexityAIConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +57,8 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         Map.entry("perplexity",  "PERPLEXITY_API_KEY"),
         Map.entry("huggingface", "HUGGINGFACE_API_KEY"),
         Map.entry("azureopenai", "AZURE_OPENAI_API_KEY"),
-        Map.entry("gemini",      "GEMINI_API_KEY")
+        Map.entry("gemini",        "GEMINI_API_KEY"),
+        Map.entry("google_gemini", "GEMINI_API_KEY")
     );
 
     private final CredentialResolutionService resolutionService;
@@ -158,9 +160,23 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Create a fresh AIModel instance with a per-user API key.
-     * Follows the Orkes ModelConfigurationProvider pattern.
+     * Resolve any named credential for the current user.
      */
+    private String resolveUserCredential(String credentialName) {
+        String userId = extractUserIdFromTaskContext();
+        if (userId == null) {
+            userId = RequestContextHolder.get()
+                .map(ctx -> ctx.getUser().getId())
+                .orElse(null);
+        }
+        if (userId == null) return null;
+        try {
+            return resolutionService.resolve(userId, credentialName);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /**
      * Create a fresh AIModel instance with a per-user API key.
      * Uses the server-wide model's base URL/endpoint config as defaults,
@@ -193,6 +209,21 @@ public class AgentspanAIModelProvider extends AIModelProvider {
                 yield c;
             }
             case "perplexity" -> new PerplexityAIConfiguration(apiKey, null);
+            case "gemini", "google_gemini" -> {
+                var c = new GeminiVertexConfiguration();
+                c.setApiKey(apiKey);
+                // Resolve projectId from credential store
+                String projectId = resolveUserCredential("GOOGLE_CLOUD_PROJECT");
+                if (projectId != null) {
+                    c.setProjectId(projectId);
+                }
+                // Default location if not set
+                String location = resolveUserCredential("GOOGLE_CLOUD_LOCATION");
+                c.setLocation(location != null ? location : "us-central1");
+                // Use AI Studio REST endpoint when only API key is available (no ADC)
+                c.setBaseURL("https://generativelanguage.googleapis.com");
+                yield c;
+            }
             default -> null;
         };
         return config != null ? config.get() : null;
