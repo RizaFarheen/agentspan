@@ -369,9 +369,26 @@ export class AgentStream implements AsyncIterable<AgentEvent> {
     const doneEvent = this.events.find((e) => e.type === 'done');
     const errorEvent = this.events.findLast((e) => e.type === 'error');
 
-    const output = doneEvent?.output ?? null;
-    const status = doneEvent ? 'COMPLETED' : (errorEvent ? 'FAILED' : 'COMPLETED');
-    const error = errorEvent?.content;
+    // Poll the server for the real terminal status — the done SSE event
+    // signals stream end, NOT workflow success.
+    let serverStatus: Record<string, unknown> | null = null;
+    if (this.serverUrl && this.workflowId) {
+      try {
+        const statusUrl = `${this.serverUrl}/agent/${this.workflowId}/status`;
+        const resp = await fetch(statusUrl, { headers: this.headers });
+        if (resp.ok) {
+          serverStatus = await resp.json() as Record<string, unknown>;
+        }
+      } catch {
+        // Fall back to stream-based inference
+      }
+    }
+
+    const status = (serverStatus?.status as string)
+      ?? (errorEvent ? 'FAILED' : (doneEvent ? 'COMPLETED' : 'COMPLETED'));
+    const output = (serverStatus?.output as unknown) ?? doneEvent?.output ?? null;
+    const error = (serverStatus?.reasonForIncompletion as string)
+      ?? errorEvent?.content;
 
     return makeAgentResult({
       output,
