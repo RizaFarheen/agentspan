@@ -107,12 +107,29 @@ public class GeminiApiKeyModel extends GeminiVertex {
             // Extract text from response
             String text = response.text() != null ? response.text() : "";
 
-            // Build Spring AI ChatResponse with finish reason metadata
-            var metadata = org.springframework.ai.chat.metadata.ChatGenerationMetadata.builder()
+            // Extract token usage from response
+            int promptTokens = 0, completionTokens = 0, totalTokens = 0;
+            if (response.usageMetadata().isPresent()) {
+                var usage = response.usageMetadata().get();
+                promptTokens = usage.promptTokenCount().orElse(0);
+                completionTokens = usage.candidatesTokenCount().orElse(0);
+                totalTokens = usage.totalTokenCount().orElse(promptTokens + completionTokens);
+            }
+
+            // Build Spring AI ChatResponse with finish reason and token usage
+            var genMetadata = org.springframework.ai.chat.metadata.ChatGenerationMetadata.builder()
                     .finishReason("STOP")
                     .build();
-            Generation generation = new Generation(new AssistantMessage(text), metadata);
-            return new ChatResponse(List.of(generation));
+            Generation generation = new Generation(new AssistantMessage(text), genMetadata);
+
+            var responseUsage = new org.springframework.ai.chat.metadata.DefaultUsage(
+                    promptTokens, completionTokens, totalTokens);
+            var responseMetadata = org.springframework.ai.chat.metadata.ChatResponseMetadata.builder()
+                    .usage(responseUsage)
+                    .model(modelName)
+                    .build();
+
+            return new ChatResponse(List.of(generation), responseMetadata);
         }
 
         @Override
