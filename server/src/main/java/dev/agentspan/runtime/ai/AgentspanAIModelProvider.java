@@ -83,16 +83,20 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         }
 
         // Try per-user credential resolution
+        log.info("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
+        log.info("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
         if (userApiKey != null) {
             try {
                 AIModel model = createModelWithKey(provider, userApiKey);
                 if (model != null) {
-                    log.debug("Per-user AIModel created for provider '{}'", provider);
+                    log.info("Per-user AIModel created for provider '{}'", provider);
+                    // Register in provider map so Conductor's executor can find it
+                    getProviderToLLM().put(provider.toLowerCase(), model);
                     return model;
                 }
             } catch (Exception e) {
-                log.warn("Failed to create per-user AIModel for '{}': {}", provider, e.getMessage());
+                log.warn("Failed to create per-user AIModel for '{}': {}", provider, e.getMessage(), e);
             }
         }
 
@@ -124,12 +128,15 @@ public class AgentspanAIModelProvider extends AIModelProvider {
                 .orElse(null);
         }
 
-        if (userId == null) return null;
+        // Fall back to anonymous user (OSS / no-auth mode)
+        if (userId == null) {
+            userId = "00000000-0000-0000-0000-000000000000";
+        }
 
         try {
             return resolutionService.resolve(userId, envVarName);
         } catch (Exception e) {
-            log.debug("Per-user key not found for provider '{}': {}", provider, e.getMessage());
+            log.debug("Credential not found for provider '{}': {}", provider, e.getMessage());
             return null;
         }
     }
@@ -169,7 +176,9 @@ public class AgentspanAIModelProvider extends AIModelProvider {
                 .map(ctx -> ctx.getUser().getId())
                 .orElse(null);
         }
-        if (userId == null) return null;
+        if (userId == null) {
+            userId = "00000000-0000-0000-0000-000000000000";
+        }
         try {
             return resolutionService.resolve(userId, credentialName);
         } catch (Exception e) {
@@ -209,23 +218,33 @@ public class AgentspanAIModelProvider extends AIModelProvider {
                 yield c;
             }
             case "perplexity" -> new PerplexityAIConfiguration(apiKey, null);
-            case "gemini", "google_gemini" -> {
-                var c = new GeminiVertexConfiguration();
-                c.setApiKey(apiKey);
-                // Resolve projectId from credential store
-                String projectId = resolveUserCredential("GOOGLE_CLOUD_PROJECT");
-                if (projectId != null) {
-                    c.setProjectId(projectId);
-                }
-                // Default location if not set
-                String location = resolveUserCredential("GOOGLE_CLOUD_LOCATION");
-                c.setLocation(location != null ? location : "us-central1");
-                // Use AI Studio REST endpoint when only API key is available (no ADC)
-                c.setBaseURL("https://generativelanguage.googleapis.com");
-                yield c;
-            }
+            case "gemini", "google_gemini" -> null; // Handled below
             default -> null;
         };
-        return config != null ? config.get() : null;
+
+        if (config != null) {
+            return config.get();
+        }
+
+        // Gemini with API key: use REST transport (AI Studio), not gRPC (Vertex AI)
+        String providerLower = provider.toLowerCase();
+        if (providerLower.equals("gemini") || providerLower.equals("google_gemini")) {
+            return createGeminiApiKeyModel(apiKey);
+        }
+
+        return null;
+    }
+
+    /**
+     * Create a Gemini model using API key auth via REST transport.
+     * This avoids the Vertex AI gRPC path which requires IAM credentials.
+     */
+    private AIModel createGeminiApiKeyModel(String apiKey) {
+        String projectId = resolveUserCredential("GOOGLE_CLOUD_PROJECT");
+        var config = new GeminiVertexConfiguration();
+        config.setApiKey(apiKey);
+        config.setProjectId(projectId != null ? projectId : "google-ai-studio");
+        config.setLocation("us-central1");
+        return new GeminiApiKeyModel(config, apiKey);
     }
 }
