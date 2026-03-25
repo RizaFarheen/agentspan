@@ -1,0 +1,10 @@
+{
+  "name": "agentspan-examples-openai",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openai/agents": "^0.8.0",
+    "dotenv": "^16.0.0",
+    "zod": "^4.0.0"
+  }
+}
