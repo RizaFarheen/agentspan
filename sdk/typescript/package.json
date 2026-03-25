@@ -17,11 +17,6 @@
       "import": "./dist/testing/index.js",
       "require": "./dist/testing/index.cjs"
     },
-    "./validation": {
-      "types": "./dist/validation/runner.d.ts",
-      "import": "./dist/validation/runner.js",
-      "require": "./dist/validation/runner.cjs"
-    },
     "./ai": {
       "types": "./dist/wrappers/ai.d.ts",
       "import": "./dist/wrappers/ai.js",

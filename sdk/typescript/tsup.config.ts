@@ -4,7 +4,6 @@ export default defineConfig({
   entry: [
     'src/index.ts',
     'src/testing/index.ts',
-    'src/validation/runner.ts',
     'src/wrappers/ai.ts',
     'src/wrappers/langgraph.ts',
     'src/wrappers/langchain.ts',
