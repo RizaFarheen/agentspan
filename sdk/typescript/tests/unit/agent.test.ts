@@ -176,7 +176,7 @@ describe('PromptTemplate', () => {
 // ── scatterGather ──────────────────────────────────────────
 
 describe('scatterGather()', () => {
-  it('creates parallel agent with coordinator', () => {
+  it('creates coordinator with worker agent_tools', () => {
     const worker1 = new Agent({ name: 'worker1', model: 'openai/gpt-4o' });
     const worker2 = new Agent({ name: 'worker2', model: 'openai/gpt-4o' });
 
@@ -185,28 +185,42 @@ describe('scatterGather()', () => {
       model: 'openai/gpt-4o',
       instructions: 'Research team',
       workers: [worker1, worker2],
-      coordinatorInstructions: 'Aggregate results from workers.',
     });
 
     expect(sg.name).toBe('research_team');
-    expect(sg.strategy).toBe('parallel');
-    expect(sg.agents).toHaveLength(3); // 2 workers + 1 coordinator
-    expect(sg.agents[0]).toBe(worker1);
-    expect(sg.agents[1]).toBe(worker2);
-    expect(sg.agents[2].name).toBe('research_team_coordinator');
-    expect(sg.agents[2].instructions).toBe('Aggregate results from workers.');
+    // Workers are tools, not sub-agents
+    expect(sg.agents).toHaveLength(0);
+    expect(sg.tools).toHaveLength(2);
+    expect(sg.tools[0]).toHaveProperty('toolType', 'agent_tool');
+    expect(sg.tools[1]).toHaveProperty('toolType', 'agent_tool');
   });
 
-  it('uses default coordinator instructions', () => {
+  it('includes scatter-gather prefix in instructions', () => {
     const sg = scatterGather({
       name: 'team',
       model: 'openai/gpt-4o',
       workers: [new Agent({ name: 'w1' })],
+      instructions: 'Focus on depth.',
     });
-    const coordinator = sg.agents[sg.agents.length - 1];
-    expect(coordinator.instructions).toBe(
-      'Coordinate parallel workers and aggregate their results.',
-    );
+    expect(sg.instructions).toContain('coordinator that decomposes');
+    expect(sg.instructions).toContain('MULTIPLE TIMES IN PARALLEL');
+    expect(sg.instructions).toContain('Focus on depth.');
+  });
+
+  it('defaults model to worker model', () => {
+    const sg = scatterGather({
+      name: 'team',
+      workers: [new Agent({ name: 'w1', model: 'anthropic/claude-sonnet-4-5' })],
+    });
+    expect(sg.model).toBe('anthropic/claude-sonnet-4-5');
+  });
+
+  it('defaults timeout to 300 seconds', () => {
+    const sg = scatterGather({
+      name: 'team',
+      workers: [new Agent({ name: 'w1' })],
+    });
+    expect(sg.timeoutSeconds).toBe(300);
   });
 });
 

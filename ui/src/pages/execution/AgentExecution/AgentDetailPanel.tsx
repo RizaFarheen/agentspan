@@ -551,11 +551,38 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
               <SummaryRow label="Status" value={<StatusBadgeInline status={selAgent.status} />} />
               {selAgent.totalDurationMs > 0 && <SummaryRow label="Duration" value={formatDuration(selAgent.totalDurationMs)} />}
               {(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens) > 0 && (
-                <SummaryRow label="Total tokens" value={formatTokens(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens)} />
+                <>
+                  <SummaryRow label="Prompt tokens" value={formatTokens(selAgent.totalTokens.promptTokens)} />
+                  <SummaryRow label="Completion tokens" value={formatTokens(selAgent.totalTokens.completionTokens)} />
+                  <SummaryRow label="Total tokens" value={formatTokens(selAgent.totalTokens.promptTokens + selAgent.totalTokens.completionTokens)} />
+                </>
               )}
+              {selAgent.turns.length > 0 && <SummaryRow label="Turns" value={selAgent.turns.length} />}
               {selAgent.finishReason && <SummaryRow label="Finish reason" value={selAgent.finishReason.toUpperCase()} />}
               {selAgent.failureReason && <SummaryRow label="Failure reason" value={<span style={{ color: "#DC2626" }}>{selAgent.failureReason}</span>} />}
             </SummaryTable>
+            {/* Input */}
+            {selAgent.input && (
+              <Box sx={{ mx: 2, mb: 1.5, mt: 1.5, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
+                <Box sx={{ px: 2, py: 0.75, borderBottom: "1px solid #e5e7eb", backgroundColor: "#f9fafb" }}>
+                  <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "#6b7280" }}>Input</Typography>
+                </Box>
+                <Box sx={{ px: 2, py: 1 }}>
+                  <ContentView value={selAgent.input} label="input" />
+                </Box>
+              </Box>
+            )}
+            {/* Output */}
+            {selAgent.output && (
+              <Box sx={{ mx: 2, mb: 1.5, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
+                <Box sx={{ px: 2, py: 0.75, borderBottom: "1px solid #e5e7eb", backgroundColor: "#f9fafb" }}>
+                  <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "#6b7280" }}>Output</Typography>
+                </Box>
+                <Box sx={{ px: 2, py: 1 }}>
+                  <ContentView value={selAgent.output} label="output" />
+                </Box>
+              </Box>
+            )}
             {onDrillIn && (
               <Box sx={{ px: 2, py: 1 }}>
                 <Box
@@ -579,29 +606,32 @@ function GroupDetailPanel({ node, onDrillIn }: { node: DetailNodeData; onDrillIn
               <SummaryRow label="Tool" value={selEvent.toolName ?? "tool"} />
               <SummaryRow label="Status" value={<StatusBadgeInline status={statuses[selectedIdx]} />} />
               {selEvent.durationMs ? <SummaryRow label="Duration" value={formatDuration(selEvent.durationMs)} /> : null}
+              {selEvent.tokens && (selEvent.tokens.promptTokens + selEvent.tokens.completionTokens) > 0 && (
+                <SummaryRow label="Tokens" value={formatTokens(selEvent.tokens.promptTokens + selEvent.tokens.completionTokens)} />
+              )}
               {selEvent.taskMeta?.workerId && <SummaryRow label="Worker" value={selEvent.taskMeta.workerId} />}
               {selEvent.taskMeta?.reasonForIncompletion && (
                 <SummaryRow label="Failure" value={<span style={{ color: "#DC2626" }}>{selEvent.taskMeta.reasonForIncompletion}</span>} />
               )}
             </SummaryTable>
             {selEvent.toolArgs != null && (
-              <Box sx={{ mx: 2, mb: 1.5, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
+              <Box sx={{ mx: 2, mb: 1.5, mt: 1.5, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
                 <Box sx={{ px: 2, py: 0.75, borderBottom: "1px solid #e5e7eb", backgroundColor: "#f9fafb" }}>
                   <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "#6b7280" }}>Input</Typography>
                 </Box>
-                <Box sx={{ height: 160 }}>
+                <Box sx={{ height: 200 }}>
                   <JsonView src={selEvent.toolArgs} />
                 </Box>
-                {selEvent.result != null && (
-                  <>
-                    <Box sx={{ px: 2, py: 0.75, borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb", backgroundColor: "#f9fafb" }}>
-                      <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "#6b7280" }}>Output</Typography>
-                    </Box>
-                    <Box sx={{ height: 160 }}>
-                      <JsonView src={selEvent.result} />
-                    </Box>
-                  </>
-                )}
+              </Box>
+            )}
+            {selEvent.result != null && (
+              <Box sx={{ mx: 2, mb: 1.5, border: "1px solid #e5e7eb", borderRadius: 1, overflow: "hidden" }}>
+                <Box sx={{ px: 2, py: 0.75, borderBottom: "1px solid #e5e7eb", backgroundColor: "#f9fafb" }}>
+                  <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "#6b7280" }}>Output</Typography>
+                </Box>
+                <Box sx={{ height: 200 }}>
+                  <JsonView src={selEvent.result} />
+                </Box>
               </Box>
             )}
           </Box>

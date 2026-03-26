@@ -248,14 +248,18 @@ function getIterationNum(name: string): number | null {
 }
 
 /** Extract agent name from sub-workflow task reference name.
- * HANDOFF pattern: "workflow_handoff_0_planner_t1__1" → "planner_t1"
- * SWARM pattern:   "workflow_agent_1_engineering_lead__2" → "engineering_lead"
- * Simple pattern:  "researcher__1" → "researcher"
+ * HANDOFF pattern:  "workflow_handoff_0_planner_t1__1" → "planner_t1"
+ * SWARM pattern:    "workflow_agent_1_engineering_lead__2" → "engineering_lead"
+ * PARALLEL pattern: "coordinator_parallel_0_researcher" → "researcher"
+ * Simple pattern:   "researcher__1" → "researcher"
  */
 function extractAgentName(name: string): string | null {
   let m = name.match(/_handoff_\d+_(.+?)__\d+$/);
   if (m) return m[1];
   m = name.match(/_agent_\d+_(.+?)__\d+$/);
+  if (m) return m[1];
+  // Parallel fork: "coordinator_parallel_0_researcher" → "researcher"
+  m = name.match(/_parallel_\d+_(.+?)(?:__\d+)?$/);
   if (m) return m[1];
   // Simple: strip __N iteration suffix → "researcher__1" → "researcher"
   m = name.match(/^(.+?)__\d+$/);
@@ -908,6 +912,58 @@ export function transformWorkflowExecutionToAgentRun(
     })
     .filter((t) => t.events.length > 0 || t.subAgents.length > 0);
 
+  // Root-level parallel SUB_WORKFLOWs (FORK/JOIN pattern without DO_WHILE iterations).
+  // These represent parallel agent execution: FORK → [SUB_WORKFLOW...] → JOIN → aggregate.
+  const rootSubWorkflows = rootActiveTasks.filter(isAgentSubWorkflow);
+  if (rootSubWorkflows.length > 0) {
+    const subAgents: AgentRunData[] = rootSubWorkflows.map((task) => {
+      const agentName =
+        extractAgentName(task.referenceTaskName)
+        ?? task.inputData?.subWorkflowName as string
+        ?? task.workflowTask?.name
+        ?? task.referenceTaskName;
+      const subWfId = task.outputData?.subWorkflowId as string | undefined;
+      const dur = task.endTime && task.startTime ? task.endTime - task.startTime : 0;
+      const outputStr =
+        typeof task.outputData?.result === "string"
+          ? task.outputData.result
+          : undefined;
+      const failReason = task.reasonForIncompletion ?? undefined;
+
+      return {
+        id: subWfId ?? task.taskId,
+        subWorkflowId: subWfId,
+        agentName,
+        turns: [],
+        status: mapWorkflowStatus(task.status as any),
+        totalTokens: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        totalDurationMs: dur,
+        output: outputStr,
+        failureReason: failReason,
+      } as AgentRunData;
+    });
+
+    const completed = subAgents.filter((s) => s.status === AgentStatus.COMPLETED).length;
+    const failed = subAgents.filter((s) => s.status === AgentStatus.FAILED).length;
+    const running = subAgents.length - completed - failed;
+    const ts = failed > 0 ? AgentStatus.FAILED : running > 0 ? AgentStatus.RUNNING : AgentStatus.COMPLETED;
+    const subTimestamps = rootSubWorkflows
+      .flatMap((t) => [t.startTime, t.endTime])
+      .filter((v): v is number => v != null && v > 0);
+
+    turns.push({
+      turnNumber: turns.length + 1,
+      events: [],
+      status: ts,
+      durationMs: subTimestamps.length
+        ? Math.max(...subTimestamps) - Math.min(...subTimestamps)
+        : 0,
+      tokens: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      subAgents,
+      strategy: subAgents.length > 1 ? AgentStrategy.PARALLEL : AgentStrategy.SINGLE,
+    });
+  }
+
   // Build events + turn for root-level tasks (outside DO_WHILE).
   // This handles: simple single-LLM agents (greeter, triage_router_wf)
   // and final synthesis tasks (triage_final, customer_service_triage_final).
@@ -1121,7 +1177,7 @@ export function transformWorkflowExecutionToAgentRun(
     },
     totalDurationMs,
     finishReason,
-    strategy: sortedIters.length > 0 ? AgentStrategy.HANDOFF : AgentStrategy.SINGLE,
+    strategy: rootSubWorkflows.length > 1 ? AgentStrategy.PARALLEL : sortedIters.length > 0 ? AgentStrategy.HANDOFF : AgentStrategy.SINGLE,
     input: agentInput,
     output: finalOutput,
   };
