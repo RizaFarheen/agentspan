@@ -117,7 +117,7 @@ export function AgentExecutionTab({ execution }: AgentExecutionTabProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [rootRun.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rootRun]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [drillLoading, setDrillLoading] = useState(false);
 

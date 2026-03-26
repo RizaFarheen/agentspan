@@ -828,10 +828,12 @@ describe('complex multi-agent wire format', () => {
     });
     const config = serializer.serializeAgent(sg);
 
-    expect(config.strategy).toBe('parallel');
-    const agents = config.agents as Record<string, unknown>[];
-    expect(agents).toHaveLength(3);
-    expect(agents[2].name).toBe('research_team_coordinator');
+    // scatterGather creates a flat coordinator with agent_tool tools, not parallel sub-agents
+    expect(config.name).toBe('research_team');
+    const tools = config.tools as Record<string, unknown>[];
+    expect(tools).toHaveLength(2);
+    expect(tools[0]).toHaveProperty('toolType', 'agent_tool');
+    expect(tools[1]).toHaveProperty('toolType', 'agent_tool');
   });
 });
 

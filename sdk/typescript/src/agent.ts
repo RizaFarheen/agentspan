@@ -5,6 +5,7 @@ import type {
   CliConfig,
   PromptTemplate as PromptTemplateInterface,
 } from './types.js';
+import { agentTool } from './tool.js';
 
 // ── PromptTemplate class ──────────────────────────────────
 
@@ -226,33 +227,69 @@ export class Agent {
 
 export interface ScatterGatherOptions {
   name: string;
-  model: string;
+  model?: string;
   instructions?: string;
+  /** The worker agent that handles each sub-task. */
   workers: Agent[];
+  /** Extra tools for the coordinator (in addition to the worker tools). */
+  tools?: unknown[];
+  /** Retries per sub-task on failure (default 2). */
+  retryCount?: number;
+  /** Base delay between retries in seconds (default 2). */
+  retryDelaySeconds?: number;
+  /** When true, a single sub-task failure fails the entire scatter-gather. Default false. */
+  failFast?: boolean;
+  /** Timeout in seconds for the entire coordinator (default 300). */
+  timeoutSeconds?: number;
+  /** @deprecated Use `instructions` instead. */
   coordinatorInstructions?: string;
 }
 
+const SCATTER_GATHER_PREFIX = (workerNames: string) =>
+  `You are a coordinator that decomposes problems into independent sub-tasks.
+
+WORKFLOW:
+1. Analyze the input and identify independent sub-problems
+2. Call the worker tool(s) MULTIPLE TIMES IN PARALLEL — once per sub-problem, each with a clear, self-contained prompt
+3. After all results return, synthesize them into a unified answer
+
+Available worker tools: ${workerNames}
+
+IMPORTANT: Issue all tool calls in a SINGLE response to maximize parallelism.
+`;
+
 /**
- * Syntactic sugar for creating a coordinator agent that dispatches
- * parallel research workers.
+ * Create a coordinator agent pre-configured for the scatter-gather pattern.
  *
- * Produces an agent with `strategy: 'parallel'` and a coordinator sub-agent.
+ * The coordinator decomposes a problem into N independent sub-tasks,
+ * dispatches the worker agent(s) N times in parallel (via `agentTool`),
+ * and synthesizes the results. N is determined at runtime by the LLM.
+ *
+ * Each sub-task is a durable Conductor sub-workflow with automatic retries.
  */
 export function scatterGather(options: ScatterGatherOptions): Agent {
-  const coordinator = new Agent({
-    name: `${options.name}_coordinator`,
-    model: options.model,
-    instructions:
-      options.coordinatorInstructions ??
-      'Coordinate parallel workers and aggregate their results.',
-  });
+  const workerTools = options.workers.map((worker) =>
+    agentTool(worker, {
+      retryCount: options.retryCount,
+      retryDelaySeconds: options.retryDelaySeconds,
+      optional: options.failFast === true ? false : true,
+    }),
+  );
+
+  const resolvedModel = options.model ?? options.workers[0]?.model ?? 'openai/gpt-4o';
+  const workerNames = options.workers.map((w) => w.name).join(', ');
+  const prefix = SCATTER_GATHER_PREFIX(workerNames);
+  const userInstructions = options.instructions ?? options.coordinatorInstructions ?? '';
+  const fullInstructions = userInstructions ? `${prefix}\n${userInstructions}` : prefix;
+
+  const allTools = [...workerTools, ...(options.tools ?? [])];
 
   return new Agent({
     name: options.name,
-    model: options.model,
-    instructions: options.instructions,
-    agents: [...options.workers, coordinator],
-    strategy: 'parallel',
+    model: resolvedModel,
+    instructions: fullInstructions,
+    tools: allTools,
+    timeoutSeconds: options.timeoutSeconds ?? 300,
   });
 }
 

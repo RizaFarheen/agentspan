@@ -174,9 +174,10 @@ describe('Stage 2: Research Team', () => {
     expect(names).toContain('data_analyst');
   });
 
-  it('scatter_gather produces a parallel agent with workers', () => {
-    expect(researchCoordinator.strategy).toBe('parallel');
-    expect(researchCoordinator.agents.length).toBeGreaterThanOrEqual(2);
+  it('scatter_gather produces coordinator with agent_tool workers', () => {
+    // scatterGather now creates a flat coordinator with agent_tool tools
+    expect(researchCoordinator.tools.length).toBeGreaterThanOrEqual(1);
+    expect(researchCoordinator.tools[0]).toHaveProperty('toolType', 'agent_tool');
   });
 
   it('researcher worker has correct tools', () => {
