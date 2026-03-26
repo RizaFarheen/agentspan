@@ -33,11 +33,11 @@ Example::
 
 from __future__ import annotations
 
-from contextvars import ContextVar
-from dataclasses import dataclass, field
 import os
 import shlex
 import subprocess
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 

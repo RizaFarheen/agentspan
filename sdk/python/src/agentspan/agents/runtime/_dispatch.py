@@ -427,12 +427,10 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
                         _injected_env_keys.append(k)
 
                 # Also set credential context for non-isolated tools using get_credential()
-                from agentspan.agents.runtime.credentials.accessor import (
-                    clear_credential_context as _clear_credential_context,
-                    set_credential_context,
-                )
-                clear_credential_context = _clear_credential_context
-                set_credential_context(resolved_credentials)
+                from agentspan.agents.runtime.credentials import accessor as credential_accessor
+
+                clear_credential_context = credential_accessor.clear_credential_context
+                credential_accessor.set_credential_context(resolved_credentials)
 
             try:
                 result = _execute(
