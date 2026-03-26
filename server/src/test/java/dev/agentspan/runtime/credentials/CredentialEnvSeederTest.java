@@ -133,7 +133,7 @@ class CredentialEnvSeederTest {
     }
 
     @Test
-    void seeder_storesGitHubCliCredentials_fromEnv() throws Exception {
+    void seeder_storesGitHubCredentials_inRealDb() throws Exception {
         Function<String, String> envLookup = name -> switch (name) {
             case "GH_TOKEN" -> "ghp-test-gh-token";
             case "GITHUB_TOKEN" -> "ghp-test-github-token";
