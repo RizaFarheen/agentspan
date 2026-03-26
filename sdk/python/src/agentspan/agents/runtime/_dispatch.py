@@ -205,6 +205,7 @@ _CIRCUIT_BREAKER_THRESHOLD = 10
 
 # Current execution context for ToolContext injection
 _current_context = {}
+_MISSING = object()
 
 
 def reset_circuit_breaker(tool_name: str) -> None:
@@ -349,11 +350,12 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
             # 1. Module-level registry (works with fork, not spawn)
             # 2. Closure variable tool_def (works with fork)
             # 3. _tool_def attribute on tool_func (works everywhere)
-            _td = _tool_def_registry.get(tool_name) or tool_def
+            _td = _tool_def_registry.get(tool_name) or tool_def or getattr(tool_func, "_tool_def", None)
             raw_credentials = list(getattr(_td, "credentials", [])) if _td else _get_credential_names_from_tool(tool_func)
-            task_credential_names = task.input_data.pop("_credential_names", None)
+            task_credential_names = task.input_data.pop("_credential_names", _MISSING)
             # Normalize: CredentialFile → env_var string, keep strings as-is
             from agentspan.agents.runtime.credentials.types import CredentialFile
+            has_task_credential_names = task_credential_names is not _MISSING
             if isinstance(task_credential_names, list):
                 credential_names = [str(c) for c in task_credential_names if isinstance(c, str)]
             else:
@@ -363,7 +365,7 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
                     if isinstance(c, (str, CredentialFile))
                 ]
             # Fallback: workflow-level credentials (for framework-extracted tools)
-            if not credential_names and task.workflow_instance_id:
+            if not credential_names and not has_task_credential_names and task.workflow_instance_id:
                 with _workflow_credentials_lock:
                     credential_names = list(_workflow_credentials.get(task.workflow_instance_id, []))
             resolved_credentials = {}

@@ -21,6 +21,7 @@ from agentspan.agents.runtime._dispatch import (
     _tool_registry,
     _tool_task_names,
     _tool_type_registry,
+    _workflow_credentials,
     make_tool_worker,
 )
 
@@ -53,6 +54,7 @@ def _clean_state():
     _mcp_servers.clear()
     _tool_error_counts.clear()
     _tool_approval_flags.clear()
+    _workflow_credentials.clear()
     _current_context.clear()
     yield
     _tool_registry.clear()
@@ -61,6 +63,7 @@ def _clean_state():
     _mcp_servers.clear()
     _tool_error_counts.clear()
     _tool_approval_flags.clear()
+    _workflow_credentials.clear()
     _current_context.clear()
 
 
@@ -283,6 +286,35 @@ class TestMakeToolWorker:
         assert mock_run.call_args.kwargs["timeout"] == 90
         assert mock_run.call_args.kwargs["cwd"] == "/override"
 
+    def test_cli_worker_uses_tool_func_tool_def_when_wrapper_has_no_tool_def_argument(self):
+        from agentspan.agents.cli_config import _make_cli_tool
+
+        tool_fn = _make_cli_tool(
+            allowed_commands=["gh"],
+            timeout=30,
+            working_dir="/default",
+            allow_shell=False,
+        )
+        td = tool_fn._tool_def
+        wrapper = make_tool_worker(td.func, td.name)
+
+        task = _make_task(
+            input_data={
+                "command": "git",
+                "args": ["status"],
+                "_allowed_commands": ["gh", "git"],
+                "_working_dir": None,
+            }
+        )
+
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok\n", stderr="")
+            result = wrapper(task)
+
+        assert result.status == "COMPLETED"
+        assert mock_run.call_args.args[0] == ["git", "status"]
+        assert mock_run.call_args.kwargs["cwd"] is None
+
     def test_cli_worker_resets_runtime_policy_between_tasks(self):
         from agentspan.agents.cli_config import _make_cli_tool
 
@@ -373,6 +405,38 @@ class TestMakeToolWorker:
         assert captured["token"] == "exec-token"
         assert captured["credential_names"] == ["ALT_TOKEN"]
         assert result.output_data == {"alt": "alt-value", "default": None}
+
+    def test_empty_task_credential_names_prevent_shared_credential_fallback(self, monkeypatch):
+        from agentspan.agents.tool import tool
+
+        class _FailFetcher:
+            def fetch(self, token, credential_names):
+                raise AssertionError(f"fetch should not be called: {token} {credential_names}")
+
+        monkeypatch.setattr(
+            "agentspan.agents.runtime._dispatch._get_credential_fetcher",
+            lambda: _FailFetcher(),
+        )
+        _workflow_credentials["test-wf-001"] = ["WF_TOKEN"]
+
+        @tool(credentials=["DEFAULT_TOKEN"])
+        def read_tokens() -> dict:
+            return {
+                "wf": os.getenv("WF_TOKEN"),
+                "default": os.getenv("DEFAULT_TOKEN"),
+            }
+
+        td = read_tokens._tool_def
+        wrapper = make_tool_worker(td.func, td.name, tool_def=td)
+        result = wrapper(
+            _make_task(
+                input_data={"_credential_names": []},
+                workflow_instance_id="test-wf-001",
+            )
+        )
+
+        assert result.status == "COMPLETED"
+        assert result.output_data == {"wf": None, "default": None}
 
 
 # ── Guardrail integration with make_tool_worker ────────────────────────

@@ -264,6 +264,7 @@ public class ToolCompiler {
                 } else if ("cli".equals(toolType)) {
                     Map<String, Object> cliEntry = new LinkedHashMap<>();
                     cliEntry.put("allowedCommands", cfg.getOrDefault("allowedCommands", Collections.emptyList()));
+                    cliEntry.put("credentials", cfg.getOrDefault("credentials", Collections.emptyList()));
                     if (cfg.containsKey("allowShell")) {
                         cliEntry.put("allowShell", cfg.get("allowShell"));
                     }
@@ -272,9 +273,6 @@ public class ToolCompiler {
                     }
                     if (cfg.containsKey("workingDir")) {
                         cliEntry.put("workingDir", cfg.get("workingDir"));
-                    }
-                    if (cfg.containsKey("credentials")) {
-                        cliEntry.put("credentials", cfg.get("credentials"));
                     }
                     cliConfig.put(tool.getName(), cliEntry);
                 } else if ("mcp".equals(toolType)) {
