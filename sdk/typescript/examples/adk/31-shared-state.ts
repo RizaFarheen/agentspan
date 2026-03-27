@@ -64,7 +64,7 @@ const clearList = new FunctionTool({
 
 // ── Agent ────────────────────────────────────────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'shopping_assistant',
   model,
   instruction:
@@ -89,4 +89,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('31-shared-state.ts') || process.argv[1]?.endsWith('31-shared-state.js')) {
+  main().catch(console.error);
+}

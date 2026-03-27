@@ -14,7 +14,7 @@ import { AgentRuntime } from '../../src/index.js';
 
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'greeter',
   model,
   instruction: 'You are a friendly greeter. Reply with a warm hello and one fun fact.',
@@ -33,4 +33,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('00-hello-world.ts') || process.argv[1]?.endsWith('00-hello-world.js')) {
+  main().catch(console.error);
+}

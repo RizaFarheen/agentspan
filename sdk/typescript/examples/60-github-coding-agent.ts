@@ -317,16 +317,15 @@ const prompt =
   'Pick an open issue from the GitHub repository, implement the ' +
   'feature or fix the bug, get it reviewed by QA, and create a PR.';
 
-console.log('='.repeat(60));
-console.log('  GitHub Coding Agent + QA Tester');
-console.log(`  Repo: ${REPO}`);
-console.log(`  Work dir: ${WORK_DIR}`);
-console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
-console.log('='.repeat(60));
-console.log(`\nPrompt: ${prompt}\n`);
-
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('60-github-coding-agent.ts') || process.argv[1]?.endsWith('60-github-coding-agent.js')) {
+  console.log('='.repeat(60));
+  console.log('  GitHub Coding Agent + QA Tester');
+  console.log(`  Repo: ${REPO}`);
+  console.log(`  Work dir: ${WORK_DIR}`);
+  console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
+  console.log('='.repeat(60));
+  console.log(`\nPrompt: ${prompt}\n`);
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(codingTeam, prompt);

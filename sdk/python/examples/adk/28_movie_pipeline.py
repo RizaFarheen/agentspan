@@ -199,10 +199,12 @@ movie_pipeline = SequentialAgent(
                 audio_designer, producer],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        movie_pipeline,
-        "Create a 3-scene short film about a robot discovering music "
-        "for the first time in a post-apocalyptic world.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            movie_pipeline,
+            "Create a 3-scene short film about a robot discovering music "
+            "for the first time in a post-apocalyptic world.",
+        )
+        result.print_result()

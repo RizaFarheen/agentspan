@@ -126,7 +126,7 @@ const estimateTaxImpact = new FunctionTool({
 
 // ── Sub-agents ────────────────────────────────────────────────────
 
-const portfolioAnalyst = new LlmAgent({
+export const portfolioAnalyst = new LlmAgent({
   name: 'portfolio_analyst',
   model,
   description: 'Analyzes client portfolios and calculates returns.',
@@ -134,7 +134,7 @@ const portfolioAnalyst = new LlmAgent({
   tools: [getPortfolio, calculateReturns],
 });
 
-const marketResearcher = new LlmAgent({
+export const marketResearcher = new LlmAgent({
   name: 'market_researcher',
   model,
   description: 'Researches market conditions and economic indicators.',
@@ -142,7 +142,7 @@ const marketResearcher = new LlmAgent({
   tools: [getMarketData, getEconomicIndicators],
 });
 
-const taxAdvisor = new LlmAgent({
+export const taxAdvisor = new LlmAgent({
   name: 'tax_advisor',
   model,
   description: 'Advises on tax implications of investment decisions.',
@@ -152,7 +152,7 @@ const taxAdvisor = new LlmAgent({
 
 // ── Coordinator ───────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'financial_advisor',
   model,
   instruction:
@@ -179,4 +179,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('17-financial-advisor.ts') || process.argv[1]?.endsWith('17-financial-advisor.js')) {
+  main().catch(console.error);
+}

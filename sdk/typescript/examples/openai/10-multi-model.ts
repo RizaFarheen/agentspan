@@ -68,7 +68,7 @@ const generateCodeSample = tool({
 
 // ── Fast, cheap model for initial triage ────────────────────────────
 
-const triage = new Agent({
+export const triage = new Agent({
   name: 'triage',
   instructions:
     'You are a documentation triage agent. Determine what the user needs ' +
@@ -83,7 +83,7 @@ const triage = new Agent({
 
 // ── More capable model for doc lookups ──────────────────────────────
 
-const docSpecialist = new Agent({
+export const docSpecialist = new Agent({
   name: 'doc_specialist',
   instructions:
     'You are a documentation specialist. Search the docs and provide ' +
@@ -95,7 +95,7 @@ const docSpecialist = new Agent({
 
 // ── Code-focused model for code generation ──────────────────────────
 
-const codeSpecialist = new Agent({
+export const codeSpecialist = new Agent({
   name: 'code_specialist',
   instructions:
     'You are a code example specialist. Generate clean, well-commented ' +
@@ -122,4 +122,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('10-multi-model.ts') || process.argv[1]?.endsWith('10-multi-model.js')) {
+  main().catch(console.error);
+}

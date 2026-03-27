@@ -70,6 +70,8 @@ agent = Agent(
     tools=[get_todo_list, add_todo],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority.")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority.")
+        result.print_result()

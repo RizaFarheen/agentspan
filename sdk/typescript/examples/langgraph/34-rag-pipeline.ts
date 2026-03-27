@@ -211,4 +211,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('34-rag-pipeline.ts') || process.argv[1]?.endsWith('34-rag-pipeline.js')) {
+  main().catch(console.error);
+}

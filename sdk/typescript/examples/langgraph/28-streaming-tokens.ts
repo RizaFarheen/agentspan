@@ -89,4 +89,7 @@ async function main() {
   await streamToConsole(PROMPT);
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('28-streaming-tokens.ts') || process.argv[1]?.endsWith('28-streaming-tokens.js')) {
+  main().catch(console.error);
+}

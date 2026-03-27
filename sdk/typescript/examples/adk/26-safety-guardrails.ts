@@ -79,7 +79,7 @@ const sanitizeResponse = new FunctionTool({
 // ── Pipeline stages ──────────────────────────────────────────────────
 
 // Main assistant generates responses
-const assistant = new LlmAgent({
+export const assistant = new LlmAgent({
   name: 'helpful_assistant',
   model,
   instruction:
@@ -89,7 +89,7 @@ const assistant = new LlmAgent({
 });
 
 // Safety checker scans the response
-const safetyChecker = new LlmAgent({
+export const safetyChecker = new LlmAgent({
   name: 'safety_checker',
   model,
   instruction:
@@ -101,7 +101,7 @@ const safetyChecker = new LlmAgent({
 });
 
 // Pipeline: generate -> check -> deliver
-const safePipeline = new SequentialAgent({
+export const safePipeline = new SequentialAgent({
   name: 'safe_assistant',
   subAgents: [assistant, safetyChecker],
 });
@@ -123,4 +123,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('26-safety-guardrails.ts') || process.argv[1]?.endsWith('26-safety-guardrails.js')) {
+  main().catch(console.error);
+}

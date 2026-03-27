@@ -20,11 +20,10 @@ export const agent = new Agent({
   instructions: 'You are a haiku poet. Write a single haiku.',
 });
 
-console.log('Streaming agent execution:');
-console.log('-'.repeat(40));
-
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('11-streaming.ts') || process.argv[1]?.endsWith('11-streaming.js')) {
+  console.log('Streaming agent execution:');
+  console.log('-'.repeat(40));
   const runtime = new AgentRuntime();
   try {
     const agentStream = await runtime.stream(

@@ -70,7 +70,7 @@ const getStoreHours = new FunctionTool({
 
 // ── Agent with globalInstruction ────────────────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'store_assistant',
   model,
   globalInstruction:
@@ -100,4 +100,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('15-global-instruction.ts') || process.argv[1]?.endsWith('15-global-instruction.js')) {
+  main().catch(console.error);
+}

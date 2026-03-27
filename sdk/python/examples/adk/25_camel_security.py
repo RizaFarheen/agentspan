@@ -22,6 +22,8 @@ from google.adk.agents import Agent, SequentialAgent
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 def fetch_user_data(user_id: str) -> dict:
     """Fetch user data from the database.
@@ -62,7 +64,6 @@ def redact_sensitive_fields(data: str) -> dict:
     """
     import json
 
-from settings import settings
     try:
         parsed = json.loads(data) if isinstance(data, str) else data
     except (json.JSONDecodeError, TypeError):
@@ -121,9 +122,11 @@ pipeline = SequentialAgent(
     sub_agents=[collector, validator, responder],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        pipeline,
-        "Tell me everything about user U001 including their financial details.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            pipeline,
+            "Tell me everything about user U001 including their financial details.",
+        )
+        result.print_result()

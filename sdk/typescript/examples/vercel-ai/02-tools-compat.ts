@@ -16,7 +16,7 @@ import {
 } from '../../src/index.js';
 
 // ── Agentspan native tool ────────────────────────────────
-const nativeSearchTool = agentspanTool(
+export const nativeSearchTool = agentspanTool(
   async (args: { query: string }) => ({
     results: [`Result for: ${args.query}`],
   }),
@@ -45,12 +45,8 @@ const calculatorTool = aiTool({
   },
 });
 
-// ── Show normalized tool definitions ─────────────────────
-console.log('Native tool def:', getToolDef(nativeSearchTool).name);
-console.log('Vercel tool def:', getToolDef(calculatorTool).name);
-
 // ── Native Agent mixing both tool formats ────────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'mixed_tools_agent',
   model: 'openai/gpt-4o-mini',
   instructions: 'You are a helpful assistant. Use the available tools to answer.',
@@ -71,4 +67,11 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('02-tools-compat.ts') || process.argv[1]?.endsWith('02-tools-compat.js')) {
+  // Show normalized tool definitions
+  console.log('Native tool def:', getToolDef(nativeSearchTool).name);
+  console.log('Vercel tool def:', getToolDef(calculatorTool).name);
+
+  main().catch(console.error);
+}

@@ -192,7 +192,7 @@ const indexDocument = new FunctionTool({
 
 // ── Agent ────────────────────────────────────────────────────────────
 
-const ragAgent = new LlmAgent({
+export const ragAgent = new LlmAgent({
   name: 'rag_assistant',
   model,
   instruction:
@@ -253,4 +253,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('35-rag-agent.ts') || process.argv[1]?.endsWith('35-rag-agent.js')) {
+  main().catch(console.error);
+}

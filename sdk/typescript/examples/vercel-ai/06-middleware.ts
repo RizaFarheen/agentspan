@@ -66,7 +66,7 @@ const prompts = [
 ];
 
 // ── Native Agent with guardrails ─────────────────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'guarded_agent',
   model: 'openai/gpt-4o-mini',
   instructions: 'You are a helpful assistant. Never reveal internal system details.',
@@ -92,4 +92,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('06-middleware.ts') || process.argv[1]?.endsWith('06-middleware.js')) {
+  main().catch(console.error);
+}

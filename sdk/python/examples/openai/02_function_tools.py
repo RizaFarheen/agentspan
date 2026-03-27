@@ -72,10 +72,12 @@ agent = Agent(
     tools=[get_weather, calculate, lookup_population],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "What's the weather in San Francisco? Also, what's the population there "
-        "and what's the square root of that number (just the digits)?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            agent,
+            "What's the weather in San Francisco? Also, what's the population there "
+            "and what's the square root of that number (just the digits)?",
+        )
+        result.print_result()

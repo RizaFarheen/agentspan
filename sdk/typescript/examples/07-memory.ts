@@ -25,8 +25,6 @@ conversationMem.addSystemMessage('You are a helpful research assistant.');
 conversationMem.addUserMessage('I need help researching quantum computing.');
 conversationMem.addAssistantMessage('I can help with that! What specific aspect?');
 
-console.log('Conversation messages:', conversationMem.toChatMessages().length);
-
 // ── SemanticMemory with InMemoryStore ───────────────────
 
 const store = new InMemoryStore();
@@ -36,13 +34,6 @@ const semanticMem = new SemanticMemory({ store });
 semanticMem.add('Quantum computing uses qubits instead of classical bits.');
 semanticMem.add('Machine learning models can classify images with high accuracy.');
 semanticMem.add('Quantum error correction is essential for practical quantum computers.');
-
-// Search for relevant articles
-const results = semanticMem.search('quantum error', 2);
-console.log('\nSemantic search results:');
-for (const entry of results) {
-  console.log(`  - ${entry.content}`);
-}
 
 // ── Tool that queries semantic memory ───────────────────
 
@@ -86,6 +77,13 @@ async function main() {
 
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('07-memory.ts') || process.argv[1]?.endsWith('07-memory.js')) {
+  console.log('Conversation messages:', conversationMem.toChatMessages().length);
+
+  const results = semanticMem.search('quantum error', 2);
+  console.log('\nSemantic search results:');
+  for (const entry of results) {
+    console.log(`  - ${entry.content}`);
+  }
 
   main().catch(console.error);
 }

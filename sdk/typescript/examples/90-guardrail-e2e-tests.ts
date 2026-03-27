@@ -479,15 +479,14 @@ async function runTests(runtime: AgentRuntime, runner: TestRunner) {
 
 // -- Main --------------------------------------------------------------------
 
-console.log('='.repeat(90));
-console.log('  Guardrail E2E Test Suite -- 27-cell matrix');
-console.log('  Position (3) x Type (3) x OnFail (3)');
-console.log('='.repeat(90));
-
-const runner = new TestRunner();
-
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('90-guardrail-e2e-tests.ts') || process.argv[1]?.endsWith('90-guardrail-e2e-tests.js')) {
+  console.log('='.repeat(90));
+  console.log('  Guardrail E2E Test Suite -- 27-cell matrix');
+  console.log('  Position (3) x Type (3) x OnFail (3)');
+  console.log('='.repeat(90));
+
+  const runner = new TestRunner();
   const runtime = new AgentRuntime();
 
   try {

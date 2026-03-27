@@ -61,14 +61,13 @@ const prompt =
   'the Sieve of Eratosthenes. Then use it to find all primes up to 100 ' +
   'and calculate their sum.';
 
-console.log('='.repeat(60));
-console.log('  Coding Agent + QA Tester (Swarm)');
-console.log('  coder <-> qa_tester (LLM-driven handoffs)');
-console.log('='.repeat(60));
-console.log(`\nPrompt: ${prompt}\n`);
-
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('59-coding-agent.ts') || process.argv[1]?.endsWith('59-coding-agent.js')) {
+  console.log('='.repeat(60));
+  console.log('  Coding Agent + QA Tester (Swarm)');
+  console.log('  coder <-> qa_tester (LLM-driven handoffs)');
+  console.log('='.repeat(60));
+  console.log(`\nPrompt: ${prompt}\n`);
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(coder, prompt);

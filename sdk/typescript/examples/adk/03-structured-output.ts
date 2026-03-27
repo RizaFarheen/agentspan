@@ -43,7 +43,7 @@ const RecipeSchema = z.object({
 
 // ── Agent ────────────────────────────────────────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'recipe_generator',
   model,
   instruction:
@@ -72,4 +72,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('03-structured-output.ts') || process.argv[1]?.endsWith('03-structured-output.js')) {
+  main().catch(console.error);
+}

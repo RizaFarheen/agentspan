@@ -61,8 +61,10 @@ agent = Agent(
     tools=[search_documentation],
 )
 
-with AgentRuntime() as runtime:
-    print("Streaming events:\n")
-    for event in runtime.stream(agent, "How do I authenticate with the API?"):
-        print(f"  [{event.type}] {event.data}")
-    print("\nStream complete.")
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        print("Streaming events:\n")
+        for event in runtime.stream(agent, "How do I authenticate with the API?"):
+            print(f"  [{event.type}] {event.data}")
+        print("\nStream complete.")

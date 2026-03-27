@@ -88,9 +88,11 @@ agent = Agent(
     tools=[get_user_preferences, search_tutorials],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "I want to learn Python. What tutorials do you recommend?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            agent,
+            "I want to learn Python. What tutorials do you recommend?",
+        )
+        result.print_result()

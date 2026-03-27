@@ -45,7 +45,7 @@ const lookupTime = aiTool({
 });
 
 // ── Native Agent with multiple tools and maxTurns ────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'multistep_agent',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -69,4 +69,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('05-multi-step.ts') || process.argv[1]?.endsWith('05-multi-step.js')) {
+  main().catch(console.error);
+}

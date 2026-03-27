@@ -69,7 +69,7 @@ const lookupPopulation = tool({
 
 // ── Agent ───────────────────────────────────────────────────────────
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'multi_tool_agent',
   instructions:
     'You are a helpful assistant with access to weather, calculator, ' +
@@ -94,4 +94,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('02-function-tools.ts') || process.argv[1]?.endsWith('02-function-tools.js')) {
+  main().catch(console.error);
+}

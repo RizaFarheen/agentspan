@@ -63,7 +63,7 @@ const getProductInfo = tool({
 
 // ── Specialist agents ───────────────────────────────────────────────
 
-const orderAgent = new Agent({
+export const orderAgent = new Agent({
   name: 'order_specialist',
   instructions:
     'You handle order-related inquiries. Use the check_order_status tool ' +
@@ -72,7 +72,7 @@ const orderAgent = new Agent({
   tools: [checkOrderStatus],
 });
 
-const refundAgent = new Agent({
+export const refundAgent = new Agent({
   name: 'refund_specialist',
   instructions:
     'You handle refund requests. Use the process_refund tool to initiate ' +
@@ -81,7 +81,7 @@ const refundAgent = new Agent({
   tools: [processRefund],
 });
 
-const salesAgent = new Agent({
+export const salesAgent = new Agent({
   name: 'sales_specialist',
   instructions:
     'You handle product inquiries and sales. Use the get_product_info tool ' +
@@ -92,7 +92,7 @@ const salesAgent = new Agent({
 
 // ── Triage agent with handoffs ──────────────────────────────────────
 
-const triageAgent = new Agent({
+export const triageAgent = new Agent({
   name: 'customer_service_triage',
   instructions:
     'You are a customer service triage agent. Determine the customer\'s need ' +
@@ -119,4 +119,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('04-handoffs.ts') || process.argv[1]?.endsWith('04-handoffs.js')) {
+  main().catch(console.error);
+}

@@ -22,7 +22,7 @@ const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 // ── Sub-agents ───────────────────────────────────────────────────────
 
 // Sub-agent with no parent context
-const independentSummarizer = new LlmAgent({
+export const independentSummarizer = new LlmAgent({
   name: 'independent_summarizer',
   model,
   description: 'Summarizes text without any prior conversation context.',
@@ -32,7 +32,7 @@ const independentSummarizer = new LlmAgent({
 });
 
 // Sub-agent that sees parent context (default)
-const contextAwareHelper = new LlmAgent({
+export const contextAwareHelper = new LlmAgent({
   name: 'context_aware_helper',
   model,
   description: 'A helpful assistant that builds on prior conversation context.',
@@ -42,7 +42,7 @@ const contextAwareHelper = new LlmAgent({
 
 // ── Coordinator ──────────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'coordinator',
   model,
   instruction:
@@ -69,4 +69,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('29-include-contents.ts') || process.argv[1]?.endsWith('29-include-contents.js')) {
+  main().catch(console.error);
+}

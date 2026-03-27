@@ -63,7 +63,7 @@ const extractKeywords = tool({
 
 // ── Specialist agents ───────────────────────────────────────────────
 
-const sentimentAgent = new Agent({
+export const sentimentAgent = new Agent({
   name: 'sentiment_analyzer',
   instructions:
     'You analyze text sentiment. Use the analyze_sentiment tool and provide a brief interpretation.',
@@ -71,7 +71,7 @@ const sentimentAgent = new Agent({
   tools: [analyzeSentiment],
 });
 
-const keywordAgent = new Agent({
+export const keywordAgent = new Agent({
   name: 'keyword_extractor',
   instructions:
     'You extract keywords from text. Use the extract_keywords tool and categorize the results.',
@@ -81,7 +81,7 @@ const keywordAgent = new Agent({
 
 // ── Manager agent ───────────────────────────────────────────────────
 
-const manager = new Agent({
+export const manager = new Agent({
   name: 'text_analysis_manager',
   instructions:
     'You are a text analysis manager. When given text to analyze:\n' +
@@ -119,4 +119,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('08-agent-as-tool.ts') || process.argv[1]?.endsWith('08-agent-as-tool.js')) {
+  main().catch(console.error);
+}

@@ -80,7 +80,7 @@ const checkOrderStatus = new FunctionTool({
 
 // ── Agent with callbacks ────────────────────────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'customer_service_agent',
   model,
   instruction:
@@ -122,4 +122,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('14-callbacks.ts') || process.argv[1]?.endsWith('14-callbacks.js')) {
+  main().catch(console.error);
+}

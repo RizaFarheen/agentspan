@@ -166,10 +166,12 @@ coordinator = Agent(
     sub_agents=[reliability_lead, security_lead],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        coordinator,
-        "Give me a full platform health assessment. Focus on the payments service "
-        "which seems to be having issues.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            coordinator,
+            "Give me a full platform health assessment. Focus on the payments service "
+            "which seems to be having issues.",
+        )
+        result.print_result()

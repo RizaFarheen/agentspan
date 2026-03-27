@@ -89,4 +89,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('02-react-with-tools.ts') || process.argv[1]?.endsWith('02-react-with-tools.js')) {
+  main().catch(console.error);
+}

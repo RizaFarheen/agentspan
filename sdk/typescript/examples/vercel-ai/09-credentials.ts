@@ -29,7 +29,7 @@ const fetchReport = aiTool({
 });
 
 // ── Native Agent with credentials ────────────────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'credentialed_agent',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -57,4 +57,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('09-credentials.ts') || process.argv[1]?.endsWith('09-credentials.js')) {
+  main().catch(console.error);
+}

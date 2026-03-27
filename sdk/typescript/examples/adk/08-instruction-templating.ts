@@ -75,7 +75,7 @@ const searchTutorials = new FunctionTool({
 
 // The {user_name} and {expertise_level} placeholders get replaced
 // from session state when the agent runs in ADK.
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'adaptive_tutor',
   model,
   instruction:
@@ -102,4 +102,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('08-instruction-templating.ts') || process.argv[1]?.endsWith('08-instruction-templating.js')) {
+  main().catch(console.error);
+}

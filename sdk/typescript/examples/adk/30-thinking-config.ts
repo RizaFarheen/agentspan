@@ -40,7 +40,7 @@ const calculate = new FunctionTool({
 
 // ── Agent with thinking config ───────────────────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'deep_thinker',
   model,
   instruction:
@@ -71,4 +71,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('30-thinking-config.ts') || process.argv[1]?.endsWith('30-thinking-config.js')) {
+  main().catch(console.error);
+}

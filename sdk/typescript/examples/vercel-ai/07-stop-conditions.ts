@@ -51,7 +51,7 @@ const summarize = aiTool({
 const termination = new TextMention('ANALYSIS COMPLETE').or(new MaxMessage(10));
 
 // ── Native Agent with AI SDK tools and termination ───────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'stop_conditions_agent',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -80,4 +80,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('07-stop-conditions.ts') || process.argv[1]?.endsWith('07-stop-conditions.js')) {
+  main().catch(console.error);
+}

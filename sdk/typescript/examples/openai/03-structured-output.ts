@@ -35,7 +35,7 @@ const MovieList = z.object({
 
 // ── Agent ───────────────────────────────────────────────────────────
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'movie_recommender',
   instructions:
     'You are a movie recommendation expert. When asked for movie suggestions, ' +
@@ -63,4 +63,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('03-structured-output.ts') || process.argv[1]?.endsWith('03-structured-output.js')) {
+  main().catch(console.error);
+}

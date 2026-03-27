@@ -63,11 +63,10 @@ export const mediaAgent = new Agent({
 
 // -- Run ----------------------------------------------------------------------
 
-console.log('Media Generation Agent');
-console.log('='.repeat(60));
-
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('40-media-generation-agent.ts') || process.argv[1]?.endsWith('40-media-generation-agent.js')) {
+  console.log('Media Generation Agent');
+  console.log('='.repeat(60));
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(

@@ -83,7 +83,7 @@ const scoreSafety = new FunctionTool({
 // ── Pipeline stages ──────────────────────────────────────────────────
 
 // Red-team agent crafts adversarial test prompts
-const redTeam = new LlmAgent({
+export const redTeam = new LlmAgent({
   name: 'red_team_agent',
   model,
   instruction:
@@ -96,7 +96,7 @@ const redTeam = new LlmAgent({
 });
 
 // Target agent -- the system being tested
-const target = new LlmAgent({
+export const target = new LlmAgent({
   name: 'target_agent',
   model,
   instruction:
@@ -107,7 +107,7 @@ const target = new LlmAgent({
 });
 
 // Evaluator agent scores the target's response
-const evaluator = new LlmAgent({
+export const evaluator = new LlmAgent({
   name: 'security_evaluator',
   model,
   instruction:
@@ -119,7 +119,7 @@ const evaluator = new LlmAgent({
 });
 
 // Pipeline: attack -> respond -> evaluate
-const securityTest = new SequentialAgent({
+export const securityTest = new SequentialAgent({
   name: 'security_test_pipeline',
   subAgents: [redTeam, target, evaluator],
 });
@@ -141,4 +141,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('27-security-agent.ts') || process.argv[1]?.endsWith('27-security-agent.js')) {
+  main().catch(console.error);
+}

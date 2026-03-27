@@ -82,7 +82,7 @@ const addTodo = tool({
 
 // ── Agent ───────────────────────────────────────────────────────────
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'personal_assistant',
   instructions: getDynamicInstructions,
   model: 'gpt-4o-mini',
@@ -103,4 +103,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('09-dynamic-instructions.ts') || process.argv[1]?.endsWith('09-dynamic-instructions.js')) {
+  main().catch(console.error);
+}

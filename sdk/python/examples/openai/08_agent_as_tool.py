@@ -92,11 +92,13 @@ manager = Agent(
     ],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        manager,
-        "Analyze this review: 'The new laptop is excellent! The display is amazing "
-        "and the battery life is wonderful. However, the keyboard feels terrible "
-        "and the trackpad is the worst I've used.'",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            manager,
+            "Analyze this review: 'The new laptop is excellent! The display is amazing "
+            "and the battery life is wonderful. However, the keyboard feels terrible "
+            "and the trackpad is the worst I've used.'",
+        )
+        result.print_result()

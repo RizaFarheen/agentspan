@@ -48,11 +48,13 @@ coordinator = Agent(
     sub_agents=[independent_summarizer, context_aware_helper],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        coordinator,
-        "Please summarize this: 'The quick brown fox jumps over the lazy dog. "
-        "This sentence contains every letter of the alphabet and is commonly "
-        "used for typography testing.'",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            coordinator,
+            "Please summarize this: 'The quick brown fox jumps over the lazy dog. "
+            "This sentence contains every letter of the alphabet and is commonly "
+            "used for typography testing.'",
+        )
+        result.print_result()

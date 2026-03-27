@@ -86,7 +86,7 @@ const checkPerformanceMetrics = new FunctionTool({
 
 // ── Level 2: Team lead agents ─────────────────────────────────────────
 
-const opsAgent = new LlmAgent({
+export const opsAgent = new LlmAgent({
   name: 'ops_specialist',
   model,
   description: 'Monitors service health and investigates operational issues.',
@@ -94,7 +94,7 @@ const opsAgent = new LlmAgent({
   tools: [checkApiHealth, checkErrorLogs],
 });
 
-const securityAgent = new LlmAgent({
+export const securityAgent = new LlmAgent({
   name: 'security_specialist',
   model,
   description: 'Runs security scans and identifies vulnerabilities.',
@@ -102,7 +102,7 @@ const securityAgent = new LlmAgent({
   tools: [runSecurityScan],
 });
 
-const performanceAgent = new LlmAgent({
+export const performanceAgent = new LlmAgent({
   name: 'performance_specialist',
   model,
   description: 'Analyzes performance metrics and identifies bottlenecks.',
@@ -112,7 +112,7 @@ const performanceAgent = new LlmAgent({
 
 // ── Level 1: Team leads ───────────────────────────────────────────────
 
-const reliabilityLead = new LlmAgent({
+export const reliabilityLead = new LlmAgent({
   name: 'reliability_team_lead',
   model,
   description: 'Leads the reliability team covering ops and performance.',
@@ -123,7 +123,7 @@ const reliabilityLead = new LlmAgent({
   subAgents: [opsAgent, performanceAgent],
 });
 
-const securityLead = new LlmAgent({
+export const securityLead = new LlmAgent({
   name: 'security_team_lead',
   model,
   description: 'Leads the security team for vulnerability assessment.',
@@ -135,7 +135,7 @@ const securityLead = new LlmAgent({
 
 // ── Top level: Platform coordinator ──────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'platform_coordinator',
   model,
   instruction:
@@ -165,4 +165,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('10-hierarchical-agents.ts') || process.argv[1]?.endsWith('10-hierarchical-agents.js')) {
+  main().catch(console.error);
+}

@@ -20,7 +20,7 @@ const PersonSchema = z.object({
 type Person = z.infer<typeof PersonSchema>;
 
 // ── Native Agent with structured output ──────────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'structured_output_agent',
   model: 'openai/gpt-4o-mini',
   instructions: 'Generate fictional but realistic profiles when asked.',
@@ -49,4 +49,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('04-structured-output.ts') || process.argv[1]?.endsWith('04-structured-output.js')) {
+  main().catch(console.error);
+}

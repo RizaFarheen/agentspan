@@ -226,7 +226,7 @@ const searchWeb = new FunctionTool({
   },
 });
 
-const searchAgent = new LlmAgent({
+export const searchAgent = new LlmAgent({
   name: 'search_agent',
   model,
   description: 'A technical search assistant for Conductor workflow issues.',
@@ -240,7 +240,7 @@ const searchAgent = new LlmAgent({
 
 // ── Root agent ───────────────────────────────────────────────────────
 
-const softwareAssistant = new LlmAgent({
+export const softwareAssistant = new LlmAgent({
   name: 'software_assistant',
   model,
   instruction:
@@ -283,4 +283,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('33-software-bug-assistant.ts') || process.argv[1]?.endsWith('33-software-bug-assistant.js')) {
+  main().catch(console.error);
+}

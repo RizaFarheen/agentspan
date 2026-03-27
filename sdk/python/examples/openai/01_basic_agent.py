@@ -28,6 +28,8 @@ agent = Agent(
     model=settings.llm_model,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Say hello and tell me a fun fact about the Python programming language.")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Say hello and tell me a fun fact about the Python programming language.")
+        result.print_result()

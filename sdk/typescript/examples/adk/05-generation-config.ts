@@ -18,7 +18,7 @@ const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // ── Precise agent -- low temperature for factual responses ──────────
 
-const factualAgent = new LlmAgent({
+export const factualAgent = new LlmAgent({
   name: 'fact_checker',
   model,
   instruction:
@@ -31,7 +31,7 @@ const factualAgent = new LlmAgent({
 
 // ── Creative agent -- high temperature for creative writing ─────────
 
-const creativeAgent = new LlmAgent({
+export const creativeAgent = new LlmAgent({
   name: 'storyteller',
   model,
   instruction:
@@ -64,4 +64,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('05-generation-config.ts') || process.argv[1]?.endsWith('05-generation-config.js')) {
+  main().catch(console.error);
+}

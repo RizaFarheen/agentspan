@@ -17,7 +17,7 @@ import { AgentRuntime } from '../../src/index.js';
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // Three analysts run in parallel
-const marketAnalyst = new LlmAgent({
+export const marketAnalyst = new LlmAgent({
   name: 'market_analyst',
   model,
   description: 'Analyzes market trends.',
@@ -26,7 +26,7 @@ const marketAnalyst = new LlmAgent({
     'provide a brief 2-3 sentence market analysis. Focus on trends and competition.',
 });
 
-const techAnalyst = new LlmAgent({
+export const techAnalyst = new LlmAgent({
   name: 'tech_analyst',
   model,
   description: 'Evaluates technology aspects.',
@@ -35,7 +35,7 @@ const techAnalyst = new LlmAgent({
     'provide a brief 2-3 sentence technical evaluation. Focus on innovation and capabilities.',
 });
 
-const riskAnalyst = new LlmAgent({
+export const riskAnalyst = new LlmAgent({
   name: 'risk_analyst',
   model,
   description: 'Assesses risks.',
@@ -45,7 +45,7 @@ const riskAnalyst = new LlmAgent({
 });
 
 // All three run in parallel
-const parallelAnalysis = new ParallelAgent({
+export const parallelAnalysis = new ParallelAgent({
   name: 'parallel_analysis',
   subAgents: [marketAnalyst, techAnalyst, riskAnalyst],
 });
@@ -66,4 +66,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('12-parallel-agent.ts') || process.argv[1]?.endsWith('12-parallel-agent.js')) {
+  main().catch(console.error);
+}

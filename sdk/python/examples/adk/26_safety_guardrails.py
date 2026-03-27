@@ -110,10 +110,12 @@ safe_pipeline = SequentialAgent(
     sub_agents=[assistant, safety_checker],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        safe_pipeline,
-        "What are the contact details for our support team? "
-        "Include email support@company.com and phone 555-123-4567.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            safe_pipeline,
+            "What are the contact details for our support team? "
+            "Include email support@company.com and phone 555-123-4567.",
+        )
+        result.print_result()

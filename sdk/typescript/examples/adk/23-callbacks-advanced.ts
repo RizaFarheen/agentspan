@@ -47,7 +47,7 @@ const inspectAfterModel: AfterModelCallback = ({ context, response }) => {
 
 // ── Agent with callbacks ──────────────────────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'monitored_assistant',
   model,
   instruction:
@@ -73,4 +73,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('23-callbacks-advanced.ts') || process.argv[1]?.endsWith('23-callbacks-advanced.js')) {
+  main().catch(console.error);
+}

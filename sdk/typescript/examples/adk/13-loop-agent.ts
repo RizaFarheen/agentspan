@@ -17,7 +17,7 @@ import { AgentRuntime } from '../../src/index.js';
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // Writer drafts content
-const writer = new LlmAgent({
+export const writer = new LlmAgent({
   name: 'draft_writer',
   model,
   instruction:
@@ -27,7 +27,7 @@ const writer = new LlmAgent({
 });
 
 // Critic reviews and provides feedback
-const critic = new LlmAgent({
+export const critic = new LlmAgent({
   name: 'critic',
   model,
   instruction:
@@ -38,13 +38,13 @@ const critic = new LlmAgent({
 });
 
 // Each iteration: write -> critique
-const iteration = new SequentialAgent({
+export const iteration = new SequentialAgent({
   name: 'write_critique_cycle',
   subAgents: [writer, critic],
 });
 
 // Loop the write-critique cycle 3 times
-const refinementLoop = new LoopAgent({
+export const refinementLoop = new LoopAgent({
   name: 'refinement_loop',
   subAgents: [iteration],
   maxIterations: 3,
@@ -66,4 +66,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('13-loop-agent.ts') || process.argv[1]?.endsWith('13-loop-agent.js')) {
+  main().catch(console.error);
+}

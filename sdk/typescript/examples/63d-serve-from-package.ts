@@ -31,7 +31,7 @@ const healthCheck = tool(
   },
 );
 
-const monitoringAgent = new Agent({
+export const monitoringAgent = new Agent({
   name: 'monitoring',
   model: llmModel,
   tools: [healthCheck],
@@ -40,14 +40,17 @@ const monitoringAgent = new Agent({
 
 // -- Serve -------------------------------------------------------------------
 
-console.log('Serving monitoring agent.');
-console.log('To also serve discovered agents, use discoverAgents().');
-console.log('');
-console.log('Usage:');
-console.log('  import { discoverAgents } from "../src/index.js";');
-console.log('  const agents = await discoverAgents(["./agents"]);');
-console.log('  await runtime.serve(monitoringAgent, ...agents);');
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('63d-serve-from-package.ts') || process.argv[1]?.endsWith('63d-serve-from-package.js')) {
+  console.log('Serving monitoring agent.');
+  console.log('To also serve discovered agents, use discoverAgents().');
+  console.log('');
+  console.log('Usage:');
+  console.log('  import { discoverAgents } from "../src/index.js";');
+  console.log('  const agents = await discoverAgents(["./agents"]);');
+  console.log('  await runtime.serve(monitoringAgent, ...agents);');
 
-// In production, uncomment:
-// const runtime = new AgentRuntime();
-// await runtime.serve(monitoringAgent);  // blocks until Ctrl+C / SIGTERM
+  // In production, uncomment:
+  // const runtime = new AgentRuntime();
+  // await runtime.serve(monitoringAgent);  // blocks until Ctrl+C / SIGTERM
+}

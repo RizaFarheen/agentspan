@@ -70,7 +70,7 @@ const writeSection = new FunctionTool({
 
 // ── Agent with planner (via thinkingConfig) ──────────────────────────
 
-const agent = new LlmAgent({
+export const agent = new LlmAgent({
   name: 'research_writer',
   model,
   instruction:
@@ -103,4 +103,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('24-planner.ts') || process.argv[1]?.endsWith('24-planner.js')) {
+  main().catch(console.error);
+}

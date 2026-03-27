@@ -104,4 +104,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('05-tool-node.ts') || process.argv[1]?.endsWith('05-tool-node.js')) {
+  main().catch(console.error);
+}

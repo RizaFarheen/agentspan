@@ -25,7 +25,7 @@ const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // ── Specialist agents with transfer restrictions ────────────────────
 
-const specialistA = new LlmAgent({
+export const specialistA = new LlmAgent({
   name: 'data_collector',
   model,
   instruction:
@@ -35,7 +35,7 @@ const specialistA = new LlmAgent({
   disallowTransferToParent: true,
 });
 
-const specialistB = new LlmAgent({
+export const specialistB = new LlmAgent({
   name: 'analyst',
   model,
   instruction:
@@ -43,7 +43,7 @@ const specialistB = new LlmAgent({
     'a concise analysis with insights. You can transfer to any agent.',
 });
 
-const specialistC = new LlmAgent({
+export const specialistC = new LlmAgent({
   name: 'summarizer',
   model,
   instruction:
@@ -55,7 +55,7 @@ const specialistC = new LlmAgent({
 
 // ── Coordinator ───────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'research_coordinator',
   model,
   instruction:
@@ -83,4 +83,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('22-transfer-control.ts') || process.argv[1]?.endsWith('22-transfer-control.js')) {
+  main().catch(console.error);
+}

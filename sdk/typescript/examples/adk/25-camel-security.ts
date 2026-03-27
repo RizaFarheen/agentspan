@@ -75,7 +75,7 @@ const redactSensitiveFields = new FunctionTool({
 // ── Pipeline stages ──────────────────────────────────────────────────
 
 // Data collector fetches raw user data
-const collector = new LlmAgent({
+export const collector = new LlmAgent({
   name: 'data_collector',
   model,
   instruction:
@@ -86,7 +86,7 @@ const collector = new LlmAgent({
 });
 
 // Validator enforces data security policy
-const validator = new LlmAgent({
+export const validator = new LlmAgent({
   name: 'security_validator',
   model,
   instruction:
@@ -98,7 +98,7 @@ const validator = new LlmAgent({
 });
 
 // Responder formats the final answer
-const responder = new LlmAgent({
+export const responder = new LlmAgent({
   name: 'responder',
   model,
   instruction:
@@ -109,7 +109,7 @@ const responder = new LlmAgent({
 });
 
 // Sequential pipeline enforces data flow: collect -> validate -> respond
-const pipeline = new SequentialAgent({
+export const pipeline = new SequentialAgent({
   name: 'secure_data_pipeline',
   subAgents: [collector, validator, responder],
 });
@@ -130,4 +130,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('25-camel-security.ts') || process.argv[1]?.endsWith('25-camel-security.js')) {
+  main().catch(console.error);
+}

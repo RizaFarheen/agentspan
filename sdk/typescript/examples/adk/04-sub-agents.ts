@@ -74,7 +74,7 @@ const getTravelAdvisory = new FunctionTool({
 
 // ── Specialist agents ────────────────────────────────────────────────
 
-const flightAgent = new LlmAgent({
+export const flightAgent = new LlmAgent({
   name: 'flight_specialist',
   model,
   description: 'Handles flight searches and booking inquiries.',
@@ -84,7 +84,7 @@ const flightAgent = new LlmAgent({
   tools: [searchFlights],
 });
 
-const hotelAgent = new LlmAgent({
+export const hotelAgent = new LlmAgent({
   name: 'hotel_specialist',
   model,
   description: 'Handles hotel searches and accommodation inquiries.',
@@ -94,7 +94,7 @@ const hotelAgent = new LlmAgent({
   tools: [searchHotels],
 });
 
-const advisoryAgent = new LlmAgent({
+export const advisoryAgent = new LlmAgent({
   name: 'travel_advisory_specialist',
   model,
   description: 'Provides travel advisories, visa requirements, and safety information.',
@@ -106,7 +106,7 @@ const advisoryAgent = new LlmAgent({
 
 // ── Coordinator agent ────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'travel_coordinator',
   model,
   instruction:
@@ -135,4 +135,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('04-sub-agents.ts') || process.argv[1]?.endsWith('04-sub-agents.js')) {
+  main().catch(console.error);
+}

@@ -50,14 +50,14 @@ const checkStatus = tool(
 
 // -- Define agents -----------------------------------------------------------
 
-const docAssistant = new Agent({
+export const docAssistant = new Agent({
   name: 'doc_assistant',
   model: llmModel,
   tools: [searchDocs],
   instructions: 'Help users find documentation. Use search_docs to look up answers.',
 });
 
-const opsBot = new Agent({
+export const opsBot = new Agent({
   name: 'ops_bot',
   model: llmModel,
   tools: [checkStatus],
@@ -66,13 +66,16 @@ const opsBot = new Agent({
 
 // -- Serve: register workers and block ---------------------------------------
 
-console.log('Serving workers for doc_assistant + ops_bot.');
-console.log('To actually start the blocking serve loop, uncomment the runtime.serve() call.');
-console.log('');
-console.log('Usage:');
-console.log('  const runtime = new AgentRuntime();');
-console.log('  await runtime.serve(docAssistant, opsBot); // blocks until Ctrl+C / SIGTERM');
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('63b-serve.ts') || process.argv[1]?.endsWith('63b-serve.js')) {
+  console.log('Serving workers for doc_assistant + ops_bot.');
+  console.log('To actually start the blocking serve loop, uncomment the runtime.serve() call.');
+  console.log('');
+  console.log('Usage:');
+  console.log('  const runtime = new AgentRuntime();');
+  console.log('  await runtime.serve(docAssistant, opsBot); // blocks until Ctrl+C / SIGTERM');
 
-// In production, uncomment:
-// const runtime = new AgentRuntime();
-// await runtime.serve(docAssistant, opsBot);  // blocks until Ctrl+C / SIGTERM
+  // In production, uncomment:
+  // const runtime = new AgentRuntime();
+  // await runtime.serve(docAssistant, opsBot);  // blocks until Ctrl+C / SIGTERM
+}

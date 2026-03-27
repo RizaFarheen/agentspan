@@ -58,7 +58,7 @@ const searchKnowledgeBase = new FunctionTool({
   },
 });
 
-const researcher = new LlmAgent({
+export const researcher = new LlmAgent({
   name: 'researcher',
   model,
   instruction:
@@ -99,7 +99,7 @@ const compute = new FunctionTool({
   },
 });
 
-const calculator = new LlmAgent({
+export const calculator = new LlmAgent({
   name: 'calculator',
   model,
   instruction: 'You are a math assistant. Use the compute tool for calculations.',
@@ -108,7 +108,7 @@ const calculator = new LlmAgent({
 
 // ── Parent agent with AgentTool wrappers ─────────────────────────
 
-const manager = new LlmAgent({
+export const manager = new LlmAgent({
   name: 'manager',
   model,
   instruction:
@@ -140,4 +140,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('21-agent-tool.ts') || process.argv[1]?.endsWith('21-agent-tool.js')) {
+  main().catch(console.error);
+}

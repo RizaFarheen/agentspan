@@ -194,4 +194,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('18-email-drafter.ts') || process.argv[1]?.endsWith('18-email-drafter.js')) {
+  main().catch(console.error);
+}

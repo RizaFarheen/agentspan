@@ -21,22 +21,6 @@
 import { Agent, AgentRuntime, tool, isTracingEnabled } from '../src/index.js';
 import { llmModel } from './settings.js';
 
-// -- Check if OTel is available --------------------------------------------
-
-console.log(`OpenTelemetry available: ${isTracingEnabled()}`);
-
-if (isTracingEnabled()) {
-  // In a real app you'd configure OTel here:
-  // import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-  // import { ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-  // const provider = new NodeTracerProvider();
-  // provider.addSpanProcessor(new SimpleSpanProcessor(new ConsoleSpanExporter()));
-  // provider.register();
-  console.log('OTel is configured -- spans will be emitted');
-} else {
-  console.log('OTel not configured -- set OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_SERVICE_NAME to enable');
-}
-
 // -- Agent with tools ------------------------------------------------------
 
 const lookup = tool(
@@ -67,6 +51,14 @@ export const agent = new Agent({
 
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('26-opentelemetry-tracing.ts') || process.argv[1]?.endsWith('26-opentelemetry-tracing.js')) {
+  console.log(`OpenTelemetry available: ${isTracingEnabled()}`);
+
+  if (isTracingEnabled()) {
+    console.log('OTel is configured -- spans will be emitted');
+  } else {
+    console.log('OTel not configured -- set OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_SERVICE_NAME to enable');
+  }
+
   const runtime = new AgentRuntime();
   try {
     // The runtime automatically creates spans if OTel is configured.

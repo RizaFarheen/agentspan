@@ -77,7 +77,7 @@ const checkSeoKeywords = new FunctionTool({
 // ── Sub-agents ────────────────────────────────────────────────────
 
 // Research agent gathers information
-const researcher = new LlmAgent({
+export const researcher = new LlmAgent({
   name: 'blog_researcher',
   model,
   description: 'Researches topics and gathers key facts.',
@@ -89,7 +89,7 @@ const researcher = new LlmAgent({
 });
 
 // Writer creates the blog post draft
-const writer = new LlmAgent({
+export const writer = new LlmAgent({
   name: 'blog_writer',
   model,
   description: 'Writes blog post drafts based on research.',
@@ -101,7 +101,7 @@ const writer = new LlmAgent({
 });
 
 // Editor polishes the post
-const editor = new LlmAgent({
+export const editor = new LlmAgent({
   name: 'blog_editor',
   model,
   description: 'Edits and polishes blog posts.',
@@ -113,7 +113,7 @@ const editor = new LlmAgent({
 
 // ── Coordinator ───────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'content_coordinator',
   model,
   instruction:
@@ -140,4 +140,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('20-blog-writer.ts') || process.argv[1]?.endsWith('20-blog-writer.js')) {
+  main().catch(console.error);
+}

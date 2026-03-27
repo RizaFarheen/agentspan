@@ -129,4 +129,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('09-math-agent.ts') || process.argv[1]?.endsWith('09-math-agent.js')) {
+  main().catch(console.error);
+}

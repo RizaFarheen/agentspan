@@ -119,7 +119,9 @@ agent = Agent(
     ],
 )
 
-with AgentRuntime() as runtime:
-    # This should pass guardrails
-    result = runtime.run(agent, "What's the balance on account ACC-100?")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # This should pass guardrails
+        result = runtime.run(agent, "What's the balance on account ACC-100?")
+        result.print_result()

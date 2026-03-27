@@ -52,9 +52,11 @@ agent = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "Recommend 3 sci-fi movies that explore the concept of artificial intelligence.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            agent,
+            "Recommend 3 sci-fi movies that explore the concept of artificial intelligence.",
+        )
+        result.print_result()

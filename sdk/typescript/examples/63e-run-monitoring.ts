@@ -13,12 +13,15 @@
  *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
  */
 
-console.log('Run Monitoring Agent by Name');
-console.log('');
-console.log('The TypeScript SDK currently requires an Agent object for runtime.run().');
-console.log('To run the monitoring agent by name, use the HTTP API:');
-console.log('');
-console.log('  POST /api/agent/run');
-console.log('  { "name": "monitoring", "prompt": "Is everything healthy? Run a full check." }');
-console.log('');
-console.log('Or use the Python SDK: runtime.run("monitoring", "Is everything healthy?")');
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('63e-run-monitoring.ts') || process.argv[1]?.endsWith('63e-run-monitoring.js')) {
+  console.log('Run Monitoring Agent by Name');
+  console.log('');
+  console.log('The TypeScript SDK currently requires an Agent object for runtime.run().');
+  console.log('To run the monitoring agent by name, use the HTTP API:');
+  console.log('');
+  console.log('  POST /api/agent/run');
+  console.log('  { "name": "monitoring", "prompt": "Is everything healthy? Run a full check." }');
+  console.log('');
+  console.log('Or use the Python SDK: runtime.run("monitoring", "Is everything healthy?")');
+}

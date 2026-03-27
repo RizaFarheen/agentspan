@@ -26,6 +26,8 @@ agent = Agent(
     instruction="You are a friendly greeter. Reply with a warm hello and one fun fact.",
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Say hello!")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(agent, "Say hello!")
+        result.print_result()

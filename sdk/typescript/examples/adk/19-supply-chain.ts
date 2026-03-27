@@ -127,7 +127,7 @@ const getDemandForecast = new FunctionTool({
 
 // ── Sub-agents ────────────────────────────────────────────────────
 
-const inventoryAgent = new LlmAgent({
+export const inventoryAgent = new LlmAgent({
   name: 'inventory_manager',
   model,
   description: 'Manages inventory levels and supplier relationships.',
@@ -135,7 +135,7 @@ const inventoryAgent = new LlmAgent({
   tools: [getInventoryLevels, checkSupplierStatus],
 });
 
-const logisticsAgent = new LlmAgent({
+export const logisticsAgent = new LlmAgent({
   name: 'logistics_coordinator',
   model,
   description: 'Handles shipping routes and shipment tracking.',
@@ -143,7 +143,7 @@ const logisticsAgent = new LlmAgent({
   tools: [getShippingRoutes, getPendingShipments],
 });
 
-const demandAgent = new LlmAgent({
+export const demandAgent = new LlmAgent({
   name: 'demand_planner',
   model,
   description: 'Forecasts product demand.',
@@ -153,7 +153,7 @@ const demandAgent = new LlmAgent({
 
 // ── Coordinator ───────────────────────────────────────────────────
 
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'supply_chain_coordinator',
   model,
   instruction:
@@ -180,4 +180,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('19-supply-chain.ts') || process.argv[1]?.endsWith('19-supply-chain.js')) {
+  main().catch(console.error);
+}

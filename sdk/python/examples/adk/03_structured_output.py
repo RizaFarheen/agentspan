@@ -61,9 +61,11 @@ agent = Agent(
     },
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "Give me a recipe for classic Italian carbonara pasta.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            agent,
+            "Give me a recipe for classic Italian carbonara pasta.",
+        )
+        result.print_result()

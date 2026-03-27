@@ -24,7 +24,7 @@ const weatherTool = aiTool({
 });
 
 // ── Native agentspan Agent with AI SDK tool ─────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'weather_agent',
   model: 'openai/gpt-4o-mini',
   instructions: 'You are a helpful assistant. Use available tools to answer questions.',
@@ -45,4 +45,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('01-basic-agent.ts') || process.argv[1]?.endsWith('01-basic-agent.js')) {
+  main().catch(console.error);
+}

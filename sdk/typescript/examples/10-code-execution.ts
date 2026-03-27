@@ -16,11 +16,6 @@ const MODEL = process.env.AGENTSPAN_LLM_MODEL ?? 'openai/gpt-4o';
 // -- Create a local code executor --
 const executor = new LocalCodeExecutor({ timeout: 10 });
 
-// -- Test it directly --
-const directResult = executor.execute('console.log("Hello from code executor!")', 'javascript');
-console.log('Direct execution:', directResult.output);
-console.log('Success:', directResult.success);
-
 // -- Wrap as a tool --
 const codeTool = executor.asTool('run_code');
 
@@ -51,6 +46,10 @@ async function main() {
 
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('10-code-execution.ts') || process.argv[1]?.endsWith('10-code-execution.js')) {
+  // Test executor directly
+  const directResult = executor.execute('console.log("Hello from code executor!")', 'javascript');
+  console.log('Direct execution:', directResult.output);
+  console.log('Success:', directResult.success);
 
   main().catch(console.error);
 }

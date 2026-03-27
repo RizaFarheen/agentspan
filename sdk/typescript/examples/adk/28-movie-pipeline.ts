@@ -135,7 +135,7 @@ const assembleProduction = new FunctionTool({
 
 // ── Pipeline stages ──────────────────────────────────────────────────
 
-const conceptDeveloper = new LlmAgent({
+export const conceptDeveloper = new LlmAgent({
   name: 'concept_developer',
   model,
   instruction:
@@ -145,7 +145,7 @@ const conceptDeveloper = new LlmAgent({
   tools: [createConcept],
 });
 
-const scriptwriter = new LlmAgent({
+export const scriptwriter = new LlmAgent({
   name: 'scriptwriter',
   model,
   instruction:
@@ -155,7 +155,7 @@ const scriptwriter = new LlmAgent({
   tools: [writeScene],
 });
 
-const visualDirector = new LlmAgent({
+export const visualDirector = new LlmAgent({
   name: 'visual_director',
   model,
   instruction:
@@ -165,7 +165,7 @@ const visualDirector = new LlmAgent({
   tools: [describeVisual],
 });
 
-const audioDesigner = new LlmAgent({
+export const audioDesigner = new LlmAgent({
   name: 'audio_designer',
   model,
   instruction:
@@ -175,7 +175,7 @@ const audioDesigner = new LlmAgent({
   tools: [specifyAudio],
 });
 
-const producer = new LlmAgent({
+export const producer = new LlmAgent({
   name: 'producer',
   model,
   instruction:
@@ -186,7 +186,7 @@ const producer = new LlmAgent({
 });
 
 // Full pipeline: concept -> script -> visuals -> audio -> assembly
-const moviePipeline = new SequentialAgent({
+export const moviePipeline = new SequentialAgent({
   name: 'short_movie_pipeline',
   subAgents: [conceptDeveloper, scriptwriter, visualDirector, audioDesigner, producer],
 });
@@ -208,4 +208,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('28-movie-pipeline.ts') || process.argv[1]?.endsWith('28-movie-pipeline.js')) {
+  main().catch(console.error);
+}

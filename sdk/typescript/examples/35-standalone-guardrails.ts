@@ -22,7 +22,7 @@ import type { GuardrailResult, GuardrailDef } from '../src/index.js';
 
 // -- Define guardrails -------------------------------------------------------
 
-const noPii = guardrail(
+export const noPii = guardrail(
   (content: string): GuardrailResult => {
     const ccPattern = /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/;
     const ssnPattern = /\b\d{3}-\d{2}-\d{4}\b/;
@@ -38,7 +38,7 @@ const noPii = guardrail(
   { name: 'no_pii' },
 );
 
-const noProfanity = guardrail(
+export const noProfanity = guardrail(
   (content: string): GuardrailResult => {
     const banned = new Set(['damn', 'hell', 'crap']);
     const words = new Set(content.toLowerCase().split(/\s+/));
@@ -54,7 +54,7 @@ const noProfanity = guardrail(
   { name: 'no_profanity' },
 );
 
-const wordLimit = guardrail(
+export const wordLimit = guardrail(
   (content: string): GuardrailResult => {
     const count = content.split(/\s+/).filter(Boolean).length;
     if (count > 100) {
@@ -117,8 +117,11 @@ function runStandalone(): void {
 
 // ============================================================================
 
-runStandalone();
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('35-standalone-guardrails.ts') || process.argv[1]?.endsWith('35-standalone-guardrails.js')) {
+  runStandalone();
 
-console.log('-'.repeat(60));
-console.log('To run guardrails as Conductor workers (no agent needed):');
-console.log('  npx tsx examples/35-standalone-guardrails.ts --workers');
+  console.log('-'.repeat(60));
+  console.log('To run guardrails as Conductor workers (no agent needed):');
+  console.log('  npx tsx examples/35-standalone-guardrails.ts --workers');
+}

@@ -20,7 +20,7 @@ setTracingDisabled(true);
 
 // ── Creative agent with high temperature ────────────────────────────
 
-const creativeAgent = new Agent({
+export const creativeAgent = new Agent({
   name: 'creative_writer',
   instructions:
     'You are a creative writing assistant. Write with vivid imagery ' +
@@ -34,7 +34,7 @@ const creativeAgent = new Agent({
 
 // ── Precise agent with low temperature ──────────────────────────────
 
-const preciseAgent = new Agent({
+export const preciseAgent = new Agent({
   name: 'code_reviewer',
   instructions:
     'You are a precise code reviewer. Analyze code snippets for bugs, ' +
@@ -70,4 +70,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('06-model-settings.ts') || process.argv[1]?.endsWith('06-model-settings.js')) {
+  main().catch(console.error);
+}

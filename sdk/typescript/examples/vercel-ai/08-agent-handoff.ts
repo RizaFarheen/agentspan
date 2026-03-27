@@ -36,7 +36,7 @@ const analyzeData = aiTool({
 
 // ── Specialist agents ────────────────────────────────────
 
-const codeSpecialist = new Agent({
+export const codeSpecialist = new Agent({
   name: 'code_specialist',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -44,7 +44,7 @@ const codeSpecialist = new Agent({
   tools: [lookupCode],
 });
 
-const dataSpecialist = new Agent({
+export const dataSpecialist = new Agent({
   name: 'data_specialist',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -54,7 +54,7 @@ const dataSpecialist = new Agent({
 
 // ── Triage agent with handoff strategy ───────────────────
 
-const triageAgent = new Agent({
+export const triageAgent = new Agent({
   name: 'triage_agent',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -89,4 +89,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('08-agent-handoff.ts') || process.argv[1]?.endsWith('08-agent-handoff.js')) {
+  main().catch(console.error);
+}

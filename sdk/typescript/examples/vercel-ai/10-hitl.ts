@@ -56,7 +56,7 @@ const executeAction = agentspanTool(
 );
 
 // ── Native Agent with HITL tools ─────────────────────────
-const agent = new Agent({
+export const agent = new Agent({
   name: 'hitl_agent',
   model: 'openai/gpt-4o-mini',
   instructions:
@@ -140,4 +140,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('10-hitl.ts') || process.argv[1]?.endsWith('10-hitl.js')) {
+  main().catch(console.error);
+}

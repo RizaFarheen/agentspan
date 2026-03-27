@@ -55,7 +55,7 @@ const githubLookup = tool(
   },
 );
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'external_cred_agent',
   model: llmModel,
   tools: [githubLookup],
@@ -106,23 +106,24 @@ async function externalWorkerExample(taskInput: Record<string, unknown>) {
   }
 }
 
-// -- Demo output (no runtime.run -- this is a pattern demonstration) ----------
-
-console.log('Note: This example demonstrates the pattern for external workers.');
-console.log('The external worker (externalWorkerExample) would run in a separate process.');
-console.log();
-console.log('To run end-to-end:');
-console.log('  1. Start the external worker in one terminal');
-console.log('  2. Run the agent in another terminal');
-console.log();
-console.log('Agent definition:');
-console.log(`  name: ${agent.name}`);
-console.log(`  tools: [${agent.tools.map((t) => (t as { name?: string }).name ?? 'unknown').join(', ')}]`);
-console.log();
-console.log('External worker pattern:');
-console.log("  const token = extractExecutionToken(taskInput);");
-console.log("  const creds = await resolveCredentials(serverUrl, {}, token, ['GITHUB_TOKEN']);");
-console.log("  const value = creds.GITHUB_TOKEN;");
-
 // Suppress unused variable warning
 void externalWorkerExample;
+
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('16h-credentials-external-worker.ts') || process.argv[1]?.endsWith('16h-credentials-external-worker.js')) {
+  console.log('Note: This example demonstrates the pattern for external workers.');
+  console.log('The external worker (externalWorkerExample) would run in a separate process.');
+  console.log();
+  console.log('To run end-to-end:');
+  console.log('  1. Start the external worker in one terminal');
+  console.log('  2. Run the agent in another terminal');
+  console.log();
+  console.log('Agent definition:');
+  console.log(`  name: ${agent.name}`);
+  console.log(`  tools: [${agent.tools.map((t) => (t as { name?: string }).name ?? 'unknown').join(', ')}]`);
+  console.log();
+  console.log('External worker pattern:');
+  console.log("  const token = extractExecutionToken(taskInput);");
+  console.log("  const creds = await resolveCredentials(serverUrl, {}, token, ['GITHUB_TOKEN']);");
+  console.log("  const value = creds.GITHUB_TOKEN;");
+}

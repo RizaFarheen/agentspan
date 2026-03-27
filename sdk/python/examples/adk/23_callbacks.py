@@ -84,9 +84,11 @@ agent = LlmAgent(
     after_model_callback=inspect_after_model,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "Explain the difference between supervised and unsupervised machine learning.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        result = runtime.run(
+            agent,
+            "Explain the difference between supervised and unsupervised machine learning.",
+        )
+        result.print_result()

@@ -60,15 +60,14 @@ export const opsAgent = new Agent({
 
 const prompt = 'Show me the disk usage summary and list files in the current directory.';
 
-console.log('='.repeat(60));
-console.log('  CLI Tool with Guardrails');
-console.log('  Allowed: ls, cat, df, du, git, ps, uname, wc');
-console.log('  Blocked: rm -rf, sudo, mkfs, dd');
-console.log('='.repeat(60));
-console.log(`\nPrompt: ${prompt}\n`);
-
 // Only run when executed directly (not when imported for discovery)
 if (process.argv[1]?.endsWith('62-cli-tool-guardrails.ts') || process.argv[1]?.endsWith('62-cli-tool-guardrails.js')) {
+  console.log('='.repeat(60));
+  console.log('  CLI Tool with Guardrails');
+  console.log('  Allowed: ls, cat, df, du, git, ps, uname, wc');
+  console.log('  Blocked: rm -rf, sudo, mkfs, dd');
+  console.log('='.repeat(60));
+  console.log(`\nPrompt: ${prompt}\n`);
   const runtime = new AgentRuntime();
   try {
     const result = await runtime.run(opsAgent, prompt);

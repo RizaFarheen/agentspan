@@ -17,7 +17,7 @@ import { AgentRuntime } from '../../src/index.js';
 const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // Step 1: Research agent gathers facts
-const researcher = new LlmAgent({
+export const researcher = new LlmAgent({
   name: 'researcher',
   model,
   instruction:
@@ -26,7 +26,7 @@ const researcher = new LlmAgent({
 });
 
 // Step 2: Writer agent takes the research and writes a summary
-const writer = new LlmAgent({
+export const writer = new LlmAgent({
   name: 'writer',
   model,
   instruction:
@@ -36,7 +36,7 @@ const writer = new LlmAgent({
 });
 
 // Step 3: Editor agent polishes the summary
-const editor = new LlmAgent({
+export const editor = new LlmAgent({
   name: 'editor',
   model,
   instruction:
@@ -45,7 +45,7 @@ const editor = new LlmAgent({
 });
 
 // Pipeline: researcher -> writer -> editor
-const pipeline = new SequentialAgent({
+export const pipeline = new SequentialAgent({
   name: 'content_pipeline',
   subAgents: [researcher, writer, editor],
 });
@@ -63,4 +63,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('11-sequential-agent.ts') || process.argv[1]?.endsWith('11-sequential-agent.js')) {
+  main().catch(console.error);
+}

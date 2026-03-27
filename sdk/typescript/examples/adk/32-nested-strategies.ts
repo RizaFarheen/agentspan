@@ -24,7 +24,7 @@ const model = process.env.AGENTSPAN_LLM_MODEL ?? 'gemini-2.5-flash';
 
 // ── Parallel research agents ─────────────────────────────────────────
 
-const marketAnalyst = new LlmAgent({
+export const marketAnalyst = new LlmAgent({
   name: 'market_analyst',
   model,
   instruction:
@@ -32,7 +32,7 @@ const marketAnalyst = new LlmAgent({
     'and key players for the given topic. Be concise (3-4 bullet points).',
 });
 
-const riskAnalyst = new LlmAgent({
+export const riskAnalyst = new LlmAgent({
   name: 'risk_analyst',
   model,
   instruction:
@@ -41,14 +41,14 @@ const riskAnalyst = new LlmAgent({
 });
 
 // Both run concurrently
-const parallelResearch = new ParallelAgent({
+export const parallelResearch = new ParallelAgent({
   name: 'research_phase',
   subAgents: [marketAnalyst, riskAnalyst],
 });
 
 // ── Summarizer ───────────────────────────────────────────────────────
 
-const summarizer = new LlmAgent({
+export const summarizer = new LlmAgent({
   name: 'summarizer',
   model,
   instruction:
@@ -58,7 +58,7 @@ const summarizer = new LlmAgent({
 
 // ── Pipeline: parallel -> sequential ─────────────────────────────────
 
-const pipeline = new SequentialAgent({
+export const pipeline = new SequentialAgent({
   name: 'analysis_pipeline',
   subAgents: [parallelResearch, summarizer],
 });
@@ -79,4 +79,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('32-nested-strategies.ts') || process.argv[1]?.endsWith('32-nested-strategies.js')) {
+  main().catch(console.error);
+}

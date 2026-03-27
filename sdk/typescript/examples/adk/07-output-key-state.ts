@@ -62,7 +62,7 @@ const generateChartDescription = new FunctionTool({
 // ── Specialist agents ────────────────────────────────────────────────
 
 // Analyst agent -- stores its findings in state via outputKey
-const analyst = new LlmAgent({
+export const analyst = new LlmAgent({
   name: 'data_analyst',
   model,
   instruction:
@@ -73,7 +73,7 @@ const analyst = new LlmAgent({
 });
 
 // Visualizer agent -- reads from state
-const visualizer = new LlmAgent({
+export const visualizer = new LlmAgent({
   name: 'chart_designer',
   model,
   instruction:
@@ -84,7 +84,7 @@ const visualizer = new LlmAgent({
 });
 
 // Coordinator delegates to both
-const coordinator = new LlmAgent({
+export const coordinator = new LlmAgent({
   name: 'report_coordinator',
   model,
   instruction:
@@ -110,4 +110,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('07-output-key-state.ts') || process.argv[1]?.endsWith('07-output-key-state.js')) {
+  main().catch(console.error);
+}

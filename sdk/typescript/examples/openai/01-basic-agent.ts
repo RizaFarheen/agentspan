@@ -18,7 +18,7 @@ import { AgentRuntime } from '../../src/index.js';
 // Disable OpenAI tracing for cleaner example output
 setTracingDisabled(true);
 
-const agent = new Agent({
+export const agent = new Agent({
   name: 'greeter',
   instructions: 'You are a friendly assistant. Keep your responses concise and helpful.',
   model: 'gpt-4o-mini',
@@ -38,4 +38,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when executed directly (not when imported for discovery)
+if (process.argv[1]?.endsWith('01-basic-agent.ts') || process.argv[1]?.endsWith('01-basic-agent.js')) {
+  main().catch(console.error);
+}

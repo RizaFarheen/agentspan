@@ -50,9 +50,11 @@ agent = Agent(
     tools=[search_knowledge_base],
 )
 
-with AgentRuntime() as runtime:
-    print("Streaming events:\n")
-    for event in runtime.stream(agent, "What's your return policy for electronics?"):
-        detail = event.content or event.tool_name or event.output or ""
-        print(f"  [{event.type}] {detail}")
-    print("\nStream complete.")
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        print("Streaming events:\n")
+        for event in runtime.stream(agent, "What's your return policy for electronics?"):
+            detail = event.content or event.tool_name or event.output or ""
+            print(f"  [{event.type}] {detail}")
+        print("\nStream complete.")
