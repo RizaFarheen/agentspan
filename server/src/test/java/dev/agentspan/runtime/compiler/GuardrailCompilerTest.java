@@ -72,8 +72,58 @@ class GuardrailCompilerTest {
         var results = gc.compileGuardrailTasks(List.of(g), "agent", "${ref}");
 
         assertThat(results).hasSize(1);
-        assertThat(results.get(0).isInline()).isFalse();
+        assertThat(results.get(0).isInline()).isTrue();
+        assertThat(results.get(0).getTasks()).hasSize(2);
         assertThat(results.get(0).getTasks().get(0).getType()).isEqualTo("SIMPLE");
+        assertThat(results.get(0).getTasks().get(1).getType()).isEqualTo("INLINE");
+    }
+
+    @Test
+    void testCustomGuardrailIncludesOpenAICompatibleInputAliases() {
+        GuardrailConfig g = GuardrailConfig.builder()
+            .name("custom_check")
+            .guardrailType("custom")
+            .position("output")
+            .taskName("my_guardrail_worker")
+            .build();
+
+        GuardrailCompiler gc = new GuardrailCompiler();
+        var results = gc.compileGuardrailTasks(List.of(g), "agent", "${ref}");
+
+        WorkflowTask workerTask = results.get(0).getTasks().get(0);
+        assertThat(workerTask.getInputParameters())
+            .containsEntry("content", "${ref}")
+            .containsEntry("input", "${ref}")
+            .containsEntry("input_text", "${ref}")
+            .containsEntry("output", "${ref}")
+            .containsEntry("agentOutput", "${ref}")
+            .containsEntry("agent_output", "${ref}");
+    }
+
+    @Test
+    void testMultipleCustomGuardrailsUseDistinctRefs() {
+        GuardrailConfig first = GuardrailConfig.builder()
+            .name("first_check")
+            .guardrailType("custom")
+            .position("output")
+            .taskName("first_worker")
+            .build();
+
+        GuardrailConfig second = GuardrailConfig.builder()
+            .name("second_check")
+            .guardrailType("custom")
+            .position("output")
+            .taskName("second_worker")
+            .build();
+
+        GuardrailCompiler gc = new GuardrailCompiler();
+        var results = gc.compileGuardrailTasks(List.of(first, second), "agent", "${ref}");
+
+        assertThat(results).hasSize(2);
+        assertThat(results).extracting(GuardrailCompiler.GuardrailTaskResult::getRefName)
+            .containsExactly("agent_output_guardrail_first_check", "agent_output_guardrail_second_check");
+        assertThat(results).flatExtracting(r -> r.getTasks().stream().map(WorkflowTask::getTaskReferenceName).toList())
+            .doesNotHaveDuplicates();
     }
 
     @Test

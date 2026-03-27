@@ -107,6 +107,9 @@ export class AgentRuntime {
     if (options?.timeoutSeconds !== undefined) {
       payload.timeoutSeconds = options.timeoutSeconds;
     }
+    if (options?.credentials) {
+      payload.credentials = options.credentials;
+    }
 
     // Register workers for all tools
     await this._registerAllWorkers(nativeAgent);
@@ -186,6 +189,9 @@ export class AgentRuntime {
 
     if (options?.timeoutSeconds !== undefined) {
       payload.timeoutSeconds = options.timeoutSeconds;
+    }
+    if (options?.credentials) {
+      payload.credentials = options.credentials;
     }
 
     // Register workers
@@ -274,46 +280,8 @@ export class AgentRuntime {
    * Accepts native Agent instances or framework agent objects.
    */
   async stream(agent: Agent | object, prompt: string, options?: RunOptions): Promise<AgentStream> {
-    const framework = detectFramework(agent);
-    if (framework !== null) {
-      throw new AgentspanError(
-        'Framework streaming is not yet supported. Use run() for framework agents.',
-      );
-    }
-
-    const nativeAgent = agent as Agent;
-    const payload = this.serializer.serialize(nativeAgent, prompt, {
-      sessionId: options?.sessionId,
-      media: options?.media,
-      idempotencyKey: options?.idempotencyKey,
-    });
-
-    if (options?.timeoutSeconds !== undefined) {
-      payload.timeoutSeconds = options.timeoutSeconds;
-    }
-
-    // Register workers
-    await this._registerAllWorkers(nativeAgent);
-    this.workerManager.startPolling();
-
-    // Start agent
-    const startResponse = await this._httpRequest(
-      'POST',
-      '/agent/start',
-      payload,
-      options?.signal,
-    );
-
-    const workflowId = startResponse.workflowId as string;
-    const sseUrl = `${this.config.serverUrl}/agent/${workflowId}/sse`;
-
-    return new AgentStream(
-      sseUrl,
-      this.authHeaders,
-      workflowId,
-      async (body) => this._respond(workflowId, body, options?.signal),
-      this.config.serverUrl,
-    );
+    const handle = await this.start(agent, prompt, options);
+    return handle.stream();
   }
 
   // ── deploy() ──────────────────────────────────────────
@@ -816,6 +784,7 @@ export class AgentRuntime {
         rawConfig,
         prompt,
         sessionId: options?.sessionId,
+        credentials: options?.credentials,
       };
 
       const startResponse = await this._httpRequest(
@@ -892,6 +861,7 @@ export class AgentRuntime {
       rawConfig,
       prompt,
       sessionId: options?.sessionId,
+      credentials: options?.credentials,
     };
 
     const startResponse = await this._httpRequest(

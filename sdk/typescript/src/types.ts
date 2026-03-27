@@ -232,6 +232,7 @@ export interface RunOptions {
   media?: string[];
   idempotencyKey?: string;
   timeoutSeconds?: number;
+  credentials?: string[];
   /** AbortSignal for cancellation/timeout. */
   signal?: AbortSignal;
 }

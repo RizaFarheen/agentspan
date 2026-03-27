@@ -8,6 +8,47 @@ describe('AgentRuntime', () => {
   const savedEnv: Record<string, string | undefined> = {};
   const envKeys = ['AGENTSPAN_SERVER_URL', 'AGENTSPAN_API_KEY', 'AGENTSPAN_AUTH_KEY', 'AGENTSPAN_AUTH_SECRET'];
 
+  function mockAgentServer(workflowId = 'wf-cred-test', fetchCalls?: string[]) {
+    global.fetch = vi.fn().mockImplementation(async (url: string) => {
+      fetchCalls?.push(url);
+      if (url.includes('/agent/start')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ workflowId }),
+        };
+      }
+      if (url.includes('/agent/stream/')) {
+        const ssePayload = 'event: done\ndata: {"output":{"result":"ok"},"status":"COMPLETED"}\n\n';
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(ssePayload));
+              controller.close();
+            },
+          }),
+        };
+      }
+      if (url.includes(`/agent/${workflowId}/status`)) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ status: 'COMPLETED', output: { result: 'ok' } }),
+          json: async () => ({ status: 'COMPLETED', output: { result: 'ok' } }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => '{}',
+        json: async () => ({}),
+      };
+    });
+  }
+
   beforeEach(() => {
     for (const key of envKeys) {
       savedEnv[key] = process.env[key];
@@ -238,6 +279,131 @@ describe('AgentRuntime', () => {
       // Verify SSE URL uses /agent/stream/{id}
       const sseCall = fetchCalls.find((u) => u.includes('/stream/') || u.includes('/sse'));
       expect(sseCall).toBe('http://localhost:8080/api/agent/stream/wf-sse-test');
+    });
+  });
+
+  describe('stream()', () => {
+    it('streams native agents through the handle stream path', async () => {
+      const fetchCalls: string[] = [];
+      mockAgentServer('wf-native-stream', fetchCalls);
+
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
+
+      const { Agent } = await import('../../src/agent.js');
+      const agent = new Agent({ name: 'native_stream_agent', model: 'gpt-4o' });
+
+      const agentStream = await runtime.stream(agent, 'test prompt');
+      const result = await agentStream.getResult();
+
+      expect(result.status).toBe('COMPLETED');
+      expect(result.output).toEqual({ result: 'ok' });
+      expect(fetchCalls).toContain('http://localhost:8080/api/agent/stream/wf-native-stream');
+    });
+
+    it('streams framework agents through the same SSE endpoint', async () => {
+      const fetchCalls: string[] = [];
+      mockAgentServer('wf-framework-stream', fetchCalls);
+
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
+
+      const openAiAgent = {
+        name: 'framework_stream_agent',
+        instructions: 'You are helpful.',
+        model: 'gpt-4o',
+        tools: [],
+        handoffs: [],
+      };
+
+      const agentStream = await runtime.stream(openAiAgent, 'test prompt');
+      const result = await agentStream.getResult();
+
+      expect(result.status).toBe('COMPLETED');
+      expect(result.output).toEqual({ result: 'ok' });
+      expect(fetchCalls).toContain('http://localhost:8080/api/agent/stream/wf-framework-stream');
+
+      const startCall = (global.fetch as any).mock.calls.find(([url]: [string]) =>
+        url.includes('/agent/start'),
+      );
+      const body = JSON.parse(startCall[1].body as string);
+      expect(body.framework).toBe('openai');
+    });
+  });
+
+  describe('credentials payloads', () => {
+    it('includes credentials in native run start payload', async () => {
+      mockAgentServer('wf-native-cred');
+
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
+      vi.spyOn((runtime as any).workerManager, 'stopPolling').mockImplementation(() => {});
+
+      const { Agent } = await import('../../src/agent.js');
+      const agent = new Agent({ name: 'native_cred_agent', model: 'gpt-4o' });
+
+      await runtime.run(agent, 'test prompt', {
+        credentials: ['OPENAI_API_KEY'],
+      });
+
+      const startCall = (global.fetch as any).mock.calls.find(([url]: [string]) =>
+        url.includes('/agent/start'),
+      );
+      const body = JSON.parse(startCall[1].body as string);
+      expect(body.credentials).toEqual(['OPENAI_API_KEY']);
+    });
+
+    it('includes credentials in framework run start payload', async () => {
+      mockAgentServer('wf-framework-cred');
+
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
+      vi.spyOn((runtime as any).workerManager, 'stopPolling').mockImplementation(() => {});
+
+      const openAiAgent = {
+        name: 'framework_cred_agent',
+        instructions: 'You are helpful.',
+        model: 'gpt-4o',
+        tools: [],
+        handoffs: [],
+      };
+
+      await runtime.run(openAiAgent, 'test prompt', {
+        credentials: ['OPENAI_API_KEY'],
+      });
+
+      const startCall = (global.fetch as any).mock.calls.find(([url]: [string]) =>
+        url.includes('/agent/start'),
+      );
+      const body = JSON.parse(startCall[1].body as string);
+      expect(body.credentials).toEqual(['OPENAI_API_KEY']);
+      expect(body.framework).toBe('openai');
+    });
+
+    it('includes credentials in framework start payload', async () => {
+      mockAgentServer('wf-framework-start-cred');
+
+      const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080/api' });
+      vi.spyOn((runtime as any).workerManager, 'startPolling').mockImplementation(() => {});
+
+      const openAiAgent = {
+        name: 'framework_start_agent',
+        instructions: 'You are helpful.',
+        model: 'gpt-4o',
+        tools: [],
+        handoffs: [],
+      };
+
+      await runtime.start(openAiAgent, 'test prompt', {
+        credentials: ['OPENAI_API_KEY'],
+      });
+
+      const startCall = (global.fetch as any).mock.calls.find(([url]: [string]) =>
+        url.includes('/agent/start'),
+      );
+      const body = JSON.parse(startCall[1].body as string);
+      expect(body.credentials).toEqual(['OPENAI_API_KEY']);
+      expect(body.framework).toBe('openai');
     });
   });
 });

@@ -229,19 +229,37 @@ public class GuardrailCompiler {
     private GuardrailTaskResult compileCustomGuardrail(
             GuardrailConfig guard, String agentName, String contentRef, String iterationRef) {
 
-        String refName = agentName + "_output_guardrail";
+        String refName = agentName + "_output_guardrail_" + guard.getName();
+        String workerRef = refName + "_worker";
 
         WorkflowTask task = new WorkflowTask();
         task.setName(guard.getTaskName());
-        task.setTaskReferenceName(refName);
+        task.setTaskReferenceName(workerRef);
         task.setType("SIMPLE");
 
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("content", contentRef);
+        inputs.put("input", contentRef);
+        inputs.put("input_text", contentRef);
+        inputs.put("output", contentRef);
+        inputs.put("agentOutput", contentRef);
+        inputs.put("agent_output", contentRef);
         inputs.put("iteration", iterationRef);
         task.setInputParameters(inputs);
 
-        return new GuardrailTaskResult(List.of(task), refName, false);
+        WorkflowTask normalizeTask = new WorkflowTask();
+        normalizeTask.setTaskReferenceName(refName);
+        normalizeTask.setType("INLINE");
+
+        Map<String, Object> normalizeInputs = new LinkedHashMap<>();
+        normalizeInputs.put("evaluatorType", "graaljs");
+        normalizeInputs.put("expression", JavaScriptBuilder.customGuardrailNormalizeScript());
+        normalizeInputs.put("worker_output", "${" + workerRef + ".output}");
+        normalizeInputs.put("guardrail_name", guard.getName());
+        normalizeInputs.put("default_on_fail", guard.getOnFail());
+        normalizeTask.setInputParameters(normalizeInputs);
+
+        return new GuardrailTaskResult(List.of(task, normalizeTask), refName, true);
     }
 
     /**
@@ -259,6 +277,11 @@ public class GuardrailCompiler {
 
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("content", contentRef);
+        inputs.put("input", contentRef);
+        inputs.put("input_text", contentRef);
+        inputs.put("output", contentRef);
+        inputs.put("agentOutput", contentRef);
+        inputs.put("agent_output", contentRef);
         inputs.put("iteration", iterationRef);
         task.setInputParameters(inputs);
 

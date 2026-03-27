@@ -260,6 +260,42 @@ class AgentCompilerTest {
     }
 
     @Test
+    void testCompileWithDynamicInstructions() {
+        AgentConfig config = AgentConfig.builder()
+            .name("dynamic_agent")
+            .model("openai/gpt-4o")
+            .instructions(Map.of(
+                "_worker_ref", "get_dynamic_instructions",
+                "description", "Generate dynamic instructions"
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        assertThat(wf.getTasks()).hasSize(3);
+
+        WorkflowTask workerTask = wf.getTasks().get(0);
+        assertThat(workerTask.getType()).isEqualTo("SIMPLE");
+        assertThat(workerTask.getName()).isEqualTo("get_dynamic_instructions");
+        assertThat(workerTask.getTaskReferenceName()).isEqualTo("dynamic_agent_instructions_worker");
+
+        WorkflowTask normalizeTask = wf.getTasks().get(1);
+        assertThat(normalizeTask.getType()).isEqualTo("INLINE");
+        assertThat(normalizeTask.getTaskReferenceName()).isEqualTo("dynamic_agent_instructions");
+
+        WorkflowTask llmTask = wf.getTasks().get(2);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages =
+            (List<Map<String, Object>>) llmTask.getInputParameters().get("messages");
+        String systemMsg = messages.stream()
+            .filter(m -> "system".equals(m.get("role")))
+            .map(m -> (String) m.get("message"))
+            .findFirst()
+            .orElse("");
+        assertThat(systemMsg).contains("${dynamic_agent_instructions.output.result}");
+    }
+
+    @Test
     void testCompileWithOutputType() {
         AgentConfig config = AgentConfig.builder()
             .name("structured_agent")

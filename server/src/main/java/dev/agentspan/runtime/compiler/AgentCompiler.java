@@ -38,6 +38,24 @@ public class AgentCompiler {
     private int timeoutSeconds = 0;
     private int llmRetryCount = 3;
 
+    static final class ResolvedInstructions {
+        private final List<WorkflowTask> preTasks;
+        private final String text;
+
+        ResolvedInstructions(List<WorkflowTask> preTasks, String text) {
+            this.preTasks = preTasks;
+            this.text = text;
+        }
+
+        List<WorkflowTask> getPreTasks() {
+            return preTasks;
+        }
+
+        String getText() {
+            return text;
+        }
+    }
+
     /**
      * Main entry point: compile an AgentConfig into a WorkflowDef.
      */
@@ -116,8 +134,10 @@ public class AgentCompiler {
     WorkflowDef compileSimple(AgentConfig config) {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         String llmRef = config.getName() + "_llm";
+        String instructionsRef = config.getName() + "_instructions";
 
         WorkflowDef wf = createWorkflow(config);
+        ResolvedInstructions resolvedInstructions = resolveInstructions(config, instructionsRef);
 
         // Build LLM task
         WorkflowTask llmTask = buildLlmTask(config, parsed, llmRef, null);
@@ -127,7 +147,9 @@ public class AgentCompiler {
 
         if (outputGuardrails.isEmpty()) {
             // Simple path: single LLM call, no loop
-            wf.setTasks(List.of(llmTask));
+            List<WorkflowTask> tasks = new ArrayList<>(resolvedInstructions.getPreTasks());
+            tasks.add(llmTask);
+            wf.setTasks(tasks);
             wf.setOutputParameters(Map.of(
                 "result", ref(llmRef + ".output.result"),
                 "finishReason", ref(llmRef + ".output.finishReason")
@@ -190,7 +212,10 @@ public class AgentCompiler {
         String resolveRef = config.getName() + "_resolve_output";
         WorkflowTask resolveTask = buildResolveOutputTask(resolveRef, llmRef);
 
-        wf.setTasks(List.of(loop, resolveTask));
+        List<WorkflowTask> tasks = new ArrayList<>(resolvedInstructions.getPreTasks());
+        tasks.add(loop);
+        tasks.add(resolveTask);
+        wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
             "result", ref(resolveRef + ".output.result.result"),
             "finishReason", ref(resolveRef + ".output.result.finishReason")
@@ -204,6 +229,7 @@ public class AgentCompiler {
     WorkflowDef compileWithTools(AgentConfig config) {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         String llmRef = config.getName() + "_llm";
+        String instructionsRef = config.getName() + "_instructions";
         List<ToolConfig> tools = config.getTools();
 
         ToolCompiler tc = new ToolCompiler();
@@ -212,6 +238,7 @@ public class AgentCompiler {
         boolean hasApi = tools.stream().anyMatch(t -> "api".equals(t.getToolType()));
 
         WorkflowDef wf = createWorkflow(config);
+        ResolvedInstructions resolvedInstructions = resolveInstructions(config, instructionsRef);
 
         // ── Discovery (pre-loop tasks) or static tool specs ──────────
         ToolCompiler.DiscoveryResult discoveryResult = null;
@@ -404,6 +431,7 @@ public class AgentCompiler {
         if (discoveryResult != null) {
             allTasks.addAll(discoveryResult.getPreTasks());
         }
+        allTasks.addAll(resolvedInstructions.getPreTasks());
 
         // Initialize workflow variables
         Map<String, Object> initVars = new LinkedHashMap<>();
@@ -483,6 +511,7 @@ public class AgentCompiler {
     WorkflowDef compileHybrid(AgentConfig config) {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         String llmRef = config.getName() + "_llm";
+        String instructionsRef = config.getName() + "_instructions";
 
         // Build transfer tools for each sub-agent
         List<ToolConfig> allTools = new ArrayList<>(config.getTools());
@@ -506,6 +535,7 @@ public class AgentCompiler {
 
         WorkflowDef wf = createWorkflow(config);
         wf.setDescription("Hybrid agent: " + config.getName());
+        ResolvedInstructions resolvedInstructions = resolveInstructions(config, instructionsRef);
 
         // ── Discovery or static tool specs ───────────────────────────
         ToolCompiler.DiscoveryResult discoveryResult = null;
@@ -669,12 +699,17 @@ public class AgentCompiler {
 
         if (discoveryResult != null) {
             List<WorkflowTask> allTasks = new ArrayList<>(discoveryResult.getPreTasks());
+            allTasks.addAll(resolvedInstructions.getPreTasks());
             allTasks.add(initStateHybrid);
             allTasks.add(loop);
             allTasks.add(transferSwitch);
             wf.setTasks(allTasks);
         } else {
-            wf.setTasks(List.of(initStateHybrid, loop, transferSwitch));
+            List<WorkflowTask> allTasks = new ArrayList<>(resolvedInstructions.getPreTasks());
+            allTasks.add(initStateHybrid);
+            allTasks.add(loop);
+            allTasks.add(transferSwitch);
+            wf.setTasks(allTasks);
         }
 
         // Output: direct result or transfer result
@@ -814,7 +849,7 @@ public class AgentCompiler {
             }
         } else {
             // Inline string instructions
-            String instrText = instructions != null ? instructions.toString() : "";
+            String instrText = resolveInstructions(config, config.getName() + "_instructions").getText();
             if (toolSpecs != null && instrText.isEmpty()) {
                 instrText = "You are a helpful assistant.";
             }
@@ -901,6 +936,68 @@ public class AgentCompiler {
 
         llm.setInputParameters(inputs);
         return llm;
+    }
+
+    ResolvedInstructions resolveInstructions(AgentConfig config, String refName) {
+        Object instructions = config.getInstructions();
+        if (!(instructions instanceof Map<?, ?> map) || !map.containsKey("_worker_ref")) {
+            String text = instructions instanceof String ? (String) instructions
+                    : instructions != null ? instructions.toString() : "";
+            return new ResolvedInstructions(List.of(), text);
+        }
+
+        Object taskNameObj = map.get("_worker_ref");
+        if (!(taskNameObj instanceof String taskName) || taskName.isBlank()) {
+            return new ResolvedInstructions(List.of(), "");
+        }
+
+        String workerRef = refName + "_worker";
+
+        WorkflowTask workerTask = new WorkflowTask();
+        workerTask.setName(taskName);
+        workerTask.setTaskReferenceName(workerRef);
+        workerTask.setType("SIMPLE");
+
+        Map<String, Object> ctx = new LinkedHashMap<>();
+        ctx.put("prompt", "${workflow.input.prompt}");
+        ctx.put("session_id", "${workflow.input.session_id}");
+        ctx.put("media", "${workflow.input.media}");
+
+        Map<String, Object> agent = new LinkedHashMap<>();
+        agent.put("name", config.getName());
+        if (config.getModel() != null) {
+            agent.put("model", config.getModel());
+        }
+        if (config.getDescription() != null) {
+            agent.put("description", config.getDescription());
+        }
+        if (config.getMetadata() != null && !config.getMetadata().isEmpty()) {
+            agent.put("metadata", config.getMetadata());
+        }
+
+        Map<String, Object> workerInputs = new LinkedHashMap<>();
+        workerInputs.put("ctx", ctx);
+        workerInputs.put("context", ctx);
+        workerInputs.put("agent", agent);
+        workerInputs.put("prompt", "${workflow.input.prompt}");
+        workerInputs.put("session_id", "${workflow.input.session_id}");
+        workerInputs.put("sessionId", "${workflow.input.session_id}");
+        workerInputs.put("media", "${workflow.input.media}");
+        workerTask.setInputParameters(workerInputs);
+
+        WorkflowTask normalizeTask = new WorkflowTask();
+        normalizeTask.setTaskReferenceName(refName);
+        normalizeTask.setType("INLINE");
+        Map<String, Object> normalizeInputs = new LinkedHashMap<>();
+        normalizeInputs.put("evaluatorType", "graaljs");
+        normalizeInputs.put("expression", JavaScriptBuilder.normalizeInstructionsScript());
+        normalizeInputs.put("worker_output", "${" + workerRef + ".output}");
+        normalizeTask.setInputParameters(normalizeInputs);
+
+        return new ResolvedInstructions(
+                List.of(workerTask, normalizeTask),
+                ref(refName + ".output.result")
+        );
     }
 
     /**

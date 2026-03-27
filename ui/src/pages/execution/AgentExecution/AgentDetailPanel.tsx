@@ -298,11 +298,56 @@ function AgentToolCard({ tool }: { tool: Record<string, unknown> }) {
   );
 }
 
+/** Extract guardrail function name from an input/output guardrail entry */
+function guardrailFnName(g: unknown): string {
+  if (!g || typeof g !== "object") return getItemName(g);
+  const obj = g as Record<string, unknown>;
+  const fn = obj.guardrail_function as Record<string, unknown> | undefined;
+  if (fn) return getItemName(fn);
+  return obj.name as string ?? getItemName(g);
+}
+
+/** Small inline pipeline chip */
+function PipelineChip({ label, color, bg, border }: { label: string; color: string; bg: string; border: string }) {
+  return (
+    <Box sx={{ px: 0.75, py: 0.25, borderRadius: 0.5, backgroundColor: bg, border: `1px solid ${border}`, fontSize: "0.72rem", color, whiteSpace: "nowrap" }}>
+      {label}
+    </Box>
+  );
+}
+
+function GuardrailPipeline({ inputGrs, outputGrs }: { inputGrs: string[]; outputGrs: string[] }) {
+  const arrow = <Box sx={{ color: "#9ca3af", fontSize: "0.72rem", lineHeight: 1, flexShrink: 0 }}>→</Box>;
+  return (
+    <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.5, rowGap: 0.75 }}>
+      {inputGrs.map((name, i) => (
+        <Box key={`ip-${i}`} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <PipelineChip label={name} color="#7c3aed" bg="#faf5ff" border="#e9d5ff" />
+          {arrow}
+        </Box>
+      ))}
+      <PipelineChip label="LLM Call" color="#374151" bg="#f3f4f6" border="#d1d5db" />
+      {outputGrs.map((name, i) => (
+        <Box key={`op-${i}`} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          {arrow}
+          <PipelineChip label={name} color="#0369a1" bg="#e0f2fe" border="#bae6fd" />
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
-  const instructions = (agentDef.instructions ?? agentDef.description) as string | undefined;
+  const rawInstr = agentDef.instructions ?? agentDef.description;
+  const instructions = typeof rawInstr === "string" ? rawInstr : undefined;
+  const dynamicInstr = rawInstr && typeof rawInstr === "object" ? rawInstr as Record<string, unknown> : undefined;
   const allTools = (agentDef.tools as Array<Record<string, unknown>> | undefined) ?? [];
-  const guardrailsDef = (agentDef.guardrails as Array<unknown> | undefined) ?? [];
   const defModel = agentDef.model as string | undefined;
+
+  // Read guardrails from both old and new field names
+  const inputGuardrails  = (agentDef.input_guardrails  as Array<unknown> | undefined) ?? [];
+  const outputGuardrails = (agentDef.output_guardrails as Array<unknown> | undefined) ?? [];
+  const legacyGuardrails = (agentDef.guardrails as Array<unknown> | undefined) ?? [];
 
   // Split tools by category
   const agentTools    = allTools.filter(t => toolCategory(t) === "agent");
@@ -312,12 +357,15 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
   const mcpTools      = allTools.filter(t => toolCategory(t) === "mcp");
   const ragTools      = allTools.filter(t => toolCategory(t) === "rag");
 
-  const guardrailNames = [
+  const inputGrNames  = inputGuardrails.map(g => guardrailFnName(g));
+  const outputGrNames = outputGuardrails.map(g => guardrailFnName(g));
+  const legacyGrNames = [
     ...guardrailTools.map(g => getItemName(g)),
-    ...guardrailsDef.map(g => getItemName(g)),
+    ...legacyGuardrails.map(g => getItemName(g)),
   ];
+  const hasGuardrailPipeline = inputGrNames.length > 0 || outputGrNames.length > 0;
 
-  const hasContent = instructions || allTools.length || guardrailsDef.length || defModel;
+  const hasContent = instructions || dynamicInstr || allTools.length || hasGuardrailPipeline || legacyGrNames.length > 0 || defModel;
   if (!hasContent) return null;
 
   return (
@@ -331,6 +379,14 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
       </Typography>
 
       {defModel && <SummaryRow label="Configured model" value={<ModelValue model={defModel} />} />}
+
+      {/* Guardrail pipeline: |ip gr| → |LLM| → |op gr| */}
+      {hasGuardrailPipeline && (
+        <SummaryRow
+          label="Guardrail pipeline"
+          value={<GuardrailPipeline inputGrs={inputGrNames} outputGrs={outputGrNames} />}
+        />
+      )}
 
       {/* Agent tools — each shown as a mini card */}
       {agentTools.length > 0 && (
@@ -376,11 +432,11 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
         />
       )}
 
-      {/* Guardrails (from both tools list and agentDef.guardrails) */}
-      {guardrailNames.length > 0 && (
+      {/* Legacy guardrails (from tools list with toolType="guardrail" or agentDef.guardrails) */}
+      {legacyGrNames.length > 0 && !hasGuardrailPipeline && (
         <SummaryRow
-          label={`Guardrails (${guardrailNames.length})`}
-          value={<TagList items={guardrailNames} color="#0369a1" bg="#e0f2fe" border="#bae6fd" />}
+          label={`Guardrails (${legacyGrNames.length})`}
+          value={<TagList items={legacyGrNames} color="#0369a1" bg="#e0f2fe" border="#bae6fd" />}
         />
       )}
 
@@ -396,6 +452,22 @@ function AgentDefSection({ agentDef }: { agentDef: Record<string, unknown> }) {
               maxHeight: 180, overflowY: "auto",
             }}>
               {instructions}
+            </Box>
+          }
+        />
+      )}
+      {/* Dynamic instructions (worker ref) */}
+      {!instructions && dynamicInstr && (
+        <SummaryRow
+          label="Instructions"
+          value={
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, fontSize: "0.78rem", color: "text.secondary" }}>
+              <Box sx={{ px: 0.75, py: 0.25, borderRadius: 0.5, backgroundColor: "#f0f4ff", border: "1px solid #d1d9f5", fontSize: "0.72rem", color: "#4969e4" }}>
+                {getItemName(dynamicInstr)}
+              </Box>
+              <span style={{ fontStyle: "italic", fontSize: "0.72rem" }}>
+                {typeof dynamicInstr.description === "string" ? dynamicInstr.description : "dynamic"}
+              </span>
             </Box>
           }
         />
@@ -784,6 +856,52 @@ function SummaryContent({ node, onDrillIn }: { node: DetailNodeData; onDrillIn?:
         <SummaryTable>
           <SummaryRow label="Target agent" value={ev?.targetAgent ?? node.label} />
           <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
+        </SummaryTable>
+      </Box>
+    );
+  }
+
+  // Guardrail event (GUARDRAIL_PASS/FAIL — not a gate)
+  if ((node.kind === "output" || node.kind === "error") &&
+      (ev?.type === EventType.GUARDRAIL_PASS || ev?.type === EventType.GUARDRAIL_FAIL) &&
+      ev?.toolName !== "gate") {
+    const passed = ev.type === EventType.GUARDRAIL_PASS;
+    const grDetail = ev.detail as Record<string, unknown> | undefined;
+    const grOutput = grDetail?.output as Record<string, unknown> | undefined;
+    const reason = (grOutput?.message ?? (grOutput?.output_info as any)?.reason ?? ev.summary) as string;
+    const meta = ev.taskMeta;
+    const fmt = (ts?: number) =>
+      ts ? new Date(ts).toLocaleString(undefined, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).replace(",", "") : undefined;
+    return (
+      <Box>
+        <Box sx={{
+          mx: 2, my: 1, px: 1.25, py: 0.75, borderRadius: 1,
+          backgroundColor: passed ? "#f0fdf4" : "#fff5f5",
+          border: `1px solid ${passed ? "#86efac" : "#fca5a5"}`,
+        }}>
+          <Typography sx={{ fontWeight: 700, fontSize: "0.8rem", color: passed ? "#16a34a" : "#dc2626" }}>
+            {passed ? "Guardrail passed" : "Guardrail triggered"}
+          </Typography>
+          {reason && (
+            <Typography sx={{ fontSize: "0.75rem", color: passed ? "#166534" : "#991b1b", mt: 0.25 }}>
+              {reason}
+            </Typography>
+          )}
+        </Box>
+        <SummaryTable>
+          <SummaryRow label="Guardrail" value={ev.toolName ?? node.label} />
+          <SummaryRow label="Status" value={<StatusBadgeInline status={node.status} />} />
+          {grOutput?.passed != null && <SummaryRow label="Passed" value={String(grOutput.passed)} />}
+          {grOutput?.guardrail_name != null && <SummaryRow label="Name" value={String(grOutput.guardrail_name)} />}
+          {grOutput?.on_fail != null && <SummaryRow label="On fail" value={String(grOutput.on_fail)} />}
+          {grOutput?.fixed_output != null && <SummaryRow label="Fixed output" value={String(grOutput.fixed_output)} />}
+          {ev.durationMs ? <SummaryRow label="Duration" value={formatDuration(ev.durationMs)} /> : null}
+          {meta?.taskType && <SummaryRow label="Task type" value={meta.taskType} />}
+          {meta?.referenceTaskName && <SummaryRow label="Task reference" value={meta.referenceTaskName} />}
+          {meta?.taskId && <SummaryRow label="Task execution id" value={meta.taskId} />}
+          {fmt(meta?.startTime) && <SummaryRow label="Start time" value={fmt(meta?.startTime)!} />}
+          {fmt(meta?.endTime) && <SummaryRow label="End time" value={fmt(meta?.endTime)!} />}
+          {meta?.workerId && <SummaryRow label="Worker" value={meta.workerId} />}
         </SummaryTable>
       </Box>
     );

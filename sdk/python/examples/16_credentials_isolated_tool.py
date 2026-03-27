@@ -106,6 +106,6 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
             agent,
-            "List the 5 most recently updated repos for the 'agentspan' GitHub user.",
+            "List the 5 most recently updated repos for the 'agentspan' GitHub org.",
         )
         result.print_result()

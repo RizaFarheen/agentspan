@@ -29,6 +29,7 @@ public class StartRequest {
     private String sessionId;
     private List<String> media;
     private String idempotencyKey;
+    private List<String> credentials;
 
     /** Framework identifier for foreign agents (e.g. "openai", "google_adk"). Null for native agents. */
     private String framework;
