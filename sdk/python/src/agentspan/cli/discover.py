@@ -10,6 +10,7 @@ Supports two modes:
 
 import argparse
 import json
+import os
 import sys
 
 from agentspan.agents.frameworks.serializer import detect_framework
@@ -20,9 +21,11 @@ def discover_from_path(directory: str) -> list:
 
     Adds *directory* to sys.path so files can be imported, then
     dynamically imports each .py file and collects Agent objects.
+
+    Stdout is redirected to stderr during imports so that side-effects
+    in imported scripts do not corrupt our JSON output on stdout.
     """
     import importlib
-    import os
 
     from agentspan.agents.agent import Agent
 
@@ -37,23 +40,31 @@ def discover_from_path(directory: str) -> list:
     seen_names: set = set()
     discovered: list = []
 
-    for fname in sorted(os.listdir(abs_dir)):
-        if not fname.endswith(".py") or fname.startswith("_"):
-            continue
-        mod_name = fname[:-3]  # strip .py
-        try:
-            mod = importlib.import_module(mod_name)
-        except Exception as e:
-            print(f"Skipping {fname}: {e}", file=sys.stderr)
-            continue
+    # Redirect stdout → stderr while importing so print() side-effects
+    # don't pollute our JSON output channel.
+    real_stdout = sys.stdout
+    sys.stdout = sys.stderr
 
-        for attr_name in dir(mod):
-            if attr_name.startswith("_"):
+    try:
+        for fname in sorted(os.listdir(abs_dir)):
+            if not fname.endswith(".py") or fname.startswith("_"):
                 continue
-            obj = getattr(mod, attr_name, None)
-            if isinstance(obj, Agent) and obj.name not in seen_names:
-                discovered.append(obj)
-                seen_names.add(obj.name)
+            mod_name = fname[:-3]  # strip .py
+            try:
+                mod = importlib.import_module(mod_name)
+            except Exception as e:
+                print(f"Skipping {fname}: {e}", file=sys.stderr)
+                continue
+
+            for attr_name in dir(mod):
+                if attr_name.startswith("_"):
+                    continue
+                obj = getattr(mod, attr_name, None)
+                if isinstance(obj, Agent) and obj.name not in seen_names:
+                    discovered.append(obj)
+                    seen_names.add(obj.name)
+    finally:
+        sys.stdout = real_stdout
 
     return discovered
 

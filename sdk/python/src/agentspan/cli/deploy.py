@@ -38,25 +38,33 @@ def main():
         names = set(args.agents.split(","))
         agents = [a for a in agents if a.name in names]
 
+    # Redirect stdout → stderr during deploy calls so that any
+    # print() side-effects from the SDK don't corrupt our JSON output.
+    real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+
     results = []
-    for agent in agents:
-        try:
-            infos = deploy(agent)
-            info = infos[0]
-            results.append({
-                "agent_name": info.agent_name,
-                "workflow_name": info.workflow_name,
-                "success": True,
-                "error": None,
-            })
-        except Exception as e:
-            results.append({
-                "agent_name": agent.name,
-                "workflow_name": None,
-                "success": False,
-                "error": str(e),
-            })
-            print(f"Deploy failed for {agent.name}: {e}", file=sys.stderr)
+    try:
+        for agent in agents:
+            try:
+                infos = deploy(agent)
+                info = infos[0]
+                results.append({
+                    "agent_name": info.agent_name,
+                    "workflow_name": info.workflow_name,
+                    "success": True,
+                    "error": None,
+                })
+            except Exception as e:
+                results.append({
+                    "agent_name": agent.name,
+                    "workflow_name": None,
+                    "success": False,
+                    "error": str(e),
+                })
+                print(f"Deploy failed for {agent.name}: {e}", file=sys.stderr)
+    finally:
+        sys.stdout = real_stdout
 
     json.dump(results, sys.stdout)
 
