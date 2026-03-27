@@ -20,7 +20,7 @@ from agentspan.agents.frameworks.serializer import detect_framework
 SKIP_DIRS = {
     "__pycache__", ".git", ".venv", "venv", "node_modules",
     ".mypy_cache", ".pytest_cache", ".tox", "dist", "build",
-    ".eggs", "egg-info",
+    ".eggs",
 }
 
 

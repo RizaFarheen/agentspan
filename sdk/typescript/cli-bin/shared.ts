@@ -29,7 +29,7 @@ function collectFiles(dir: string): string[] {
       results.push(...collectFiles(fullPath));
     } else if (entry.isFile()) {
       const ext = extname(entry.name);
-      if ((ext === '.ts' || ext === '.js') && !entry.name.startsWith('_')) {
+      if ((ext === '.ts' || ext === '.js') && !entry.name.startsWith('_') && !entry.name.endsWith('.d.ts')) {
         results.push(fullPath);
       }
     }

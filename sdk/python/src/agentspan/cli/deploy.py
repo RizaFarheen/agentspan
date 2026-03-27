@@ -23,25 +23,44 @@ def main():
     parser.add_argument("--agents", required=False, help="Comma-separated agent names to deploy")
     args = parser.parse_args()
 
+    # Redirect stdout → stderr during discovery and deploy so that any
+    # print() side-effects from user code don't corrupt our JSON output.
+    real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+
     try:
         if args.package:
+            import importlib as _importlib
             from agentspan.agents.runtime.discovery import discover_agents
-            agents = discover_agents([args.package])
+            from agentspan.cli.discover import discover_from_path
+
+            agents = list(discover_agents([args.package]))
+
+            # Supplement with framework agents (OpenAI, LangGraph, etc.)
+            # that discover_agents misses (it only finds native Agent instances)
+            try:
+                module = _importlib.import_module(args.package)
+                if hasattr(module, "__path__"):
+                    seen = {getattr(a, "name", None) for a in agents}
+                    for pkg_path in module.__path__:
+                        for fa in discover_from_path(pkg_path):
+                            name = getattr(fa, "name", None)
+                            if name and name not in seen:
+                                agents.append(fa)
+                                seen.add(name)
+            except Exception:
+                pass
         else:
             from agentspan.cli.discover import discover_from_path
             agents = discover_from_path(args.path)
     except Exception as e:
+        sys.stdout = real_stdout
         print(f"Discovery failed: {e}", file=sys.stderr)
         sys.exit(1)
 
     if args.agents:
         names = set(args.agents.split(","))
         agents = [a for a in agents if a.name in names]
-
-    # Redirect stdout → stderr during deploy calls so that any
-    # print() side-effects from the SDK don't corrupt our JSON output.
-    real_stdout = sys.stdout
-    sys.stdout = sys.stderr
 
     results = []
     try:
