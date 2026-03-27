@@ -90,7 +90,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 
 	// 7. Discover agents via subprocess
 	ctx := context.Background()
-	discovered, err := execDiscover(ctx, env, language, pythonBin, pkg)
+	discovered, err := execDiscover(ctx, env, language, pythonBin, wd, pkg)
 	if err != nil {
 		return fmt.Errorf("discover agents: %w", err)
 	}
@@ -130,7 +130,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 		names[i] = a.Name
 	}
 
-	results, err := execDeploy(ctx, env, language, pythonBin, pkg, names)
+	results, err := execDeploy(ctx, env, language, pythonBin, wd, pkg, names)
 	if err != nil {
 		return fmt.Errorf("deploy agents: %w", err)
 	}
@@ -380,8 +380,25 @@ func buildEnv(cfg *config.Config) []string {
 	return env
 }
 
+// findTSBinScript locates a cli-bin script by checking multiple paths.
+// In user projects: node_modules/@agentspan/sdk/cli-bin/<name>
+// In the SDK repo itself: cli-bin/<name>
+func findTSBinScript(dir, name string) (string, error) {
+	candidates := []string{
+		filepath.Join(dir, "node_modules", "@agentspan", "sdk", "cli-bin", name),
+		filepath.Join(dir, "node_modules", "agentspan", "cli-bin", name),
+		filepath.Join(dir, "cli-bin", name),
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("cannot find %s; looked in:\n  %s", name, strings.Join(candidates, "\n  "))
+}
+
 // execDiscover runs the language-specific discover subprocess.
-func execDiscover(ctx context.Context, env []string, language, pythonBin string, pkg packageInfo) ([]discoveredAgent, error) {
+func execDiscover(ctx context.Context, env []string, language, pythonBin, projectDir string, pkg packageInfo) ([]discoveredAgent, error) {
 	var data []byte
 	var err error
 
@@ -393,7 +410,11 @@ func execDiscover(ctx context.Context, env []string, language, pythonBin string,
 		}
 		data, err = runSubprocess(ctx, env, pythonBin, "-m", "agentspan.cli.discover", flag, pkg.Value)
 	case "typescript":
-		data, err = runSubprocess(ctx, env, "npx", "tsx", "node_modules/agentspan/cli-bin/discover.ts", "--path", pkg.Value)
+		script, findErr := findTSBinScript(projectDir, "discover.ts")
+		if findErr != nil {
+			return nil, findErr
+		}
+		data, err = runSubprocess(ctx, env, "npx", "tsx", script, "--path", pkg.Value)
 	default:
 		return nil, fmt.Errorf("unsupported language for discover: %s", language)
 	}
@@ -406,7 +427,7 @@ func execDiscover(ctx context.Context, env []string, language, pythonBin string,
 }
 
 // execDeploy runs the language-specific deploy subprocess.
-func execDeploy(ctx context.Context, env []string, language, pythonBin string, pkg packageInfo, agentNames []string) ([]deployResult, error) {
+func execDeploy(ctx context.Context, env []string, language, pythonBin, projectDir string, pkg packageInfo, agentNames []string) ([]deployResult, error) {
 	var data []byte
 	var err error
 
@@ -422,7 +443,11 @@ func execDeploy(ctx context.Context, env []string, language, pythonBin string, p
 		}
 		data, err = runSubprocess(ctx, env, pythonBin, args...)
 	case "typescript":
-		args := []string{"tsx", "node_modules/agentspan/cli-bin/deploy.ts", "--path", pkg.Value}
+		script, findErr := findTSBinScript(projectDir, "deploy.ts")
+		if findErr != nil {
+			return nil, findErr
+		}
+		args := []string{"tsx", script, "--path", pkg.Value}
 		if len(agentNames) > 0 {
 			args = append(args, "--agents", strings.Join(agentNames, ","))
 		}

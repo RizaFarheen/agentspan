@@ -1,6 +1,7 @@
 import { discoverAgents } from '../src/discovery.js';
 import { deploy } from '../src/runtime.js';
 import { parseArgs } from 'node:util';
+import { resolve } from 'node:path';
 import type { Agent } from '../src/agent.js';
 import type { DeploymentInfo } from '../src/types.js';
 
@@ -52,9 +53,14 @@ async function main() {
     process.exit(1);
   }
 
+  // Redirect stdout → stderr during imports so that console.log()
+  // side-effects in imported files don't corrupt our JSON output.
+  const realStdoutWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = process.stderr.write.bind(process.stderr);
+
   let agents: Agent[];
   try {
-    agents = await discoverAgents(values.path as string);
+    agents = await discoverAgents(resolve(values.path as string));
   } catch (e: any) {
     console.error(`Discovery failed: ${e.message || e}`);
     process.exit(1);
@@ -75,6 +81,8 @@ async function main() {
     }
   }
 
+  // Restore stdout for our JSON output
+  process.stdout.write = realStdoutWrite;
   console.log(JSON.stringify(results));
 }
 

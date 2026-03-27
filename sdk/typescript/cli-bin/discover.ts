@@ -1,5 +1,6 @@
 import { discoverAgents } from '../src/discovery.js';
 import { parseArgs } from 'node:util';
+import { resolve } from 'node:path';
 import type { Agent } from '../src/agent.js';
 
 export interface DiscoveryEntry {
@@ -26,7 +27,16 @@ async function main() {
   }
 
   try {
-    const agents = await discoverAgents(values.path as string);
+    // Redirect stdout → stderr during imports so that console.log()
+    // side-effects in imported files don't corrupt our JSON output.
+    const realStdoutWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = process.stderr.write.bind(process.stderr);
+
+    const agents = await discoverAgents(resolve(values.path as string));
+
+    // Restore stdout for our JSON output
+    process.stdout.write = realStdoutWrite;
+
     const result = formatDiscoveryResult(agents);
     console.log(JSON.stringify(result));
   } catch (e: any) {
