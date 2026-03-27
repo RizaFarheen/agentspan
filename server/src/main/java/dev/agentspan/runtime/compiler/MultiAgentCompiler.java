@@ -77,7 +77,9 @@ public class MultiAgentCompiler {
         WorkflowDef wf = agentCompiler.createWorkflow(config);
         wf.setDescription("Handoff agent: " + config.getName());
 
-        String instructions = resolveInstructions(config);
+        AgentCompiler.ResolvedInstructions instructionsPlan =
+            resolveInstructionsPlan(config, config.getName() + "_instructions");
+        String instructions = instructionsPlan.getText();
         List<AgentConfig> agents = config.getAgents();
         List<String> agentNames = agents.stream().map(AgentConfig::getName).toList();
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
@@ -210,7 +212,11 @@ public class MultiAgentCompiler {
         ));
         finalLlm.setInputParameters(finalInputs);
 
-        wf.setTasks(List.of(initVar, loop, finalLlm));
+        List<WorkflowTask> tasks = new ArrayList<>(instructionsPlan.getPreTasks());
+        tasks.add(initVar);
+        tasks.add(loop);
+        tasks.add(finalLlm);
+        wf.setTasks(tasks);
         wf.setOutputParameters(Map.of("result", ref(config.getName() + "_final.output.result")));
         agentCompiler.applyTimeout(wf, config);
         return wf;
@@ -488,6 +494,9 @@ public class MultiAgentCompiler {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         WorkflowDef wf = agentCompiler.createWorkflow(config);
         wf.setDescription("Router agent: " + config.getName());
+        AgentCompiler.ResolvedInstructions parentInstructions =
+            resolveInstructionsPlan(config, config.getName() + "_instructions");
+        List<WorkflowTask> preTasks = new ArrayList<>(parentInstructions.getPreTasks());
 
         List<AgentConfig> agents = config.getAgents();
         List<String> agentNames = agents.stream().map(AgentConfig::getName).toList();
@@ -546,10 +555,13 @@ public class MultiAgentCompiler {
             String routerInstr;
             if (router instanceof AgentConfig routerAgent) {
                 routerParsed = ModelParser.parse(routerAgent.getModel());
-                routerInstr = resolveInstructions(routerAgent);
+                AgentCompiler.ResolvedInstructions routerInstructions =
+                    resolveInstructionsPlan(routerAgent, config.getName() + "_router_instructions");
+                preTasks.addAll(routerInstructions.getPreTasks());
+                routerInstr = routerInstructions.getText();
             } else {
                 routerParsed = parsed;
-                routerInstr = resolveInstructions(config);
+                routerInstr = parentInstructions.getText();
             }
             String systemPrompt = (routerInstr.isEmpty() ? "" : routerInstr + "\n\n") +
                 "You are a coordinator that delegates tasks to specialized agents.\n\n" +
@@ -645,7 +657,7 @@ public class MultiAgentCompiler {
         Map<String, Object> finalInputs = new LinkedHashMap<>();
         finalInputs.put("llmProvider", parsed.getProvider());
         finalInputs.put("model", parsed.getModel());
-        String instructions = resolveInstructions(config);
+        String instructions = parentInstructions.getText();
         String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n") +
             "Based on the work done by the agents above, provide your final response to the user. " +
             "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit " +
@@ -657,7 +669,10 @@ public class MultiAgentCompiler {
         ));
         finalLlm.setInputParameters(finalInputs);
 
-        wf.setTasks(List.of(initVar, loop, finalLlm));
+        preTasks.add(initVar);
+        preTasks.add(loop);
+        preTasks.add(finalLlm);
+        wf.setTasks(preTasks);
         wf.setOutputParameters(Map.of("result", ref(config.getName() + "_final.output.result")));
         agentCompiler.applyTimeout(wf, config);
         return wf;
@@ -739,6 +754,8 @@ public class MultiAgentCompiler {
     private WorkflowDef compileSwarm(AgentConfig config) {
         WorkflowDef wf = agentCompiler.createWorkflow(config);
         wf.setDescription("Swarm orchestration: " + config.getName());
+        AgentCompiler.ResolvedInstructions instructionsPlan =
+            resolveInstructionsPlan(config, config.getName() + "_instructions");
 
         int numAgents = config.getAgents().size();
         String loopRef = config.getName() + "_loop";
@@ -838,7 +855,7 @@ public class MultiAgentCompiler {
         ParsedModel parsed = ModelParser.parse(config.getModel());
         finalInputs.put("llmProvider", parsed.getProvider());
         finalInputs.put("model", parsed.getModel());
-        String instructions = resolveInstructions(config);
+        String instructions = instructionsPlan.getText();
         String finalSystemPrompt = (instructions.isEmpty() ? "" : instructions + "\n\n") +
             "Based on the work done by the agents above, provide your final response to the user. " +
             "IMPORTANT: Include ALL details from every agent's response — do NOT summarize or omit " +
@@ -850,7 +867,11 @@ public class MultiAgentCompiler {
         ));
         finalLlm.setInputParameters(finalInputs);
 
-        wf.setTasks(List.of(initVar, loop, finalLlm));
+        List<WorkflowTask> tasks = new ArrayList<>(instructionsPlan.getPreTasks());
+        tasks.add(initVar);
+        tasks.add(loop);
+        tasks.add(finalLlm);
+        wf.setTasks(tasks);
         wf.setOutputParameters(Map.of("result", ref(config.getName() + "_final.output.result")));
         agentCompiler.applyTimeout(wf, config);
         return wf;
@@ -1412,10 +1433,7 @@ public class MultiAgentCompiler {
         return caseTasks;
     }
 
-    private String resolveInstructions(AgentConfig config) {
-        Object instr = config.getInstructions();
-        if (instr == null) return "";
-        if (instr instanceof String s) return s;
-        return instr.toString();
+    private AgentCompiler.ResolvedInstructions resolveInstructionsPlan(AgentConfig config, String refName) {
+        return agentCompiler.resolveInstructions(config, refName);
     }
 }

@@ -191,6 +191,9 @@ public class AgentService {
         input.put("prompt", request.getPrompt());
         input.put("media", request.getMedia() != null ? request.getMedia() : List.of());
         input.put("session_id", request.getSessionId() != null ? request.getSessionId() : "");
+        if (request.getCredentials() != null && !request.getCredentials().isEmpty()) {
+            input.put("credentials", request.getCredentials());
+        }
         // Extract cwd from rawConfig for frameworks that pass it
         String cwd = ".";
         if (request.getRawConfig() != null && request.getRawConfig().get("cwd") instanceof String rawCwd) {

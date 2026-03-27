@@ -355,6 +355,32 @@ class AgentRuntime:
                 headers["X-Auth-Secret"] = self._config.auth_secret
         return headers
 
+    def _register_workflow_credentials(
+        self, workflow_id: str, credentials: Optional[List[str]]
+    ) -> None:
+        """Register request-scoped credential names for extracted framework tools."""
+        if not credentials:
+            return
+        from agentspan.agents.runtime._dispatch import (
+            _workflow_credentials,
+            _workflow_credentials_lock,
+        )
+
+        with _workflow_credentials_lock:
+            _workflow_credentials[workflow_id] = list(credentials)
+
+    def _clear_workflow_credentials(self, workflow_id: str, credentials: Optional[List[str]]) -> None:
+        """Clear request-scoped credential names after workflow completion."""
+        if not credentials:
+            return
+        from agentspan.agents.runtime._dispatch import (
+            _workflow_credentials,
+            _workflow_credentials_lock,
+        )
+
+        with _workflow_credentials_lock:
+            _workflow_credentials.pop(workflow_id, None)
+
     def _start_via_server(
         self,
         agent: Agent,
@@ -414,6 +440,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
     ) -> str:
         """Async version of :meth:`_start_via_server`."""
         from agentspan.agents.config_serializer import AgentConfigSerializer
@@ -431,6 +458,8 @@ class AgentRuntime:
             payload["idempotencyKey"] = idempotency_key
         if timeout is not None:
             payload["timeoutSeconds"] = timeout
+        if credentials:
+            payload["credentials"] = credentials
 
         data = await self._http.start_agent(payload)
         workflow_id = data["workflowId"]
@@ -446,6 +475,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        credentials: Optional[List[str]] = None,
     ) -> str:
         """Async version of :meth:`_start_framework_via_server`."""
         payload: Dict[str, Any] = {
@@ -457,6 +487,8 @@ class AgentRuntime:
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
+        if credentials:
+            payload["credentials"] = credentials
 
         data = await self._http.start_agent(payload)
         workflow_id = data["workflowId"]
@@ -1984,6 +2016,7 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
                 on_event=on_event,
                 timeout=timeout,
+                credentials=credentials,
                 **kwargs,
             )
 
@@ -2027,14 +2060,7 @@ class AgentRuntime:
             credentials=credentials,
         )
 
-        # Register workflow-level credentials for framework-extracted tools
-        if credentials:
-            from agentspan.agents.runtime._dispatch import (
-                _workflow_credentials,
-                _workflow_credentials_lock,
-            )
-            with _workflow_credentials_lock:
-                _workflow_credentials[workflow_id] = list(credentials)
+        self._register_workflow_credentials(workflow_id, credentials)
 
         # Poll until complete
         effective_timeout = timeout or (
@@ -2043,10 +2069,7 @@ class AgentRuntime:
         try:
             status = self._poll_status_until_complete(workflow_id, timeout=effective_timeout)
         finally:
-            # Clean up workflow credentials
-            if credentials:
-                with _workflow_credentials_lock:
-                    _workflow_credentials.pop(workflow_id, None)
+            self._clear_workflow_credentials(workflow_id, credentials)
 
         output = status.output
         raw_status = status.status
@@ -2312,6 +2335,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Run a foreign-framework agent via server-side normalization."""
@@ -2349,43 +2373,48 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
+            credentials=credentials,
         )
+        self._register_workflow_credentials(workflow_id, credentials)
 
-        if on_event is not None:
-            return self._run_framework_with_events(
-                workflow_id,
-                correlation_id,
-                on_event,
-                timeout=timeout,
+        try:
+            if on_event is not None:
+                return self._run_framework_with_events(
+                    workflow_id,
+                    correlation_id,
+                    on_event,
+                    timeout=timeout,
+                )
+
+            # Poll until complete
+            status = self._poll_status_until_complete(workflow_id, timeout=timeout)
+
+            output = status.output
+            raw_status = status.status
+
+            if raw_status in ("FAILED", "TERMINATED"):
+                logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
+                has_output = output and not (
+                    isinstance(output, dict) and all(v is None for v in output.values())
+                )
+                if not has_output and status.reason:
+                    output = status.reason
+
+            output = self._normalize_output(output, raw_status, status.reason)
+            logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
+            token_usage = self._extract_token_usage(workflow_id)
+            return AgentResult(
+                output=output,
+                workflow_id=workflow_id,
+                correlation_id=correlation_id,
+                status=raw_status,
+                finish_reason=self._derive_finish_reason(raw_status, status.output),
+                error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+                token_usage=token_usage,
+                sub_results=self._extract_sub_results(output),
             )
-
-        # Poll until complete
-        status = self._poll_status_until_complete(workflow_id, timeout=timeout)
-
-        output = status.output
-        raw_status = status.status
-
-        if raw_status in ("FAILED", "TERMINATED"):
-            logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
-            has_output = output and not (
-                isinstance(output, dict) and all(v is None for v in output.values())
-            )
-            if not has_output and status.reason:
-                output = status.reason
-
-        output = self._normalize_output(output, raw_status, status.reason)
-        logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
-        token_usage = self._extract_token_usage(workflow_id)
-        return AgentResult(
-            output=output,
-            workflow_id=workflow_id,
-            correlation_id=correlation_id,
-            status=raw_status,
-            finish_reason=self._derive_finish_reason(raw_status, status.output),
-            error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
-            token_usage=token_usage,
-            sub_results=self._extract_sub_results(output),
-        )
+        finally:
+            self._clear_workflow_credentials(workflow_id, credentials)
 
     def _start_framework(
         self,
@@ -2434,6 +2463,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        credentials: Optional[List[str]] = None,
     ) -> str:
         """POST to /api/agent/start with framework + rawConfig."""
         import requests as req_lib
@@ -2447,6 +2477,8 @@ class AgentRuntime:
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
+        if credentials:
+            payload["credentials"] = credentials
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
@@ -2473,6 +2505,10 @@ class AgentRuntime:
         from agentspan.agents.runtime._dispatch import make_tool_worker
 
         for w in workers:
+            try:
+                setattr(w.func, "_agentspan_framework_callable", True)
+            except Exception:
+                pass
             wrapper = make_tool_worker(w.func, w.name)
             worker_task(
                 task_definition_name=w.name,
@@ -3339,6 +3375,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent asynchronously (async-first implementation).
@@ -3388,6 +3425,7 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
                 on_event=on_event,
                 timeout=timeout,
+                credentials=credentials,
                 **kwargs,
             )
 
@@ -3428,14 +3466,19 @@ class AgentRuntime:
             session_id=session_id,
             idempotency_key=idempotency_key,
             timeout=timeout,
+            credentials=credentials,
         )
+        self._register_workflow_credentials(workflow_id, credentials)
 
         effective_timeout = timeout or (
             agent.timeout_seconds if agent.timeout_seconds > 0 else None
         )
-        status = await self._poll_status_until_complete_async(
-            workflow_id, timeout=effective_timeout
-        )
+        try:
+            status = await self._poll_status_until_complete_async(
+                workflow_id, timeout=effective_timeout
+            )
+        finally:
+            self._clear_workflow_credentials(workflow_id, credentials)
 
         output = status.output
         raw_status = status.status
@@ -3806,6 +3849,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Async version of :meth:`_run_framework`."""
@@ -3839,61 +3883,66 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
+            credentials=credentials,
         )
+        self._register_workflow_credentials(workflow_id, credentials)
 
-        if on_event is not None:
-            captured_events: List[AgentEvent] = []
-            async for event in self._stream_workflow_async(workflow_id):
-                captured_events.append(event)
-                on_event(event)
+        try:
+            if on_event is not None:
+                captured_events: List[AgentEvent] = []
+                async for event in self._stream_workflow_async(workflow_id):
+                    captured_events.append(event)
+                    on_event(event)
+
+                status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
+                output = status.output
+                has_output = output and not (
+                    isinstance(output, dict) and all(v is None for v in output.values())
+                )
+                if not has_output and status.reason and status.status in ("FAILED", "TERMINATED"):
+                    output = status.reason
+                output = self._normalize_output(output, status.status, status.reason)
+                token_usage = self._extract_token_usage(workflow_id)
+                return AgentResult(
+                    output=output,
+                    workflow_id=workflow_id,
+                    correlation_id=correlation_id,
+                    status=status.status,
+                    finish_reason=self._derive_finish_reason(status.status, status.output),
+                    error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+                    token_usage=token_usage,
+                    events=captured_events,
+                    sub_results=self._extract_sub_results(output),
+                )
 
             status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
+
             output = status.output
-            has_output = output and not (
-                isinstance(output, dict) and all(v is None for v in output.values())
-            )
-            if not has_output and status.reason and status.status in ("FAILED", "TERMINATED"):
-                output = status.reason
-            output = self._normalize_output(output, status.status, status.reason)
+            raw_status = status.status
+
+            if raw_status in ("FAILED", "TERMINATED"):
+                logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
+                has_output = output and not (
+                    isinstance(output, dict) and all(v is None for v in output.values())
+                )
+                if not has_output and status.reason:
+                    output = status.reason
+
+            output = self._normalize_output(output, raw_status, status.reason)
+            logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
             token_usage = self._extract_token_usage(workflow_id)
             return AgentResult(
                 output=output,
                 workflow_id=workflow_id,
                 correlation_id=correlation_id,
-                status=status.status,
-                finish_reason=self._derive_finish_reason(status.status, status.output),
-                error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+                status=raw_status,
+                finish_reason=self._derive_finish_reason(raw_status, status.output),
+                error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
                 token_usage=token_usage,
-                events=captured_events,
                 sub_results=self._extract_sub_results(output),
             )
-
-        status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
-
-        output = status.output
-        raw_status = status.status
-
-        if raw_status in ("FAILED", "TERMINATED"):
-            logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
-            has_output = output and not (
-                isinstance(output, dict) and all(v is None for v in output.values())
-            )
-            if not has_output and status.reason:
-                output = status.reason
-
-        output = self._normalize_output(output, raw_status, status.reason)
-        logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
-        token_usage = self._extract_token_usage(workflow_id)
-        return AgentResult(
-            output=output,
-            workflow_id=workflow_id,
-            correlation_id=correlation_id,
-            status=raw_status,
-            finish_reason=self._derive_finish_reason(raw_status, status.output),
-            error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
-            token_usage=token_usage,
-            sub_results=self._extract_sub_results(output),
-        )
+        finally:
+            self._clear_workflow_credentials(workflow_id, credentials)
 
     async def _start_framework_async(
         self,

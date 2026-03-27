@@ -67,6 +67,46 @@ class MultiAgentCompilerTest {
         assertThat(switchTask.getDecisionCases()).containsKeys("agent_a", "agent_b");
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void testHandoffWithDynamicInstructionsAddsInstructionTasks() {
+        AgentConfig config = AgentConfig.builder()
+            .name("dynamic_team")
+            .model("openai/gpt-4o")
+            .instructions(Map.of(
+                "_worker_ref", "build_team_instructions",
+                "description", "Create routing instructions"
+            ))
+            .strategy("handoff")
+            .agents(List.of(
+                simpleSubAgent("agent_a", "Handle A tasks"),
+                simpleSubAgent("agent_b", "Handle B tasks")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        assertThat(wf.getTasks()).hasSize(5);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SIMPLE");
+        assertThat(wf.getTasks().get(0).getTaskReferenceName()).isEqualTo("dynamic_team_instructions_worker");
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(1).getTaskReferenceName()).isEqualTo("dynamic_team_instructions");
+
+        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask routerSubWorkflow = loop.getLoopOver().get(0);
+        WorkflowTask routerLlm = routerSubWorkflow.getSubWorkflowParam().getWorkflowDef().getTasks().get(0);
+        List<Map<String, Object>> routerMessages =
+            (List<Map<String, Object>>) routerLlm.getInputParameters().get("messages");
+        String routerSystemMsg = (String) routerMessages.get(0).get("message");
+        assertThat(routerSystemMsg).contains("${dynamic_team_instructions.output.result}");
+
+        WorkflowTask finalLlm = wf.getTasks().get(4);
+        List<Map<String, Object>> finalMessages =
+            (List<Map<String, Object>>) finalLlm.getInputParameters().get("messages");
+        String finalSystemMsg = (String) finalMessages.get(0).get("message");
+        assertThat(finalSystemMsg).contains("${dynamic_team_instructions.output.result}");
+    }
+
     @Test
     void testSequential() {
         AgentConfig config = AgentConfig.builder()
@@ -336,6 +376,46 @@ class MultiAgentCompilerTest {
         WorkflowTask switchTask = loop.getLoopOver().stream()
             .filter(t -> "SWITCH".equals(t.getType())).findFirst().orElseThrow();
         assertThat(switchTask.getDecisionCases()).containsKeys("agent_a", "agent_b", "DONE");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void testRouterAgentWithDynamicInstructionsAddsInstructionTasks() {
+        AgentConfig routerAgent = AgentConfig.builder()
+            .name("router_agent")
+            .model("anthropic/claude-sonnet-4-20250514")
+            .instructions(Map.of(
+                "_worker_ref", "build_router_instructions",
+                "description", "Create router prompt"
+            ))
+            .build();
+
+        AgentConfig config = AgentConfig.builder()
+            .name("routed_dynamic")
+            .model("openai/gpt-4o")
+            .strategy("router")
+            .router(routerAgent)
+            .agents(List.of(
+                simpleSubAgent("agent_a", "A"),
+                simpleSubAgent("agent_b", "B")
+            ))
+            .build();
+
+        WorkflowDef wf = compiler.compile(config);
+
+        assertThat(wf.getTasks()).hasSize(5);
+        assertThat(wf.getTasks().get(0).getType()).isEqualTo("SIMPLE");
+        assertThat(wf.getTasks().get(0).getTaskReferenceName()).isEqualTo("routed_dynamic_router_instructions_worker");
+        assertThat(wf.getTasks().get(1).getType()).isEqualTo("INLINE");
+        assertThat(wf.getTasks().get(1).getTaskReferenceName()).isEqualTo("routed_dynamic_router_instructions");
+
+        WorkflowTask loop = wf.getTasks().get(3);
+        WorkflowTask routerSubWorkflow = loop.getLoopOver().get(0);
+        WorkflowTask routerLlm = routerSubWorkflow.getSubWorkflowParam().getWorkflowDef().getTasks().get(0);
+        List<Map<String, Object>> routerMessages =
+            (List<Map<String, Object>>) routerLlm.getInputParameters().get("messages");
+        String routerSystemMsg = (String) routerMessages.get(0).get("message");
+        assertThat(routerSystemMsg).contains("${routed_dynamic_router_instructions.output.result}");
     }
 
     @Test

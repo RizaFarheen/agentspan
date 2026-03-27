@@ -492,6 +492,21 @@ export function transformWorkflowExecutionToAgentRun(
     })));
   }
 
+  // Build set of guardrail function names from agentDef for robust detection
+  const agentDefMeta = (execution as any).workflowDefinition?.metadata?.agentDef as Record<string, unknown> | undefined;
+  const guardrailFnNames = new Set<string>();
+  for (const gList of [
+    (agentDefMeta?.input_guardrails as Array<Record<string, unknown>> | undefined) ?? [],
+    (agentDefMeta?.output_guardrails as Array<Record<string, unknown>> | undefined) ?? [],
+    (agentDefMeta?.guardrails as Array<Record<string, unknown>> | undefined) ?? [],
+  ]) {
+    for (const g of gList) {
+      const fn = (g.guardrail_function ?? g) as Record<string, unknown>;
+      const name = (fn._worker_ref ?? fn.name) as string | undefined;
+      if (name) guardrailFnNames.add(name.toLowerCase());
+    }
+  }
+
   // Group tasks by DO_WHILE iteration number; collect root-level tasks separately
   const iterMap = new Map<number, ExecutionTask[]>();
   const rootActiveTasks: ExecutionTask[] = [];
@@ -797,20 +812,62 @@ export function transformWorkflowExecutionToAgentRun(
           continue;
         }
 
-        // ── Detect guardrail tasks by task type name convention ───────────────
-        const isGuardrail = toolName.toLowerCase().includes("guardrail");
+        // ── Detect guardrail tasks by name convention or agentDef declaration ──
+        const refName = (toolTask.referenceTaskName ?? toolTask.taskRefName ?? "").toLowerCase();
+        const isGuardrail =
+          toolName.toLowerCase().includes("guardrail") ||
+          refName.includes("guardrail") ||
+          guardrailFnNames.has(toolName.toLowerCase());
         if (isGuardrail) {
+          // Extract the actual content the guardrail checked (strip redundant alias fields)
+          const guardrailInput =
+            idData.content ?? idData.agent_output ?? idData.input_text ?? idData.output ?? idData.input;
+          // Look for the INLINE evaluation result in the same iteration
+          const evalRefPrefix = refName.replace(/_worker(_|$)/, "$1");
+          const evalTask = iterTasks.find(
+            t => t.taskType === "INLINE" &&
+                 (t.referenceTaskName ?? "").toLowerCase().startsWith(evalRefPrefix),
+          );
+          const evalResult = evalTask?.outputData?.result as Record<string, unknown> | undefined;
+          // Build a clean output: merge worker output with evaluation result
+          const guardrailOutput = evalResult ?? od;
+
+          // Guardrail "failure" is expressed in the output data, not the task status.
+          // The worker task COMPLETES even when the guardrail triggers — check output fields.
+          const guardrailTriggered =
+            failed ||
+            od.tripwire_triggered === true ||
+            evalResult?.passed === false;
+          const reason =
+            (evalResult?.message as string | undefined) ??
+            (od.output_info as any)?.reason ??
+            (guardrailTriggered ? (toolTask.reasonForIncompletion ?? "content blocked") : "passed");
+
           events.push({
             id: `${toolTask.taskId}-guardrail`,
-            type: failed ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
+            type: guardrailTriggered ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
             timestamp: toolTask.startTime ?? 0,
             toolName,
-            summary: failed
-              ? `${toolName} blocked: ${toolTask.reasonForIncompletion ?? "content blocked"}`
-              : `${toolName} passed`,
-            detail: { input: cleanInput, output: failed ? toolTask.reasonForIncompletion : od },
-            success: !failed,
+            summary: guardrailTriggered
+              ? `${toolName} blocked: ${reason}`
+              : `${toolName} — ${reason}`,
+            detail: { input: guardrailInput, output: guardrailOutput },
+            success: !guardrailTriggered,
             durationMs: toolDuration,
+            taskMeta: {
+              taskId: toolTask.taskId,
+              taskType: toolTask.taskType,
+              referenceTaskName: toolTask.referenceTaskName ?? toolTask.taskRefName,
+              scheduledTime: toolTask.scheduledTime ?? undefined,
+              startTime: toolTask.startTime ?? undefined,
+              endTime: toolTask.endTime ?? undefined,
+              workerId: (toolTask as any).workerId ?? undefined,
+              reasonForIncompletion: toolTask.reasonForIncompletion ?? undefined,
+              retryCount: toolTask.retryCount,
+              pollCount: toolTask.pollCount,
+              seq: toolTask.seq,
+              queueWaitTime: toolTask.queueWaitTime,
+            },
           });
           continue;
         }
@@ -1309,18 +1366,42 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
           durationMs,
         });
       }
-    } else if (task.taskType.toLowerCase().includes("guardrail")) {
+    } else if (
+      task.taskType.toLowerCase().includes("guardrail") ||
+      (task.referenceTaskName ?? task.taskRefName ?? "").toLowerCase().includes("guardrail")
+    ) {
+      // Extract meaningful content being checked (strip redundant alias fields)
+      const grInput =
+        (inputData as any).content ?? (inputData as any).agent_output ??
+        (inputData as any).input_text ?? (inputData as any).output ?? (inputData as any).input;
+      const grReason = (outputData.output_info as any)?.reason;
+      // Guardrail "failure" is in the output data, not the task status
+      const grTriggered = failed || outputData.tripwire_triggered === true;
       events.push({
         id: `${task.taskId}-guardrail`,
-        type: failed ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
+        type: grTriggered ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
         timestamp: task.startTime ?? 0,
         toolName: task.taskType,
-        summary: failed
-          ? `${task.taskType} blocked`
-          : `${task.taskType} passed`,
-        detail: { input: inputData, output: failed ? task.reasonForIncompletion : outputData },
-        success: !failed,
+        summary: grTriggered
+          ? `${task.taskType} blocked: ${grReason ?? "triggered"}`
+          : `${task.taskType} — ${grReason ?? "passed"}`,
+        detail: { input: grInput ?? inputData, output: failed ? task.reasonForIncompletion : outputData },
+        success: !grTriggered,
         durationMs,
+        taskMeta: {
+          taskId: task.taskId,
+          taskType: task.taskType,
+          referenceTaskName: task.referenceTaskName ?? task.taskRefName,
+          scheduledTime: task.scheduledTime ?? undefined,
+          startTime: task.startTime ?? undefined,
+          endTime: task.endTime ?? undefined,
+          workerId: (task as any).workerId ?? undefined,
+          reasonForIncompletion: task.reasonForIncompletion ?? undefined,
+          retryCount: task.retryCount,
+          pollCount: task.pollCount,
+          seq: task.seq,
+          queueWaitTime: task.queueWaitTime,
+        },
       });
     } else {
       events.push({

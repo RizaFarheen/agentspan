@@ -62,7 +62,13 @@ const prompt = "What's your return policy for electronics?";
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(agent, prompt);
+    const agentStream = await runtime.stream(agent, prompt);
+
+    for await (const event of agentStream) {
+      console.log('Event:', event.type);
+    }
+
+    const result = await agentStream.getResult();
     console.log('Status:', result.status);
     result.printResult();
   } finally {

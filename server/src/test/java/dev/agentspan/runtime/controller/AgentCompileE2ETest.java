@@ -840,6 +840,20 @@ class AgentCompileE2ETest {
         assertThat(resp2.get("workflowName").asText()).isEqualTo("multi_e2e");
     }
 
+    @Test
+    void startAgentAcceptsRequestCredentials() throws Exception {
+        Map<String, Object> config = agentConfig("start_creds_e2e", "openai/gpt-4o", "You are helpful.");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("agentConfig", config);
+        body.put("prompt", "Hello");
+        body.put("credentials", List.of("OPENAI_API_KEY"));
+
+        JsonNode resp = postStart(body);
+        assertThat(resp.get("workflowId")).isNotNull();
+        assertThat(resp.get("workflowId").asText()).isNotEmpty();
+        assertThat(resp.get("workflowName").asText()).isEqualTo("start_creds_e2e");
+    }
+
     // ══════════════════════════════════════════════════════════════════
     // OpenAI Normalizer e2e tests
     // ══════════════════════════════════════════════════════════════════
@@ -1182,6 +1196,52 @@ class AgentCompileE2ETest {
     }
 
     @Test
+    void openaiCamelCaseFieldVariants() throws Exception {
+        Map<String, Object> schema = Map.of(
+                "type", "object",
+                "properties", Map.of("answer", Map.of("type", "string"))
+        );
+
+        Map<String, Object> outputGuardrail = new LinkedHashMap<>();
+        outputGuardrail.put("name", "check_output_safety");
+        outputGuardrail.put("execute", Map.of("_worker_ref", "check_output_safety"));
+
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("name", "oai_camel_e2e");
+        raw.put("model", "gpt-4o");
+        raw.put("instructions", "Be careful.");
+        raw.put("outputType", schema);
+        raw.put("modelSettings", Map.of("temperature", 0.7, "maxTokens", 321));
+        raw.put("maxTokens", 654);
+        raw.put("outputGuardrails", List.of(outputGuardrail));
+
+        JsonNode resp = postCompile(openaiRequest(raw));
+        List<Map<String, Object>> tasks = getTasks(resp);
+        List<Map<String, Object>> llm = findAllTasksByType(tasks, "LLM_CHAT_COMPLETE");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) llm.get(0).get("inputParameters");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) inputs.get("messages");
+        String sysMsg = messages.stream()
+                .filter(m -> "system".equals(m.get("role")))
+                .map(m -> (String) m.get("message"))
+                .findFirst().orElse("");
+
+        assertThat(sysMsg).contains("JSON");
+        assertThat(inputs.get("temperature")).isEqualTo(0.7);
+        assertThat(inputs.get("maxTokens")).isEqualTo(654);
+
+        Map<String, Object> outputGuardrailTask = findAllTasksByType(tasks, "SIMPLE").stream()
+                .filter(t -> "check_output_safety".equals(t.get("name")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> guardrailInputs = (Map<String, Object>) outputGuardrailTask.get("inputParameters");
+        assertThat(guardrailInputs).containsKeys("content", "input", "input_text", "output", "agentOutput");
+    }
+
+    @Test
     void openaiTopLevelTempOverridesModelSettings() throws Exception {
         // When both model_settings and top-level are present, top-level wins
         Map<String, Object> raw = new LinkedHashMap<>();
@@ -1201,18 +1261,14 @@ class AgentCompileE2ETest {
 
     @Test
     void openaiGuardrails() throws Exception {
-        // Mirrors: examples/openai/05_guardrails.py
-        // Input guardrail with _worker_ref
+        // Mirrors the Python + TypeScript OpenAI guardrail shapes.
         Map<String, Object> inputGuardrail = new LinkedHashMap<>();
-        inputGuardrail.put("_type", "InputGuardrail");
         inputGuardrail.put("name", "pii_check");
-        inputGuardrail.put("_worker_ref", "check_for_pii");
+        inputGuardrail.put("execute", Map.of("_worker_ref", "check_for_pii"));
 
-        // Output guardrail with _worker_ref
         Map<String, Object> outputGuardrail = new LinkedHashMap<>();
-        outputGuardrail.put("_type", "OutputGuardrail");
         outputGuardrail.put("name", "safety_check");
-        outputGuardrail.put("_worker_ref", "check_output_safety");
+        outputGuardrail.put("guardrailFunction", Map.of("_worker_ref", "check_output_safety"));
 
         Map<String, Object> tool = new LinkedHashMap<>();
         tool.put("_worker_ref", "get_account_balance");
@@ -1225,7 +1281,8 @@ class AgentCompileE2ETest {
         raw.put("model", "gpt-4o");
         raw.put("instructions", "Secure banking assistant.");
         raw.put("tools", List.of(tool));
-        raw.put("guardrails", List.of(inputGuardrail, outputGuardrail));
+        raw.put("inputGuardrails", List.of(inputGuardrail));
+        raw.put("outputGuardrails", List.of(outputGuardrail));
 
         JsonNode resp = postCompile(openaiRequest(raw));
         List<Map<String, Object>> tasks = getTasks(resp);
@@ -1233,10 +1290,14 @@ class AgentCompileE2ETest {
         // Should have DO_WHILE for tool loop
         assertThat(findTaskByType(tasks, "DO_WHILE")).isNotNull();
 
-        // Guardrails produce SIMPLE tasks for custom workers
         List<Map<String, Object>> simpleTasks = findAllTasksByType(tasks, "SIMPLE");
-        // At minimum the guardrail workers should be present
-        assertThat(simpleTasks).isNotEmpty();
+        Map<String, Object> guardrailTask = simpleTasks.stream()
+                .filter(t -> "check_output_safety".equals(t.get("name")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> guardrailInputs = (Map<String, Object>) guardrailTask.get("inputParameters");
+        assertThat(guardrailInputs).containsKeys("content", "input_text", "output", "agentOutput");
     }
 
     @Test
@@ -1257,16 +1318,30 @@ class AgentCompileE2ETest {
 
         raw.put("tools", List.of(tool));
 
-        // Should compile without error — instructions may be string or object
         JsonNode resp = postCompile(openaiRequest(raw));
-        assertThat(resp.get("workflowDef")).isNotNull();
+        List<Map<String, Object>> tasks = getTasks(resp);
+        Map<String, Object> instructionsTask = findTaskByRef(tasks, "oai_dynamic_e2e_instructions_worker");
+        Map<String, Object> normalizeTask = findTaskByRef(tasks, "oai_dynamic_e2e_instructions");
+        assertThat(instructionsTask).isNotNull();
+        assertThat(instructionsTask.get("type")).isEqualTo("SIMPLE");
+        assertThat(normalizeTask).isNotNull();
+        assertThat(normalizeTask.get("type")).isEqualTo("INLINE");
+
+        List<Map<String, Object>> llm = findAllTasksByType(tasks, "LLM_CHAT_COMPLETE");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputs = (Map<String, Object>) llm.get(0).get("inputParameters");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> messages = (List<Map<String, Object>>) inputs.get("messages");
+        String sysMsg = messages.stream()
+                .filter(m -> "system".equals(m.get("role")))
+                .map(m -> (String) m.get("message"))
+                .findFirst().orElse("");
+        assertThat(sysMsg).contains("${oai_dynamic_e2e_instructions.output.result}");
     }
 
     @Test
     void openaiAgentAsTool() throws Exception {
         // Mirrors: examples/openai/08_agent_as_tool.py
-        // as_tool() produces a _worker_ref with embedded agent config
-        // The serializer serializes this as a tool with the agent's full config
         Map<String, Object> sentimentTool = new LinkedHashMap<>();
         sentimentTool.put("_worker_ref", "analyze_sentiment");
         sentimentTool.put("description", "Analyze sentiment");
@@ -1279,14 +1354,11 @@ class AgentCompileE2ETest {
         sentimentAgent.put("instructions", "Analyze sentiment.");
         sentimentAgent.put("tools", List.of(sentimentTool));
 
-        // as_tool() serializes the agent as a tool with name/description
         Map<String, Object> agentTool = new LinkedHashMap<>();
+        agentTool.put("_type", "AgentTool");
         agentTool.put("name", "sentiment_analyzer");
         agentTool.put("description", "Analyze text sentiment");
-        agentTool.put("parameters", Map.of("type", "object",
-                "properties", Map.of("request", Map.of("type", "string"))));
-        // In the OpenAI SDK, as_tool() produces a _worker_ref for the wrapper
-        agentTool.put("_worker_ref", "sentiment_analyzer");
+        agentTool.put("agent", sentimentAgent);
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "oai_manager_e2e");
@@ -1306,7 +1378,10 @@ class AgentCompileE2ETest {
         Map<String, Object> inputs = (Map<String, Object>) llm.get(0).get("inputParameters");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> toolSpecs = (List<Map<String, Object>>) inputs.get("tools");
-        assertThat(toolSpecs).anyMatch(t -> "sentiment_analyzer".equals(t.get("name")));
+        assertThat(toolSpecs).anyMatch(t ->
+                "sentiment_analyzer".equals(t.get("name"))
+                        && "SUB_WORKFLOW".equals(t.get("type"))
+                        && t.containsKey("inputSchema"));
     }
 
     @Test

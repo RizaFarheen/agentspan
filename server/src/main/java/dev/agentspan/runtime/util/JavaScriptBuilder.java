@@ -140,6 +140,82 @@ public class JavaScriptBuilder {
     }
 
     /**
+     * Normalize a framework/custom guardrail worker result into AgentSpan's
+     * internal guardrail contract.
+     */
+    public static String customGuardrailNormalizeScript() {
+        return iife(
+            "  var raw = $.worker_output;" +
+            "  var guardrailName = $.guardrail_name || 'guardrail';" +
+            "  var defaultOnFail = $.default_on_fail || 'retry';" +
+            "  if (raw == null) {" +
+            "    return {passed: true, message: '', on_fail: null," +
+            "            fixed_output: null, guardrail_name: guardrailName," +
+            "            should_continue: false};" +
+            "  }" +
+            "  if (typeof raw === 'object' && raw.result !== undefined" +
+            "      && raw.on_fail === undefined && raw.onFail === undefined" +
+            "      && raw.tripwire_triggered === undefined && raw.tripwireTriggered === undefined" +
+            "      && raw.output_info === undefined && raw.outputInfo === undefined) {" +
+            "    raw = raw.result;" +
+            "  }" +
+            "  if (raw != null && typeof raw === 'object'" +
+            "      && (raw.on_fail !== undefined || raw.onFail !== undefined" +
+            "          || raw.passed !== undefined || raw.fixed_output !== undefined" +
+            "          || raw.fixedOutput !== undefined)) {" +
+            "    var existingOnFail = raw.on_fail !== undefined ? raw.on_fail : raw.onFail;" +
+            "    var fixedOutput = raw.fixed_output !== undefined ? raw.fixed_output : raw.fixedOutput;" +
+            "    var passed = raw.passed !== false && (existingOnFail == null || existingOnFail === 'pass');" +
+            "    return {passed: passed, message: raw.message || '', on_fail: existingOnFail," +
+            "            fixed_output: fixedOutput, guardrail_name: raw.guardrail_name || raw.guardrailName || guardrailName," +
+            "            should_continue: existingOnFail === 'retry'};" +
+            "  }" +
+            "  if (raw != null && typeof raw === 'object'" +
+            "      && (raw.tripwire_triggered !== undefined || raw.tripwireTriggered !== undefined" +
+            "          || raw.output_info !== undefined || raw.outputInfo !== undefined)) {" +
+            "    var tripwire = raw.tripwire_triggered === true || raw.tripwireTriggered === true;" +
+            "    var info = raw.output_info !== undefined ? raw.output_info : raw.outputInfo;" +
+            "    var reason = '';" +
+            "    if (typeof info === 'string') {" +
+            "      reason = info;" +
+            "    } else if (info != null && typeof info === 'object' && info.reason != null) {" +
+            "      reason = String(info.reason);" +
+            "    }" +
+            "    if (!tripwire) {" +
+            "      return {passed: true, message: reason, on_fail: null," +
+            "              fixed_output: null, guardrail_name: guardrailName," +
+            "              should_continue: false};" +
+            "    }" +
+            "    return {passed: false, message: reason || (guardrailName + ' triggered')," +
+            "            on_fail: defaultOnFail, fixed_output: null," +
+            "            guardrail_name: guardrailName, should_continue: defaultOnFail === 'retry'};" +
+            "  }" +
+            "  return {passed: true, message: '', on_fail: null," +
+            "          fixed_output: null, guardrail_name: guardrailName," +
+            "          should_continue: false};"
+        );
+    }
+
+    /**
+     * Normalize a framework callable's instruction result to a plain string.
+     */
+    public static String normalizeInstructionsScript() {
+        return iife(
+            "  var raw = $.worker_output;" +
+            "  if (raw == null) return '';" +
+            "  if (typeof raw === 'string') return raw;" +
+            "  if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw);" +
+            "  if (typeof raw === 'object' && raw.result !== undefined) {" +
+            "    if (raw.result == null) return '';" +
+            "    if (typeof raw.result === 'string') return raw.result;" +
+            "    if (typeof raw.result === 'number' || typeof raw.result === 'boolean') return String(raw.result);" +
+            "    return JSON.stringify(raw.result);" +
+            "  }" +
+            "  return JSON.stringify(raw);"
+        );
+    }
+
+    /**
      * Build the output resolution JavaScript.
      * Checks if a guardrail fix or human edit stored a replacement output
      * in workflow variables, and uses it instead of the raw LLM output.

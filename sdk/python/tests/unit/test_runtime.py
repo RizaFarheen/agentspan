@@ -1639,6 +1639,92 @@ class TestStartViaServer:
         assert "idempotencyKey" not in payload
 
 
+class TestStartFrameworkViaServer:
+    """Test _start_framework_via_server() sends correct framework payloads."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
+
+                config = AgentConfig(server_url="http://fake:8080")
+                return AgentRuntime(config=config)
+
+    def test_start_framework_via_server_passes_credentials(self, runtime):
+        """Framework start payload includes request-level credentials."""
+        mock_post = _mock_requests_post({"workflowId": "wf-fw-1"})
+        with patch("requests.post", mock_post):
+            runtime._start_framework_via_server(
+                framework="openai",
+                raw_config={"name": "fw_agent"},
+                prompt="hello",
+                credentials=["OPENAI_API_KEY"],
+            )
+
+        payload = mock_post.call_args[1]["json"]
+        assert payload["credentials"] == ["OPENAI_API_KEY"]
+
+
+class TestFrameworkCredentials:
+    """Test request-scoped credential handling for framework agents."""
+
+    @pytest.fixture()
+    def runtime(self):
+        with patch("conductor.client.orkes_clients.OrkesClients"):
+            with patch("agentspan.agents.runtime.worker_manager.TaskHandler", create=True):
+                from agentspan.agents.runtime.config import AgentConfig
+                from agentspan.agents.runtime.runtime import AgentRuntime
+
+                config = AgentConfig(server_url="http://fake:8080")
+                return AgentRuntime(config=config)
+
+    def test_run_framework_registers_and_clears_workflow_credentials(self, runtime):
+        """Framework run() exposes request credentials to extracted tools for the run lifetime."""
+        from agentspan.agents.runtime._dispatch import (
+            _workflow_credentials,
+            _workflow_credentials_lock,
+        )
+
+        fake_framework_agent = object()
+
+        def _status_with_registry_check(workflow_id, timeout=None):
+            with _workflow_credentials_lock:
+                assert _workflow_credentials[workflow_id] == ["FW_API_KEY"]
+            return AgentStatus(
+                workflow_id=workflow_id,
+                is_complete=True,
+                status="COMPLETED",
+                output={"result": "ok"},
+            )
+
+        with patch("agentspan.agents.frameworks.serializer.detect_framework", return_value="openai"):
+            with patch(
+                "agentspan.agents.frameworks.serializer.serialize_agent",
+                return_value=({"name": "fw_agent"}, []),
+            ):
+                with patch.object(
+                    runtime, "_start_framework_via_server", return_value="wf-framework-1"
+                ) as mock_start:
+                    with patch.object(
+                        runtime,
+                        "_poll_status_until_complete",
+                        side_effect=_status_with_registry_check,
+                    ):
+                        with patch.object(runtime, "_extract_token_usage", return_value=None):
+                            result = runtime.run(
+                                fake_framework_agent,
+                                "hello",
+                                credentials=["FW_API_KEY"],
+                            )
+
+        assert result.workflow_id == "wf-framework-1"
+        assert mock_start.call_args.kwargs["credentials"] == ["FW_API_KEY"]
+        with _workflow_credentials_lock:
+            assert "wf-framework-1" not in _workflow_credentials
+
+
 class TestPollStatusUntilComplete:
     """Test _poll_status_until_complete() polling logic."""
 

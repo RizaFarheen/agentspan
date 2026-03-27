@@ -17,7 +17,7 @@ import MinusIcon from "components/flow/components/graphs/PanAndZoomWrapper/icons
 import PlusIcon from "components/flow/components/graphs/PanAndZoomWrapper/icons/Plus";
 import FitToFrame from "shared/icons/FitToFrame";
 import { colors } from "theme/tokens/variables";
-import { Canvas, CanvasPosition, Edge, Node, NodeData, EdgeData, PortData, PortSide } from "reaflow";
+import { Canvas, CanvasPosition, Edge, Node, NodeData, EdgeData } from "reaflow";
 import { getCardVariant } from "components/flow/components/shapes/styles";
 import { ArrowRight, Check, Prohibit } from "@phosphor-icons/react";
 import CardIcon from "components/flow/components/shapes/TaskCard/CardIcon";
@@ -175,9 +175,17 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack, 
   onBack?: () => void;
   onToggleGroup?: () => void;
 }) {
-  // ── Invisible junction node (fork/join routing) ──────────────────────────────
+  // ── Fork/join junction node — thin visible bar ──────────────────────────────
   if (data.kind === "junction") {
-    return <div style={{ width, height }} />;
+    return (
+      <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{
+          width: Math.min(width, 120), height: 4,
+          borderRadius: 2,
+          backgroundColor: "#c0c0c0",
+        }} />
+      </div>
+    );
   }
 
   // ── Ellipsis node ("... N more") ────────────────────────────────────────────
@@ -492,48 +500,21 @@ function buildTurnNodes(
     joinId: string,
   ) => {
     if (branches.length === 0) return;
-    const forkPortWidth = Math.max(W, branches.length * 32);
-    // Fork node (invisible, just routing)
-    const forkPorts: PortData[] = branches.map((_, i) => ({
-      id: `${forkId}-p${i}`,
-      width: 2,
-      height: 2,
-      side: "SOUTH" as PortSide,
-      disabled: true,
-      hidden: true,
-    }));
-    nodes.push({ id: forkId, width: forkPortWidth, height: 1, data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED }, ports: forkPorts });
+    // Fork junction: small visible bar. No ports — ELK handles edge routing.
+    nodes.push({ id: forkId, width: 120, height: 16, data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED } });
     edges.push({ id: `${prevRef.id}→${forkId}`, from: prevRef.id, to: forkId });
     done.add(forkId);
 
-    // Join node (invisible, just routing)
-    const joinPorts: PortData[] = branches.map((_, i) => ({
-      id: `${joinId}-p${i}`,
-      width: 2,
-      height: 2,
-      side: "NORTH" as PortSide,
-      disabled: true,
-      hidden: true,
-    }));
-    nodes.push({ id: joinId, width: forkPortWidth, height: 1, data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED }, ports: joinPorts });
+    // Join junction: small visible bar.
+    nodes.push({ id: joinId, width: 120, height: 16, data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED } });
     done.add(joinId);
 
-    // Branch nodes
+    // Branch nodes with edges from fork and to join
     for (let i = 0; i < branches.length; i++) {
       const b = branches[i];
       nodes.push({ id: b.id, width: W, height: b.h ?? H, data: b.data });
-      edges.push({
-        id: `${forkId}→${b.id}`,
-        from: forkId,
-        fromPort: `${forkId}-p${i}`,
-        to: b.id,
-      });
-      edges.push({
-        id: `${b.id}→${joinId}`,
-        from: b.id,
-        to: joinId,
-        toPort: `${joinId}-p${i}`,
-      });
+      edges.push({ id: `${forkId}→${b.id}`, from: forkId, to: b.id });
+      edges.push({ id: `${b.id}→${joinId}`, from: b.id, to: joinId });
       if (b.data.ts === TaskStatus.COMPLETED) done.add(b.id);
     }
 
