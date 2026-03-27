@@ -270,7 +270,7 @@ func TestParseDiscoveryResult_InvalidJSON(t *testing.T) {
 func TestParseDeployResult(t *testing.T) {
 	wfName := "agent1_workflow"
 	data := []byte(`[
-		{"agent_name":"agent1","workflow_name":"agent1_workflow","success":true,"error":""},
+		{"agent_name":"agent1","workflow_name":"agent1_workflow","success":true,"error":null},
 		{"agent_name":"agent2","workflow_name":null,"success":false,"error":"connection refused"}
 	]`)
 
@@ -287,7 +287,7 @@ func TestParseDeployResult(t *testing.T) {
 	if results[0].WorkflowName == nil || *results[0].WorkflowName != wfName {
 		t.Errorf("result[0].WorkflowName = %v, want %q", results[0].WorkflowName, wfName)
 	}
-	if results[1].Success || results[1].Error != "connection refused" {
+	if results[1].Success || results[1].Error == nil || *results[1].Error != "connection refused" {
 		t.Errorf("result[1] = %+v, want success=false error='connection refused'", results[1])
 	}
 }
@@ -358,7 +358,7 @@ func TestFormatDeployOutput_Partial(t *testing.T) {
 	wf := "wf1"
 	results := []deployResult{
 		{AgentName: "a1", WorkflowName: &wf, Success: true},
-		{AgentName: "a2", Success: false, Error: "timeout"},
+		{AgentName: "a2", Success: false, Error: strPtr("timeout")},
 	}
 
 	out := formatDeployOutput(results)
@@ -369,8 +369,8 @@ func TestFormatDeployOutput_Partial(t *testing.T) {
 
 func TestFormatDeployOutput_AllFailed(t *testing.T) {
 	results := []deployResult{
-		{AgentName: "a1", Success: false, Error: "err1"},
-		{AgentName: "a2", Success: false, Error: "err2"},
+		{AgentName: "a1", Success: false, Error: strPtr("err1")},
+		{AgentName: "a2", Success: false, Error: strPtr("err2")},
 	}
 
 	out := formatDeployOutput(results)
@@ -378,3 +378,5 @@ func TestFormatDeployOutput_AllFailed(t *testing.T) {
 		t.Errorf("output should show all-failed summary: %s", out)
 	}
 }
+
+func strPtr(s string) *string { return &s }

@@ -31,7 +31,7 @@ type deployResult struct {
 	AgentName    string  `json:"agent_name"`
 	WorkflowName *string `json:"workflow_name"`
 	Success      bool    `json:"success"`
-	Error        string  `json:"error"`
+	Error        *string `json:"error"`
 }
 
 var deployCmd = &cobra.Command{
@@ -96,8 +96,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(discovered) == 0 {
-		color.Yellow("No agents found in package %q.", pkg)
-		return nil
+		return fmt.Errorf("no agents found in package %q. Define agents as module-level Agent instances", pkg)
 	}
 
 	// Keep the full list for JSON output
@@ -137,10 +136,22 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	// 11. Output results
+	succeeded := 0
+	for _, r := range results {
+		if r.Success {
+			succeeded++
+		}
+	}
+
 	if jsonOutput {
 		out := map[string]interface{}{
 			"discovered": allDiscovered,
-			"results":    results,
+			"deployed":   results,
+			"summary": map[string]int{
+				"total":     len(results),
+				"succeeded": succeeded,
+				"failed":    len(results) - succeeded,
+			},
 		}
 		printJSON(out)
 	} else {
@@ -384,14 +395,14 @@ func execDeploy(ctx context.Context, env []string, language, pythonBin, pkg stri
 	switch language {
 	case "python":
 		args := []string{"-m", "agentspan.cli.deploy", "--package", pkg}
-		for _, n := range agentNames {
-			args = append(args, "--agent", n)
+		if len(agentNames) > 0 {
+			args = append(args, "--agents", strings.Join(agentNames, ","))
 		}
 		data, err = runSubprocess(ctx, env, pythonBin, args...)
 	case "typescript":
 		args := []string{"tsx", "node_modules/agentspan/cli-bin/deploy.ts", "--path", pkg}
-		for _, n := range agentNames {
-			args = append(args, "--agent", n)
+		if len(agentNames) > 0 {
+			args = append(args, "--agents", strings.Join(agentNames, ","))
 		}
 		data, err = runSubprocess(ctx, env, "npx", args...)
 	default:
@@ -497,7 +508,11 @@ func formatDeployOutput(results []deployResult) string {
 			fmt.Fprintln(&buf)
 		} else {
 			failures++
-			red.Fprintf(&buf, "  ✗ %s: %s\n", r.AgentName, r.Error)
+			errMsg := "unknown error"
+			if r.Error != nil {
+				errMsg = *r.Error
+			}
+			red.Fprintf(&buf, "  ✗ %s: %s\n", r.AgentName, errMsg)
 		}
 	}
 
@@ -506,8 +521,15 @@ func formatDeployOutput(results []deployResult) string {
 		green.Fprintf(&buf, "All %d agent(s) deployed successfully.\n", successes)
 	} else if successes == 0 {
 		red.Fprintf(&buf, "All %d agent(s) failed to deploy.\n", failures)
+		fmt.Fprintln(&buf)
+		fmt.Fprintln(&buf, "Check server status with: agentspan doctor")
 	} else {
 		fmt.Fprintf(&buf, "%d deployed, %d failed.\n", successes, failures)
+	}
+
+	if successes > 0 {
+		fmt.Fprintln(&buf)
+		fmt.Fprintln(&buf, "Run with: agentspan agent run --name <agent> \"your prompt\"")
 	}
 
 	return buf.String()
