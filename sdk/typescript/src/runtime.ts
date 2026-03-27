@@ -288,9 +288,19 @@ export class AgentRuntime {
 
   /**
    * Deploy an agent workflow definition.
+   * Accepts native Agent instances or framework agent objects.
    */
-  async deploy(agent: Agent): Promise<DeploymentInfo> {
-    const payload = this.serializer.serialize(agent);
+  async deploy(agent: Agent | object): Promise<DeploymentInfo> {
+    const framework = detectFramework(agent);
+
+    let payload: Record<string, unknown>;
+    if (framework !== null) {
+      const [rawConfig] = this._serializeFramework(agent, framework);
+      payload = { framework, rawConfig };
+    } else {
+      payload = this.serializer.serialize(agent as Agent);
+    }
+
     const response = await this._httpRequest('POST', '/agent/deploy', payload);
     return response as unknown as DeploymentInfo;
   }
@@ -985,7 +995,7 @@ export function stream(agent: Agent | object, prompt: string, options?: RunOptio
 /**
  * Deploy an agent using the singleton runtime.
  */
-export function deploy(agent: Agent): Promise<DeploymentInfo> {
+export function deploy(agent: Agent | object): Promise<DeploymentInfo> {
   return getRuntime().deploy(agent);
 }
 
