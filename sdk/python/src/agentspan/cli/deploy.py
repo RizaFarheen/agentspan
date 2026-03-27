@@ -48,6 +48,8 @@ def main():
         for agent in agents:
             try:
                 infos = deploy(agent)
+                if not infos:
+                    raise RuntimeError(f"deploy() returned no results for agent '{agent.name}'")
                 info = infos[0]
                 results.append({
                     "agent_name": info.agent_name,

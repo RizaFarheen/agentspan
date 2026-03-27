@@ -63,6 +63,17 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 	autoYes, _ := cmd.Flags().GetBool("yes")
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 
+	// Filter out empty strings from --agents flag
+	{
+		clean := agentNames[:0]
+		for _, n := range agentNames {
+			if n != "" {
+				clean = append(clean, n)
+			}
+		}
+		agentNames = clean
+	}
+
 	// 3. Detect language
 	language, err := detectLanguage(wd, languageFlag)
 	if err != nil {
@@ -367,17 +378,24 @@ func runSubprocess(ctx context.Context, env []string, name string, args ...strin
 // buildEnv constructs the environment variables for subprocess calls.
 func buildEnv(cfg *config.Config) []string {
 	env := os.Environ()
-	env = append(env, "AGENTSPAN_SERVER_URL="+cfg.ServerURL)
+	// Remove existing AGENTSPAN_ vars to avoid duplication
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		if !strings.HasPrefix(e, "AGENTSPAN_") {
+			filtered = append(filtered, e)
+		}
+	}
+	filtered = append(filtered, "AGENTSPAN_SERVER_URL="+cfg.ServerURL)
 	if cfg.APIKey != "" {
-		env = append(env, "AGENTSPAN_API_KEY="+cfg.APIKey)
+		filtered = append(filtered, "AGENTSPAN_API_KEY="+cfg.APIKey)
 	}
 	if cfg.AuthKey != "" {
-		env = append(env, "AGENTSPAN_AUTH_KEY="+cfg.AuthKey)
+		filtered = append(filtered, "AGENTSPAN_AUTH_KEY="+cfg.AuthKey)
 	}
 	if cfg.AuthSecret != "" {
-		env = append(env, "AGENTSPAN_AUTH_SECRET="+cfg.AuthSecret)
+		filtered = append(filtered, "AGENTSPAN_AUTH_SECRET="+cfg.AuthSecret)
 	}
-	return env
+	return filtered
 }
 
 // findTSBinScript locates a cli-bin script by walking up from dir
@@ -497,6 +515,17 @@ func filterDiscoveredAgents(agents []discoveredAgent, names []string) ([]discove
 	if len(names) == 0 {
 		return agents, nil
 	}
+
+	// Deduplicate names while preserving order
+	seen := make(map[string]bool, len(names))
+	deduped := make([]string, 0, len(names))
+	for _, n := range names {
+		if !seen[n] {
+			seen[n] = true
+			deduped = append(deduped, n)
+		}
+	}
+	names = deduped
 
 	agentMap := make(map[string]discoveredAgent)
 	for _, a := range agents {

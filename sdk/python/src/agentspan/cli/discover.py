@@ -46,29 +46,35 @@ def discover_from_path(directory: str) -> list:
     sys.stdout = sys.stderr
 
     try:
-        for fname in sorted(os.listdir(abs_dir)):
-            if not fname.endswith(".py") or fname.startswith("_"):
-                continue
-            mod_name = fname[:-3]  # strip .py
-            try:
-                mod = importlib.import_module(mod_name)
-            except Exception as e:
-                print(f"Skipping {fname}: {e}", file=sys.stderr)
-                continue
+        for root, _dirs, files in os.walk(abs_dir):
+            # Ensure each subdirectory is importable
+            abs_root = os.path.abspath(root)
+            if abs_root not in sys.path:
+                sys.path.insert(0, abs_root)
 
-            for attr_name in dir(mod):
-                if attr_name.startswith("_"):
+            for fname in sorted(files):
+                if not fname.endswith(".py") or fname.startswith("_"):
                     continue
-                obj = getattr(mod, attr_name, None)
-                if obj is None:
+                mod_name = fname[:-3]  # strip .py
+                try:
+                    mod = importlib.import_module(mod_name)
+                except BaseException as e:
+                    print(f"Skipping {fname}: {e}", file=sys.stderr)
                     continue
-                # Native Agent or framework agent (OpenAI, LangChain, ADK, etc.)
-                is_native = isinstance(obj, Agent)
-                is_framework = (not is_native) and detect_framework(obj) is not None
-                name = getattr(obj, "name", None)
-                if (is_native or is_framework) and name and name not in seen_names:
-                    discovered.append(obj)
-                    seen_names.add(name)
+
+                for attr_name in dir(mod):
+                    if attr_name.startswith("_"):
+                        continue
+                    obj = getattr(mod, attr_name, None)
+                    if obj is None:
+                        continue
+                    # Native Agent or framework agent (OpenAI, LangChain, ADK, etc.)
+                    is_native = isinstance(obj, Agent)
+                    is_framework = (not is_native) and detect_framework(obj) is not None
+                    name = getattr(obj, "name", None)
+                    if (is_native or is_framework) and name and name not in seen_names:
+                        discovered.append(obj)
+                        seen_names.add(name)
     finally:
         sys.stdout = real_stdout
 
