@@ -108,7 +108,11 @@ func runDeployCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(discovered) == 0 {
-		return fmt.Errorf("no agents found in %q. Define agents as module-level Agent instances", pkg.Value)
+		hint := "Define agents as module-level variables (e.g., agent = Agent(name=..., ...)).\n" +
+			"  Supported: AgentSpan Agent, OpenAI, LangChain, LangGraph, Google ADK.\n" +
+			"  Agents inside functions or if __name__ blocks are not discoverable.\n" +
+			"  Use --package or --path to point to the right location."
+		return fmt.Errorf("no agents found in %q.\n  %s", pkg.Value, hint)
 	}
 
 	// Keep the full list for JSON output
