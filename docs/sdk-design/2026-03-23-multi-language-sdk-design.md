@@ -2398,7 +2398,69 @@ import { generateText } from '@agentspan/sdk/vercel-ai';
 
 This is better than requiring users to rewrite their agent as `new Agent({...})`. The wrapper internally builds an Agent, runs it, and maps the result back to the framework's format. Reserve the explicit Agent API for when users need agentspan-specific features (guardrails, termination, handoffs, HITL).
 
-### 15.9 Audit Methodology
+### 15.9 CLI Deploy & Agent Discovery
+
+The `agentspan deploy` CLI command discovers and deploys agents from user code. Each SDK must provide CLI entry points that the Go CLI invokes as subprocesses.
+
+#### Architecture
+
+```
+agentspan deploy (Go CLI)
+  ├── Language detection (pyproject.toml → Python, tsconfig.json → TypeScript)
+  ├── Discovery subprocess → JSON on stdout
+  │     Python: python -m agentspan.cli.discover --path <dir> | --package <module>
+  │     TypeScript: npx tsx cli-bin/discover.ts --path <dir>
+  ├── Confirmation prompt (skip with --yes)
+  └── Deploy subprocess → JSON on stdout
+        Python: python -m agentspan.cli.deploy --path <dir> --agents foo,bar
+        TypeScript: npx tsx cli-bin/deploy.ts --path <dir> --agents foo,bar
+```
+
+#### Discovery Requirements
+
+Each SDK must provide a discovery entry point that:
+
+1. **Scans directories recursively** for source files (`.py`, `.ts`, `.js`)
+2. **Skips** `__pycache__`, `.venv`, `venv`, `node_modules`, `.git`, `dist`, `build`, and hidden directories
+3. **Dynamically imports** each file and collects agent instances
+4. **Detects both native and framework agents** using `detect_framework()`:
+   - Native `Agent` instances (including `model="claude-code/..."`)
+   - OpenAI Agents SDK (`agents.Agent`)
+   - LangGraph (`CompiledStateGraph`)
+   - LangChain (`AgentExecutor`)
+   - Google ADK (`LlmAgent`)
+5. **Redirects stdout to stderr** during imports to prevent side-effects from corrupting JSON output
+6. **Catches `BaseException`** (Python) or swallows import errors with stderr logging (TypeScript) so one broken file doesn't abort discovery
+7. **Deduplicates by agent name** — first discovered instance wins
+8. **Outputs JSON to stdout**: `[{"name": "...", "framework": "native"|"openai"|...}]`
+
+#### Deploy Requirements
+
+Each SDK must provide a deploy entry point that:
+
+1. **Re-discovers agents** (same as discovery) and filters by `--agents` if specified
+2. **Calls `deploy()` per agent** with individual error handling — partial failures must not abort the batch
+3. **Outputs JSON to stdout**: `[{"agent_name": "...", "workflow_name": "...", "success": true/false, "error": null/"..."}]`
+4. **Native agents** (including `claude-code` models) are serialized via `AgentConfigSerializer` and sent as `{"agentConfig": {...}}`
+5. **Framework agents** are serialized via `serialize_agent()` / `_serializeFramework()` and sent as `{"framework": "...", "rawConfig": {...}}`
+
+#### Key Design Decisions
+
+- **`detect_framework()` must return `null`/`None` for native `Agent` instances regardless of model string.** The `model` field (e.g., `claude-code/sonnet`) is routing metadata for the server, not a framework identifier. Returning a framework ID for native agents breaks deployment.
+- **Module-level agent definitions are the recommended pattern.** Agents defined inside functions, `if __name__` blocks, or classes are not discoverable. The error message must explain this.
+- **The Go CLI sets `AGENTSPAN_AUTO_START_SERVER=false`** in subprocess env to prevent the SDK from trying to start an embedded server during deploy.
+
+#### Reference Implementations
+
+| Component | Python | TypeScript |
+|-----------|--------|------------|
+| Discovery entry point | `sdk/python/src/agentspan/cli/discover.py` | `sdk/typescript/cli-bin/discover.ts` |
+| Deploy entry point | `sdk/python/src/agentspan/cli/deploy.py` | `sdk/typescript/cli-bin/deploy.ts` |
+| Shared discovery logic | (inline in discover.py) | `sdk/typescript/cli-bin/shared.ts` |
+| Framework detection | `sdk/python/src/agentspan/agents/frameworks/serializer.py:detect_framework()` | `sdk/typescript/src/frameworks/detect.ts:detectFramework()` |
+| CLI command (Go) | `cli/cmd/deploy.go` | (same) |
+
+### 15.10 Audit Methodology
 
 For each new SDK, run this 3-pass audit:
 
