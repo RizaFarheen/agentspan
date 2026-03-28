@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""Swarm: Claude Code agents build and review a React app until approved.
+"""Swarm: Claude Code builds a React app, OpenAI reviews it, iterate until approved.
 
 Architecture:
-    build_review_swarm (orchestrator, SWARM strategy)
+    build_review_swarm (orchestrator, anthropic/claude-sonnet-4-5, SWARM strategy)
         ├── builder  (claude-code/sonnet — Write, Edit, Bash, Read)
-        └── reviewer (claude-code/sonnet — Read, Glob, Grep)
+        └── reviewer (openai/gpt-4o — text-only code review)
 
     builder ──HANDOFF_TO_REVIEWER──> reviewer
     reviewer ──HANDOFF_TO_BUILDER──> builder  (if issues found)
     reviewer ──APPROVED──> done
+
+Demonstrates:
+    - Mixed-model multi-agent: Claude Code for building, OpenAI for reviewing
+    - SWARM orchestration with handoffs between different agent types
+    - Claude Code agent as a sub-agent in a multi-agent workflow
 
 Usage:
     uv run python examples/claude_agent_sdk/05_build_and_review.py
@@ -26,7 +31,7 @@ builder = Agent(
         f"You are a frontend developer. Write code in {PROJECT_DIR}/.\n"
         "Do NOT ask for confirmation — create and edit files directly.\n\n"
         "When you finish building or fixing, say HANDOFF_TO_REVIEWER followed by "
-        "a summary of what you did."
+        "a summary of what you did and include the full contents of App.tsx."
     ),
     tools=["Write", "Edit", "Bash", "Read", "Glob"],
     max_turns=15,
@@ -34,10 +39,10 @@ builder = Agent(
 
 reviewer = Agent(
     name="reviewer",
-    model="claude-code/sonnet",
+    model="openai/gpt-4o",
     instructions=(
-        f"You are a senior code reviewer. Review files in {PROJECT_DIR}/.\n"
-        "Read the source files and check for:\n"
+        "You are a senior code reviewer. You receive code from the builder.\n"
+        "Check for:\n"
         "- TypeScript correctness\n"
         "- Accessibility (aria labels, semantic HTML)\n"
         "- Clean code (no unused imports, proper naming)\n"
@@ -45,8 +50,6 @@ reviewer = Agent(
         "If there are issues, say HANDOFF_TO_BUILDER followed by the list of issues to fix.\n"
         "If everything looks good, say APPROVED followed by a brief summary."
     ),
-    tools=["Read", "Glob", "Grep"],
-    max_turns=10,
 )
 
 build_review_swarm = Agent(
