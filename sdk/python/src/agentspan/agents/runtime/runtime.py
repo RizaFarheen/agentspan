@@ -435,8 +435,16 @@ class AgentRuntime:
             _raise_api_error(exc, url=url)
         data = resp.json()
         workflow_id = data["workflowId"]
-        logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
-        return workflow_id
+        required_workers: Optional[set] = None
+        if "requiredWorkers" in data:
+            required_workers = set(data["requiredWorkers"])
+            logger.info(
+                "Started agent '%s' via server (workflow_id=%s, requiredWorkers=%s)",
+                agent.name, workflow_id, sorted(required_workers),
+            )
+        else:
+            logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
+        return workflow_id, required_workers
 
     async def _start_via_server_async(
         self,
@@ -470,8 +478,16 @@ class AgentRuntime:
 
         data = await self._http.start_agent(payload)
         workflow_id = data["workflowId"]
-        logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
-        return workflow_id
+        required_workers: Optional[set] = None
+        if "requiredWorkers" in data:
+            required_workers = set(data["requiredWorkers"])
+            logger.info(
+                "Started agent '%s' via server (workflow_id=%s, requiredWorkers=%s)",
+                agent.name, workflow_id, sorted(required_workers),
+            )
+        else:
+            logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
+        return workflow_id, required_workers
 
     async def _start_framework_via_server_async(
         self,
@@ -694,12 +710,19 @@ class AgentRuntime:
             worker_names = self._collect_worker_names(agent)
             self._registered_tool_names.update(worker_names)
 
-    def _prepare_workers(self, agent: Agent) -> None:
+    def _prepare_workers(
+        self, agent: Agent, *, required_workers: Optional[set] = None
+    ) -> None:
         """Register and start workers without compiling.
 
         Used when starting via the server API (``/api/agent/start``)
         which handles compilation server-side.  We still need local
         workers for tool execution, custom guardrails, etc.
+
+        When *required_workers* is provided (from the server's
+        ``requiredWorkers`` response), only system workers whose task
+        names appear in the set are registered.  User-defined tool
+        workers are always registered.
         """
         # Auto-register integrations if enabled
         if self._config.auto_register_integrations:
@@ -708,13 +731,18 @@ class AgentRuntime:
         # Associate prompt templates with the agent's model (if any)
         self._associate_templates_with_models(agent)
 
+        if required_workers is not None:
+            logger.info("Server expects workers: %s", sorted(required_workers))
+
         # Register worker functions locally
-        self._register_workers(agent)
+        self._register_workers(agent, required_workers=required_workers)
 
         # Start worker polling if needed
         if self._config.auto_start_workers and self._has_worker_tools(agent):
             with self._worker_start_lock:
-                worker_names = self._collect_worker_names(agent)
+                worker_names = self._collect_worker_names(
+                    agent, required_workers=required_workers
+                )
                 new_workers = worker_names - self._registered_tool_names
                 if new_workers:
                     logger.info(
@@ -732,28 +760,37 @@ class AgentRuntime:
                     # window caused by a full stop/restart cycle.
                     self._worker_manager.start()
 
-    def _collect_worker_names(self, agent: Agent) -> set:
+    def _collect_worker_names(
+        self, agent: Agent, *, required_workers: Optional[set] = None
+    ) -> set:
         """Collect all worker task names from an agent tree.
 
-        Includes tools, custom guardrails, stop_when, termination,
-        check_transfer, router, handoff, and manual selection workers.
-        Also recurses into agent_tool nested agents.
+        When *required_workers* is provided (from the server's
+        ``requiredWorkers`` response), the server-provided set is used
+        as the authoritative list of system workers.  User-defined tool
+        names are still collected from the agent tree and merged in.
+
+        When *required_workers* is ``None`` (older server / fallback),
+        the full detection logic runs as before.
         """
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.tool import get_tool_def
 
-        names: set = set()
-
-        # Tools (and tool-level guardrails)
+        # Always collect user-defined tool names from the agent tree
+        tool_names: set = set()
         for t in agent.tools:
             try:
                 td = get_tool_def(t)
                 if td.tool_type in ("worker", "cli"):
-                    names.add(td.name)
+                    tool_names.add(td.name)
                 elif td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                     nested_agent = td.config["agent"]
                     if not getattr(nested_agent, "external", False):
-                        names.update(self._collect_worker_names(nested_agent))
+                        tool_names.update(
+                            self._collect_worker_names(
+                                nested_agent, required_workers=required_workers
+                            )
+                        )
                 # Tool-level guardrails
                 for g in td.guardrails:
                     if (
@@ -761,9 +798,26 @@ class AgentRuntime:
                         and not isinstance(g, (RegexGuardrail, LLMGuardrail))
                         and g.func is not None
                     ):
-                        names.add(g.name)
+                        tool_names.add(g.name)
             except TypeError:
                 continue
+
+        # Recurse into sub-agents for their tool names
+        for sub in agent.agents:
+            if getattr(sub, "is_claude_code", False):
+                tool_names.add(sub.name)
+            elif not getattr(sub, "external", False):
+                tool_names.update(
+                    self._collect_worker_names(sub, required_workers=required_workers)
+                )
+
+        # If the server told us which system workers are needed, use that
+        # as the authoritative list and merge in user-defined tool names.
+        if required_workers is not None:
+            return tool_names | required_workers
+
+        # Fallback: detect system workers from the agent tree
+        names: set = set(tool_names)
 
         # Custom guardrails (not Regex/LLM/external)
         custom_guardrails = [
@@ -817,16 +871,11 @@ class AgentRuntime:
         if agent.strategy == "manual" and agent.agents:
             names.add(f"{agent.name}_process_selection")
 
-        # Recurse into sub-agents
-        for sub in agent.agents:
-            if getattr(sub, "is_claude_code", False):
-                # Claude-code sub-agents register their own passthrough worker
-                names.add(sub.name)
-            else:
-                names.update(self._collect_worker_names(sub))
         return names
 
-    def _register_workers(self, agent: Agent) -> None:
+    def _register_workers(
+        self, agent: Agent, *, required_workers: Optional[set] = None
+    ) -> None:
         """Register all workers needed for SDK-side execution.
 
         With server-side compilation, the workflow JSON comes from the
@@ -834,11 +883,24 @@ class AgentRuntime:
         registered locally for polling.  This covers tools, custom
         guardrails, stop_when, termination, check_transfer, router,
         handoff, and manual selection workers.
+
+        When *required_workers* is provided (from the server's
+        ``requiredWorkers`` response), system workers are only registered
+        if their task name appears in the set.  User-defined tool workers
+        (from ``@tool``) are always registered regardless.  When
+        *required_workers* is ``None`` (older server or fallback), all
+        workers are registered unconditionally (previous behavior).
         """
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.runtime.tool_registry import ToolRegistry
 
-        # 1. Tools (and tool-level guardrails)
+        def _server_needs(task_name: str) -> bool:
+            """Return True if the server expects this system worker."""
+            if required_workers is None:
+                return True  # fallback: register everything
+            return task_name in required_workers
+
+        # 1. Tools (and tool-level guardrails) — always registered
         if agent.tools:
             tc = ToolRegistry()
             tc.register_tool_workers(agent.tools, agent.name)
@@ -850,7 +912,7 @@ class AgentRuntime:
                 if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                     nested_agent = td.config["agent"]
                     if not getattr(nested_agent, "external", False):
-                        self._register_workers(nested_agent)
+                        self._register_workers(nested_agent, required_workers=required_workers)
                 # Register tool-level guardrail workers
                 tool_guardrails = [
                     g
@@ -860,7 +922,8 @@ class AgentRuntime:
                     and g.func is not None
                 ]
                 for g in tool_guardrails:
-                    self._register_single_guardrail_worker(g)
+                    if _server_needs(g.name):
+                        self._register_single_guardrail_worker(g)
 
         # 2. Custom guardrails (not Regex/LLM/external)
         custom_guardrails = [
@@ -871,11 +934,17 @@ class AgentRuntime:
             and g.func is not None
         ]
         if custom_guardrails:
-            self._register_guardrail_worker(agent.name, custom_guardrails)
+            # Check if any guardrail worker is needed by the server
+            needed_guardrails = [g for g in custom_guardrails if _server_needs(g.name)]
+            combined_name = f"{agent.name}_output_guardrail"
+            if needed_guardrails or _server_needs(combined_name):
+                self._register_guardrail_worker(agent.name, custom_guardrails)
 
         # 3. stop_when
         if agent.stop_when and callable(agent.stop_when):
-            self._register_stop_when_worker(agent.name, agent.stop_when)
+            task_name = f"{agent.name}_stop_when"
+            if _server_needs(task_name):
+                self._register_stop_when_worker(agent.name, agent.stop_when)
 
         # 3b. Callbacks (legacy + CallbackHandler chaining)
         from agentspan.agents.callback import (
@@ -894,19 +963,27 @@ class AgentRuntime:
             legacy_fn = getattr(agent, legacy_attr, None) if legacy_attr else None
             chained = _chain_callbacks_for_position(position, handlers, legacy_fn)
             if chained is not None:
-                self._register_callback_worker(agent.name, position, chained)
+                task_name = f"{agent.name}_{position}"
+                if _server_needs(task_name):
+                    self._register_callback_worker(agent.name, position, chained)
 
         # 3c. Callable gate (sequential pipeline)
         if getattr(agent, "gate", None) is not None and callable(agent.gate):
-            self._register_gate_worker(agent.name, agent.gate)
+            task_name = f"{agent.name}_gate"
+            if _server_needs(task_name):
+                self._register_gate_worker(agent.name, agent.gate)
 
         # 4. termination
         if agent.termination:
-            self._register_termination_worker(agent.name, agent.termination)
+            task_name = f"{agent.name}_termination"
+            if _server_needs(task_name):
+                self._register_termination_worker(agent.name, agent.termination)
 
         # 5. Check transfer (agent has tools + sub-agents → hybrid handoff)
         if agent.tools and agent.agents:
-            self._register_check_transfer_worker(agent.name)
+            task_name = f"{agent.name}_check_transfer"
+            if _server_needs(task_name):
+                self._register_check_transfer_worker(agent.name)
 
         # 6. Function-based router
         if (
@@ -915,57 +992,70 @@ class AgentRuntime:
             and callable(agent.router)
             and not hasattr(agent.router, "model")
         ):
-            self._register_router_worker(agent)
+            task_name = f"{agent.name}_router_fn"
+            if _server_needs(task_name):
+                self._register_router_worker(agent)
 
         # 7. Handoff check (swarm with handoff conditions)
         if agent.handoffs:
-            self._register_handoff_worker(agent)
+            task_name = f"{agent.name}_handoff_check"
+            if _server_needs(task_name):
+                self._register_handoff_worker(agent)
 
         # 7b. Swarm transfer tools and check_transfer workers
         if agent.strategy == "swarm" and agent.agents:
-            self._register_swarm_transfer_workers(agent)
-            self._register_check_transfer_worker(agent.name)  # parent
+            # Register transfer workers if any of them are needed
+            if required_workers is None or any(
+                f"{agent.name}_transfer_to_" in w for w in required_workers
+            ):
+                self._register_swarm_transfer_workers(agent)
+            if _server_needs(f"{agent.name}_check_transfer"):
+                self._register_check_transfer_worker(agent.name)  # parent
             for sub in agent.agents:
-                self._register_check_transfer_worker(sub.name)
+                if _server_needs(f"{sub.name}_check_transfer"):
+                    self._register_check_transfer_worker(sub.name)
 
         # 8. Manual selection
         if agent.strategy == "manual" and agent.agents:
-            self._register_manual_selection_worker(agent)
+            task_name = f"{agent.name}_process_selection"
+            if _server_needs(task_name):
+                self._register_manual_selection_worker(agent)
 
         # Recurse into sub-agents
         for sub in agent.agents:
             if getattr(sub, "is_claude_code", False):
-                # Register passthrough worker for claude-code sub-agent
-                from agentspan.agents.frameworks.claude_agent_sdk import (
-                    agent_to_claude_code_options,
-                    make_claude_agent_sdk_worker,
-                )
-                from agentspan.agents.frameworks.serializer import WorkerInfo
+                if _server_needs(sub.name):
+                    # Register passthrough worker for claude-code sub-agent
+                    from agentspan.agents.frameworks.claude_agent_sdk import (
+                        agent_to_claude_code_options,
+                        make_claude_agent_sdk_worker,
+                    )
+                    from agentspan.agents.frameworks.serializer import WorkerInfo
 
-                cc_options = agent_to_claude_code_options(sub)
-                worker_func = make_claude_agent_sdk_worker(
-                    cc_options,
-                    sub.name,
-                    self._config.server_url,
-                    self._config.auth_key or "",
-                    self._config.auth_secret or "",
-                )
-                worker = WorkerInfo(
-                    name=sub.name,
-                    description=f"Claude Agent SDK passthrough worker for {sub.name}",
-                    input_schema={
-                        "type": "object",
-                        "properties": {
-                            "prompt": {"type": "string"},
-                            "session_id": {"type": "string"},
+                    cc_options = agent_to_claude_code_options(sub)
+                    worker_func = make_claude_agent_sdk_worker(
+                        cc_options,
+                        sub.name,
+                        self._config.server_url,
+                        self._config.auth_key or "",
+                        self._config.auth_secret or "",
+                    )
+                    worker = WorkerInfo(
+                        name=sub.name,
+                        description=f"Claude Agent SDK passthrough worker for {sub.name}",
+                        input_schema={
+                            "type": "object",
+                            "properties": {
+                                "prompt": {"type": "string"},
+                                "session_id": {"type": "string"},
+                            },
                         },
-                    },
-                    func=worker_func,
-                    _pre_wrapped=True,
-                )
-                self._register_passthrough_worker(worker)
+                        func=worker_func,
+                        _pre_wrapped=True,
+                    )
+                    self._register_passthrough_worker(worker)
             elif not sub.external:
-                self._register_workers(sub)
+                self._register_workers(sub, required_workers=required_workers)
 
     # ── Worker registration helpers ────────────────────────────────
 
@@ -2092,9 +2182,6 @@ class AgentRuntime:
             if prior_messages:
                 agent = self._inject_session_memory(agent, prior_messages)
 
-        # Register workers locally, then start via server
-        self._prepare_workers(agent)
-
         resolved_prompt = self._resolve_prompt(prompt)
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
 
@@ -2102,7 +2189,10 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s'", agent.name)
 
-        workflow_id = self._start_via_server(
+        # Start via server first to get requiredWorkers, then register
+        # locally.  Conductor queues tasks so workers can start polling
+        # immediately after registration without missing work.
+        workflow_id, required_workers = self._start_via_server(
             agent,
             resolved_prompt,
             media=media,
@@ -2111,6 +2201,8 @@ class AgentRuntime:
             timeout=timeout,
             credentials=credentials,
         )
+
+        self._prepare_workers(agent, required_workers=required_workers)
 
         self._register_workflow_credentials(workflow_id, credentials)
 
@@ -3148,9 +3240,6 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
             )
 
-        # Register workers locally (tools, guardrails, etc.)
-        self._prepare_workers(agent)
-
         resolved_prompt = self._resolve_prompt(prompt)
 
         # Run input guardrails before workflow submission
@@ -3158,9 +3247,9 @@ class AgentRuntime:
 
         correlation_id = str(uuid.uuid4())
 
-        # Start via the agent runtime server API
+        # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
-        workflow_id = self._start_via_server(
+        workflow_id, required_workers = self._start_via_server(
             agent,
             resolved_prompt,
             media=media,
@@ -3168,6 +3257,8 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
         )
+
+        self._prepare_workers(agent, required_workers=required_workers)
 
         return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
 
@@ -3514,9 +3605,6 @@ class AgentRuntime:
             if prior_messages:
                 agent = self._inject_session_memory(agent, prior_messages)
 
-        # Register workers locally (sync), then start via server (async)
-        self._prepare_workers(agent)
-
         resolved_prompt = self._resolve_prompt(prompt)
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
 
@@ -3524,7 +3612,8 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s' (async)", agent.name)
 
-        workflow_id = await self._start_via_server_async(
+        # Start via server first to get requiredWorkers, then register locally
+        workflow_id, required_workers = await self._start_via_server_async(
             agent,
             resolved_prompt,
             media=media,
@@ -3533,6 +3622,8 @@ class AgentRuntime:
             timeout=timeout,
             credentials=credentials,
         )
+
+        self._prepare_workers(agent, required_workers=required_workers)
         self._register_workflow_credentials(workflow_id, credentials)
 
         effective_timeout = timeout or (
@@ -3643,14 +3734,14 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
             )
 
-        self._prepare_workers(agent)
         resolved_prompt = self._resolve_prompt(prompt)
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
 
         correlation_id = str(uuid.uuid4())
 
+        # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
-        workflow_id = await self._start_via_server_async(
+        workflow_id, required_workers = await self._start_via_server_async(
             agent,
             resolved_prompt,
             media=media,
@@ -3658,6 +3749,8 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
         )
+
+        self._prepare_workers(agent, required_workers=required_workers)
 
         return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
 
