@@ -859,13 +859,13 @@ class AgentRuntime:
         if agent.handoffs:
             names.add(f"{agent.name}_handoff_check")
 
-        # Swarm transfer workers
+        # Swarm transfer workers — prefixed with SOURCE agent name
         if agent.strategy == "swarm" and agent.agents:
             all_names = [agent.name] + [sub.name for sub in agent.agents]
             for n in all_names:
                 for peer in all_names:
                     if peer != n:
-                        names.add(f"{agent.name}_transfer_to_{peer}")
+                        names.add(f"{n}_transfer_to_{peer}")
 
         # Manual selection
         if agent.strategy == "manual" and agent.agents:
@@ -1006,7 +1006,7 @@ class AgentRuntime:
         if agent.strategy == "swarm" and agent.agents:
             # Register transfer workers if any of them are needed
             if required_workers is None or any(
-                f"{agent.name}_transfer_to_" in w for w in required_workers
+                "_transfer_to_" in w for w in required_workers
             ):
                 self._register_swarm_transfer_workers(agent)
             if _server_needs(f"{agent.name}_check_transfer"):
@@ -1502,7 +1502,9 @@ class AgentRuntime:
             for peer_name in all_names:
                 if peer_name == name:
                     continue
-                tool_name = f"{agent.name}_transfer_to_{peer_name}"
+                # Prefix with the SOURCE agent name (the one calling transfer),
+                # matching the server compiler which uses self.getName()
+                tool_name = f"{name}_transfer_to_{peer_name}"
                 if tool_name in registered:
                     continue
                 registered.add(tool_name)

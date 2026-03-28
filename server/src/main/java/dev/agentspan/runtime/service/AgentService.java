@@ -731,18 +731,22 @@ public class AgentService {
         }
 
         // Register transfer_to_ workers for swarm agents
-        // Each agent in the swarm gets {parent}_transfer_to_{peer} worker tasks
+        // Each agent gets {source}_transfer_to_{peer} — matching MultiAgentCompiler
         if ("swarm".equals(config.getStrategy()) && config.getAgents() != null) {
             List<String> allNames = new ArrayList<>();
             allNames.add(config.getName());
             for (AgentConfig sub : config.getAgents()) {
                 allNames.add(sub.getName());
             }
-            for (String name : allNames) {
-                String taskName = config.getName() + "_transfer_to_" + name;
-                if (!registered.contains(taskName)) {
-                    registerTaskDef(taskName);
-                    registered.add(taskName);
+            for (String source : allNames) {
+                for (String peer : allNames) {
+                    if (!source.equals(peer)) {
+                        String taskName = source + "_transfer_to_" + peer;
+                        if (!registered.contains(taskName)) {
+                            registerTaskDef(taskName);
+                            registered.add(taskName);
+                        }
+                    }
                 }
             }
         }
