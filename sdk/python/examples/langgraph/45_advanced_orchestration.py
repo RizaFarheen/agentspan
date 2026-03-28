@@ -1,12 +1,12 @@
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""Advanced Orchestration — LangChain agent orchestrating a complex multi-step pipeline.
+"""Advanced Orchestration — LangGraph agent orchestrating a multi-step pipeline.
 
 Demonstrates:
-    - Combining multiple LangChain patterns: structured output, prompt templates, output parsers
-    - A pipeline agent that decomposes tasks, assigns subtasks, and aggregates results
     - Tools that themselves invoke LLM chains (nested LLM calls)
+    - A pipeline agent that decomposes tasks, assigns subtasks, and aggregates results
+    - Combining structured output, prompt templates, and output parsers
     - Practical use case: automated business report generation from raw data inputs
 
 Requirements:
@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
-from langchain.agents import create_agent
+from langgraph.prebuilt import create_react_agent
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
 
@@ -138,7 +138,7 @@ def compile_report(
                 sections_text += f"\n{sec['title']}:\n{sec['content']}\n{metrics}\n"
 
             recs = "\n".join(f"  {i+1}. {r}" for i, r in enumerate(report.get("recommendations", [])))
-            risks = "\n".join(f"  ⚠ {r}" for r in report.get("risk_factors", []))
+            risks = "\n".join(f"  ! {r}" for r in report.get("risk_factors", []))
 
             return (
                 f"{'='*60}\n"
@@ -163,11 +163,10 @@ For each company analysis request:
 Always call all four tools and combine their outputs in the final report.
 """
 
-graph = create_agent(
+graph = create_react_agent(
     llm,
     tools=[analyze_market_data, generate_financial_metrics, assess_risks, compile_report],
-    name="advanced_orchestration_agent",
-    system_prompt=ORCHESTRATOR_SYSTEM,
+    prompt=ORCHESTRATOR_SYSTEM,
 )
 
 if __name__ == "__main__":
