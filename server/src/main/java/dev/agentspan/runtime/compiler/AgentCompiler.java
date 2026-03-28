@@ -734,6 +734,25 @@ public class AgentCompiler {
      * Local -> SUB_WORKFLOW with inline workflowDef.
      */
     WorkflowTask compileSubAgent(AgentConfig sub, String taskRef, String promptRef, String mediaRef) {
+        // Force passthrough compilation for Claude Code sub-agents
+        String subModel = sub.getModel();
+        if (subModel != null && subModel.startsWith("claude-code")) {
+            if (sub.getMetadata() == null) {
+                sub.setMetadata(new LinkedHashMap<>());
+            }
+            sub.getMetadata().put("_framework_passthrough", true);
+
+            // Ensure the sub-agent has a worker tool if not already set
+            if (sub.getTools() == null || sub.getTools().isEmpty()) {
+                ToolConfig worker = ToolConfig.builder()
+                    .name(sub.getName())
+                    .description("Claude Agent SDK passthrough worker")
+                    .toolType("worker")
+                    .build();
+                sub.setTools(List.of(worker));
+            }
+        }
+
         WorkflowTask task = new WorkflowTask();
         task.setTaskReferenceName(taskRef);
 
