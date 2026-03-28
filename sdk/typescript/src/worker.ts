@@ -1,6 +1,6 @@
 import type { ToolContext } from './types.js';
 import { AgentAPIError } from './errors.js';
-import { extractExecutionToken, setCredentialContext, clearCredentialContext } from './credentials.js';
+import { extractExecutionToken, setCredentialContext, clearCredentialContext, resolveCredentials, injectCredentials } from './credentials.js';
 
 // ── Type coercion (base spec §14.1) ─────────────────────
 
@@ -211,6 +211,7 @@ export type WorkerHandler = (inputData: Record<string, unknown>) => Promise<unkn
 interface QueuedWorker {
   taskName: string;
   handler: WorkerHandler;
+  credentials?: string[];
 }
 
 interface TaskData {
@@ -248,12 +249,12 @@ export class WorkerManager {
    * Queue a worker for the given task name.
    * Replaces any existing worker with the same task name.
    */
-  addWorker(taskName: string, handler: WorkerHandler): void {
+  addWorker(taskName: string, handler: WorkerHandler, credentials?: string[]): void {
     const idx = this.workers.findIndex((w) => w.taskName === taskName);
     if (idx >= 0) {
-      this.workers[idx] = { taskName, handler };
+      this.workers[idx] = { taskName, handler, credentials };
     } else {
-      this.workers.push({ taskName, handler });
+      this.workers.push({ taskName, handler, credentials });
     }
   }
 
@@ -434,6 +435,23 @@ export class WorkerManager {
         setCredentialContext(this.serverUrl, this.headers, executionToken);
       }
 
+      // Resolve and inject credentials into process.env
+      let cleanupCredentials: (() => void) | null = null;
+      if (executionToken && worker.credentials?.length) {
+        try {
+          const resolved = await resolveCredentials(
+            this.serverUrl, this.headers, executionToken, worker.credentials,
+          );
+          cleanupCredentials = injectCredentials(
+            this.serverUrl, this.headers, executionToken, resolved,
+          );
+        } catch (err) {
+          // Credential errors are config issues, not tool failures
+          // But for CLI tools, credentials are required
+          console.warn(`Credential resolution failed for ${worker.taskName}:`, err);
+        }
+      }
+
       try {
         let result = await worker.handler(cleanedInput);
 
@@ -455,6 +473,7 @@ export class WorkerManager {
           error instanceof Error ? error : new Error(String(error)),
         );
       } finally {
+        cleanupCredentials?.();
         if (executionToken) {
           clearCredentialContext();
         }

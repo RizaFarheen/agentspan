@@ -488,12 +488,16 @@ export class AgentRuntime {
 
     for (const def of toolDefs) {
       const handler = def.func!;
+      // Extract credential names (string only; CredentialFile handled at serialization)
+      const credNames = def.credentials
+        ?.filter((c): c is string => typeof c === 'string')
+        ?? undefined;
       this.workerManager.addWorker(def.name, async (inputData) => {
         const toolContext = inputData['__toolContext__'];
         // Remove internal injection
         delete inputData['__toolContext__'];
         return handler(inputData, toolContext);
-      });
+      }, credNames);
     }
 
     // Register custom guardrail workers from tools
