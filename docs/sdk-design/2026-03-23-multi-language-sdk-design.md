@@ -371,7 +371,7 @@ This is the JSON structure that every SDK must produce when serializing an Agent
   "toolType": "worker|http|api|mcp|agent_tool|human|generate_image|generate_audio|generate_video|generate_pdf|rag_search|rag_index",
   "outputSchema": { ... },
   "approvalRequired": true,
-  "timeoutSeconds": 120,
+  "timeoutSeconds": 0,
   "config": {
     "url": "https://api.example.com/data",
     "method": "GET",
@@ -1080,7 +1080,8 @@ The decorator accepts all the same parameters as the `Agent` constructor. Each S
 | Poll interval | 100ms | How often to check for tasks |
 | Thread count | 1 | Concurrent executions per worker |
 | Daemon mode | true | Kill on SDK shutdown |
-| Timeout | 120s | Default task timeout |
+| Timeout | 0 (no timeout) | Task definition timeout — **MUST be 0**. Agent-level `timeout_seconds` controls execution duration, not the task definition. Hardcoded task timeouts cause premature termination of long-running agents. |
+| Response timeout | 0 (no timeout) | Same policy as timeout — **MUST be 0**. |
 | Retry count | 2 | Default retry count |
 | Retry delay | 2s | Delay between retries |
 | Retry policy | LINEAR_BACKOFF | Backoff strategy |

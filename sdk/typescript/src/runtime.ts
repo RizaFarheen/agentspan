@@ -544,7 +544,7 @@ export class AgentRuntime {
     cond: TerminationCondition,
   ): Promise<void> {
     const taskName = `${agentName}_termination`;
-    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 0 });
     this.workerManager.addWorker(taskName, async (inputData) => {
       const result = String(inputData['result'] ?? '');
       const iteration = Number(inputData['iteration'] ?? 0);
@@ -566,7 +566,7 @@ export class AgentRuntime {
   private async _registerGuardrailWorker(gDef: GuardrailDef): Promise<void> {
     const taskName = gDef.taskName!;
     const fn = gDef.func!;
-    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 0 });
     this.workerManager.addWorker(taskName, async (inputData) => {
       const content = String(inputData['content'] ?? '');
       try {
@@ -601,7 +601,7 @@ export class AgentRuntime {
     stopWhenFn: (messages: unknown[], ...args: unknown[]) => boolean,
   ): Promise<void> {
     const taskName = `${agentName}_stop_when`;
-    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 0 });
     this.workerManager.addWorker(taskName, async (inputData) => {
       const result = String(inputData['result'] ?? '');
       const iteration = Number(inputData['iteration'] ?? 0);
@@ -631,7 +631,7 @@ export class AgentRuntime {
       if (handlers.length === 0) continue;
 
       const taskName = `${agentName}_${wirePosition}`;
-      await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+      await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 0 });
       this.workerManager.addWorker(taskName, async (inputData) => {
         const messages = inputData['messages'] ?? null;
         const llmResult = inputData['llm_result'] ?? null;
@@ -664,7 +664,7 @@ export class AgentRuntime {
     gateFn: (...args: unknown[]) => unknown,
   ): Promise<void> {
     const taskName = `${agentName}_gate`;
-    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 0 });
     this.workerManager.addWorker(taskName, async (inputData) => {
       const result = String(inputData['result'] ?? '');
       try {
@@ -689,7 +689,7 @@ export class AgentRuntime {
     routerFn: (...args: unknown[]) => string,
   ): Promise<void> {
     const taskName = `${agentName}_router_fn`;
-    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 120 });
+    await this.workerManager.registerTaskDef(taskName, { timeoutSeconds: 0 });
     this.workerManager.addWorker(taskName, async (inputData) => {
       const prompt = String(inputData['prompt'] ?? '');
       try {
@@ -769,7 +769,7 @@ export class AgentRuntime {
     // Register task definitions and add workers for each extracted tool
     for (const worker of workers) {
       await this.workerManager.registerTaskDef(worker.name, {
-        timeoutSeconds: 600,
+        timeoutSeconds: 0,
       });
       if (worker.func) {
         const fn = worker.func;
@@ -847,7 +847,7 @@ export class AgentRuntime {
     // Register task definitions and add workers for each extracted tool
     for (const worker of workers) {
       await this.workerManager.registerTaskDef(worker.name, {
-        timeoutSeconds: 600,
+        timeoutSeconds: 0,
       });
       if (worker.func) {
         const fn = worker.func;

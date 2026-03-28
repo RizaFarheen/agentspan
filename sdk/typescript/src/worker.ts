@@ -269,8 +269,8 @@ export class WorkerManager {
       retryCount: 2,
       retryLogic: 'LINEAR_BACKOFF',
       retryDelaySeconds: 2,
-      timeoutSeconds: config?.timeoutSeconds ?? 120,
-      responseTimeoutSeconds: config?.timeoutSeconds ?? 120,
+      timeoutSeconds: config?.timeoutSeconds ?? 0,
+      responseTimeoutSeconds: config?.timeoutSeconds ?? 0,
     };
 
     const url = `${this.serverUrl}/metadata/taskdefs`;
