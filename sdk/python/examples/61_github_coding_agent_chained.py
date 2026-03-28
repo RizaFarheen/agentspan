@@ -66,6 +66,7 @@ You are a GitHub issue fetcher.
 """,
     cli_commands=True,
     cli_allowed_commands=["gh", "git", "mktemp", "rm"],
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     max_turns=20,
     gate=TextGate("NO_OPEN_ISSUES"),
 )
@@ -78,6 +79,7 @@ coder = Agent(
     name="coder",
     model=MODEL,
     max_tokens=60000,
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
 You are a senior developer. Your task description contains REPO, BRANCH, ISSUE, and SUMMARY.
 
@@ -101,6 +103,7 @@ You are a senior developer. Your task description contains REPO, BRANCH, ISSUE, 
 qa_tester = Agent(
     name="qa_tester",
     model=MODEL,
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
 You are a QA engineer. Your task description contains REPO, BRANCH, and CHANGES.
 
@@ -150,6 +153,7 @@ coding_qa = Agent(
 git_push_pr = Agent(
     name="git_push_pr",
     model=MODEL,
+    credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions=f"""\
 You are a GitHub PR creator. Your task description contains REPO, BRANCH, and SUMMARY.
 The branch is already pushed to origin — your only job is to open a pull request.
