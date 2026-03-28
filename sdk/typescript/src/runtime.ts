@@ -111,21 +111,25 @@ export class AgentRuntime {
       payload.credentials = options.credentials;
     }
 
-    // Register workers for all tools
-    await this._registerAllWorkers(nativeAgent);
+    // Register tool workers (always needed) before calling the server
+    await this._registerToolWorkers(nativeAgent);
+
+    // Start agent — response may include requiredWorkers
+    const startResponse = await this._httpRequest(
+      'POST',
+      '/agent/start',
+      payload,
+      options?.signal,
+    );
+
+    const workflowId = startResponse.workflowId as string;
+    const requiredWorkers = this._parseRequiredWorkers(startResponse);
+
+    // Register system workers filtered by server-provided list
+    await this._registerSystemWorkers(nativeAgent, requiredWorkers);
     this.workerManager.startPolling();
 
     try {
-      // Start agent
-      const startResponse = await this._httpRequest(
-        'POST',
-        '/agent/start',
-        payload,
-        options?.signal,
-      );
-
-      const workflowId = startResponse.workflowId as string;
-
       // Create SSE stream
       const sseUrl = `${this.config.serverUrl}/agent/stream/${workflowId}`;
       const agentStream = new AgentStream(
@@ -194,11 +198,10 @@ export class AgentRuntime {
       payload.credentials = options.credentials;
     }
 
-    // Register workers
-    await this._registerAllWorkers(nativeAgent);
-    this.workerManager.startPolling();
+    // Register tool workers (always needed) before calling the server
+    await this._registerToolWorkers(nativeAgent);
 
-    // Start agent
+    // Start agent — response may include requiredWorkers
     const startResponse = await this._httpRequest(
       'POST',
       '/agent/start',
@@ -207,6 +210,11 @@ export class AgentRuntime {
     );
 
     const workflowId = startResponse.workflowId as string;
+    const requiredWorkers = this._parseRequiredWorkers(startResponse);
+
+    // Register system workers filtered by server-provided list
+    await this._registerSystemWorkers(nativeAgent, requiredWorkers);
+    this.workerManager.startPolling();
 
     const handle: AgentHandle = {
       workflowId,
@@ -456,10 +464,24 @@ export class AgentRuntime {
   }
 
   /**
-   * Register all workers for an agent tree: tools, termination, guardrails,
-   * stopWhen, callbacks, gates, and router functions.
+   * Parse the requiredWorkers list from a server response.
+   * Returns a Set<string> if present, or null for fallback (older servers).
    */
-  private async _registerAllWorkers(agent: Agent): Promise<void> {
+  private _parseRequiredWorkers(
+    response: Record<string, unknown>,
+  ): Set<string> | null {
+    const raw = response.requiredWorkers;
+    if (Array.isArray(raw)) {
+      return new Set(raw.map(String));
+    }
+    return null;
+  }
+
+  /**
+   * Register tool workers (user-defined) for an agent tree.
+   * These are always registered regardless of requiredWorkers.
+   */
+  private async _registerToolWorkers(agent: Agent): Promise<void> {
     const toolDefs = this._collectToolDefs(agent);
 
     for (const def of toolDefs) {
@@ -483,51 +505,79 @@ export class AgentRuntime {
         }
       }
     }
-
-    // Register system workers for the full agent tree
-    await this._registerSystemWorkers(agent);
   }
 
   /**
    * Recursively register all system workers (non-tool) for an agent tree.
+   * When requiredWorkers is provided, only register workers whose task names
+   * appear in the set. When null/undefined, register all (fallback for older servers).
    */
-  private async _registerSystemWorkers(agent: Agent): Promise<void> {
+  private async _registerSystemWorkers(
+    agent: Agent,
+    requiredWorkers?: Set<string> | null,
+  ): Promise<void> {
+    // Helper: check if a task name is needed (always true when requiredWorkers is absent)
+    const isNeeded = (taskName: string): boolean =>
+      requiredWorkers == null || requiredWorkers.has(taskName);
+
     // Termination
     if (agent.termination) {
-      await this._registerTerminationWorker(agent.name, agent.termination as TerminationCondition);
+      const taskName = `${agent.name}_termination`;
+      if (isNeeded(taskName)) {
+        await this._registerTerminationWorker(agent.name, agent.termination as TerminationCondition);
+      }
     }
 
     // Custom guardrails (those with func)
     for (const g of agent.guardrails) {
       const gDef = this._normalizeGuardrailDef(g);
       if (gDef && gDef.func && gDef.taskName) {
-        await this._registerGuardrailWorker(gDef);
+        if (isNeeded(gDef.taskName)) {
+          await this._registerGuardrailWorker(gDef);
+        }
       }
     }
 
     // stopWhen
     if (agent.stopWhen) {
-      await this._registerStopWhenWorker(agent.name, agent.stopWhen);
+      const taskName = `${agent.name}_stop_when`;
+      if (isNeeded(taskName)) {
+        await this._registerStopWhenWorker(agent.name, agent.stopWhen);
+      }
     }
 
     // Callbacks
     if (agent.callbacks.length > 0) {
-      await this._registerCallbackWorkers(agent.name, agent.callbacks);
+      // Callbacks produce multiple task names ({agent}_{position}), register if any are needed
+      const callbackTaskNames = Object.values(CALLBACK_POSITION_MAP).map(
+        (pos) => `${agent.name}_${pos}`,
+      );
+      const anyCallbackNeeded =
+        requiredWorkers == null || callbackTaskNames.some((t) => requiredWorkers.has(t));
+      if (anyCallbackNeeded) {
+        await this._registerCallbackWorkers(agent.name, agent.callbacks, requiredWorkers);
+      }
     }
 
     // Gate (callable)
     if (agent.gate && typeof agent.gate.fn === 'function') {
-      await this._registerGateWorker(agent.name, agent.gate.fn as (...args: unknown[]) => unknown);
+      const taskName = `${agent.name}_gate`;
+      if (isNeeded(taskName)) {
+        await this._registerGateWorker(agent.name, agent.gate.fn as (...args: unknown[]) => unknown);
+      }
     }
 
     // Router (function, not Agent)
     if (agent.router && typeof agent.router === 'function') {
-      await this._registerRouterWorker(agent.name, agent.router as (...args: unknown[]) => string);
+      const taskName = `${agent.name}_router_fn`;
+      if (isNeeded(taskName)) {
+        await this._registerRouterWorker(agent.name, agent.router as (...args: unknown[]) => string);
+      }
     }
 
     // Recurse into sub-agents
     for (const subAgent of agent.agents) {
-      await this._registerSystemWorkers(subAgent);
+      await this._registerSystemWorkers(subAgent, requiredWorkers);
     }
   }
 
@@ -616,6 +666,7 @@ export class AgentRuntime {
   private async _registerCallbackWorkers(
     agentName: string,
     callbacks: CallbackHandler[],
+    requiredWorkers?: Set<string> | null,
   ): Promise<void> {
     for (const [methodName, wirePosition] of Object.entries(CALLBACK_POSITION_MAP)) {
       // Check if any handler implements this method
@@ -625,6 +676,7 @@ export class AgentRuntime {
       if (handlers.length === 0) continue;
 
       const taskName = `${agentName}_${wirePosition}`;
+      if (requiredWorkers != null && !requiredWorkers.has(taskName)) continue;
       this.workerManager.addWorker(taskName, async (inputData) => {
         const messages = inputData['messages'] ?? null;
         const llmResult = inputData['llm_result'] ?? null;
