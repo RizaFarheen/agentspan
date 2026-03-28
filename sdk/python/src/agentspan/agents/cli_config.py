@@ -90,14 +90,19 @@ def _make_cli_tool(
     timeout: int = 30,
     working_dir: Optional[str] = None,
     allow_shell: bool = False,
+    agent_name: str = "",
 ) -> Any:
     """Create a ``@tool``-decorated ``run_command`` function.
 
     The returned function can be appended to ``Agent.tools`` directly.
+    The tool name is prefixed with the agent name to avoid collisions
+    when multiple agents define CLI tools with different allowed commands.
     """
     from agentspan.agents.tool import tool
 
-    @tool(name="run_command")
+    task_name = f"{agent_name}_run_command" if agent_name else "run_command"
+
+    @tool(name=task_name)
     def run_command(
         command: str,
         args: list = [],

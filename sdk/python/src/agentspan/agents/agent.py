@@ -559,6 +559,7 @@ class Agent:
             allowed_languages=cfg.allowed_languages,
             allowed_commands=cfg.allowed_commands,
             timeout=cfg.timeout,
+            agent_name=self.name,
         )
         self.tools.append(code_tool)
 
@@ -573,6 +574,7 @@ class Agent:
                 timeout=cfg.timeout,
                 working_dir=cfg.working_dir,
                 allow_shell=cfg.allow_shell,
+                agent_name=self.name,
             )
         )
 
