@@ -62,7 +62,6 @@ jobs:
   # Runs on main merges only (not PRs) to avoid burning API credits.
   e2e-tests:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [server-tests, python-unit-tests, typescript-unit-tests]
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
