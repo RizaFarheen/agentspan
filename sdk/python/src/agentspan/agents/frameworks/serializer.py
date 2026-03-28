@@ -42,8 +42,8 @@ def detect_framework(agent_obj: Any) -> Optional[str]:
     from agentspan.agents.agent import Agent
 
     if isinstance(agent_obj, Agent):
-        if getattr(agent_obj, "model", "").startswith("claude-code"):
-            return "claude_agent_sdk"
+        # Native Agent instances are always native, even with claude-code models.
+        # The server handles claude-code model routing during execution.
         return None
 
     # Precise type-name check for LangGraph (avoid fragile module prefix matching
