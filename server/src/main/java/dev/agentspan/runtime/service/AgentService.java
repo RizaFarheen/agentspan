@@ -736,9 +736,13 @@ public class AgentService {
 
     private Optional<String> validateModelProvider(AgentConfig config) {
         if (config.getModel() != null && !config.getModel().isBlank()) {
-            ModelParser.ParsedModel parsed = ModelParser.parse(config.getModel());
-            Optional<String> error = providerValidator.validateProvider(parsed.getProvider());
-            if (error.isPresent()) return error;
+            // Skip validation for Claude Code agents — they use a passthrough
+            // worker, not a server-side LLM provider.
+            if (!config.getModel().startsWith("claude-code")) {
+                ModelParser.ParsedModel parsed = ModelParser.parse(config.getModel());
+                Optional<String> error = providerValidator.validateProvider(parsed.getProvider());
+                if (error.isPresent()) return error;
+            }
         }
         if (config.getAgents() != null) {
             for (AgentConfig sub : config.getAgents()) {

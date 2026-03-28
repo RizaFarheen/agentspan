@@ -905,6 +905,23 @@ public class MultiAgentCompiler {
      * and outputs {result, finishReason, is_transfer, transfer_to}.
      */
     WorkflowDef compileSwarmAgentWorkflow(AgentConfig agent, List<ToolConfig> transferTools) {
+        // Claude Code agents use passthrough — no LLM loop, just a single SIMPLE task
+        if (agent.getModel() != null && agent.getModel().startsWith("claude-code")) {
+            // Ensure the passthrough worker tool is set
+            if (agent.getTools() == null || agent.getTools().isEmpty()) {
+                agent.setTools(List.of(
+                    ToolConfig.builder()
+                        .name(agent.getName())
+                        .description("Claude Agent SDK passthrough worker")
+                        .toolType("worker")
+                        .build()
+                ));
+            }
+            if (agent.getMetadata() == null) agent.setMetadata(new java.util.LinkedHashMap<>());
+            agent.getMetadata().put("_framework_passthrough", true);
+            return agentCompiler.compileFrameworkPassthrough(agent);
+        }
+
         boolean hasSubAgents = agent.getAgents() != null && !agent.getAgents().isEmpty();
 
         if (hasSubAgents) {

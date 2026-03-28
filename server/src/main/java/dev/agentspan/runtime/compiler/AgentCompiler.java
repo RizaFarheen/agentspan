@@ -2893,7 +2893,7 @@ public class AgentCompiler {
             && Boolean.TRUE.equals(config.getMetadata().get("_framework_passthrough"));
     }
 
-    private WorkflowDef compileFrameworkPassthrough(AgentConfig config) {
+    WorkflowDef compileFrameworkPassthrough(AgentConfig config) {
         log.debug("Compiling framework passthrough workflow: {}", config.getName());
 
         if (config.getTools() == null || config.getTools().isEmpty()) {
