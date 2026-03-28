@@ -42,23 +42,10 @@ logger = logging.getLogger("agentspan.agents.runtime")
 
 
 def _default_task_def(name: str) -> Any:
-    """Create a TaskDef with standard retry policy for agent worker tasks."""
-    from conductor.client.http.models.task_def import TaskDef
+    """Create a TaskDef with standard retry policy for agent worker tasks.
 
-    td = TaskDef(name=name)
-    td.retry_count = 2
-    td.retry_logic = "LINEAR_BACKOFF"
-    td.retry_delay_seconds = 2
-    td.timeout_seconds = 120
-    td.response_timeout_seconds = 120
-    td.timeout_policy = "RETRY"
-    return td
-
-
-def _passthrough_task_def(name: str) -> Any:
-    """Create a TaskDef with extended timeout for framework passthrough workers.
-
-    LangGraph/LangChain graphs can run much longer than the 120s default.
+    Timeout is 0 (no timeout) — the agent configuration controls execution
+    duration, not the task definition.
     """
     from conductor.client.http.models.task_def import TaskDef
 
@@ -66,8 +53,26 @@ def _passthrough_task_def(name: str) -> Any:
     td.retry_count = 2
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
-    td.timeout_seconds = 600
-    td.response_timeout_seconds = 600
+    td.timeout_seconds = 0
+    td.response_timeout_seconds = 0
+    td.timeout_policy = "RETRY"
+    return td
+
+
+def _passthrough_task_def(name: str) -> Any:
+    """Create a TaskDef for framework passthrough workers.
+
+    Timeout is 0 (no timeout) — the agent configuration controls execution
+    duration, not the task definition.
+    """
+    from conductor.client.http.models.task_def import TaskDef
+
+    td = TaskDef(name=name)
+    td.retry_count = 2
+    td.retry_logic = "LINEAR_BACKOFF"
+    td.retry_delay_seconds = 2
+    td.timeout_seconds = 0
+    td.response_timeout_seconds = 0
     td.timeout_policy = "RETRY"
     return td
 

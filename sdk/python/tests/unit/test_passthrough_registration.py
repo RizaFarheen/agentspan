@@ -47,13 +47,13 @@ class TestSerializeAgentDispatching:
 
 
 class TestPassthroughTaskDef:
-    def test_passthrough_task_def_has_600s_timeout(self):
+    def test_passthrough_task_def_has_no_timeout(self):
         from agentspan.agents.runtime.runtime import _passthrough_task_def
 
         td = _passthrough_task_def("my_graph")
 
-        assert td.timeout_seconds == 600
-        assert td.response_timeout_seconds == 600
+        assert td.timeout_seconds == 0
+        assert td.response_timeout_seconds == 0
         assert td.name == "my_graph"
 
 
