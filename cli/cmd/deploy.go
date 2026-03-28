@@ -387,6 +387,8 @@ func buildEnv(cfg *config.Config) []string {
 		}
 	}
 	filtered = append(filtered, "AGENTSPAN_SERVER_URL="+cfg.ServerURL)
+	// Prevent the SDK from auto-starting an embedded server during deploy
+	filtered = append(filtered, "AGENTSPAN_AUTO_START_SERVER=false")
 	if cfg.APIKey != "" {
 		filtered = append(filtered, "AGENTSPAN_API_KEY="+cfg.APIKey)
 	}
