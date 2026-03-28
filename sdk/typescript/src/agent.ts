@@ -6,6 +6,19 @@ import type {
   PromptTemplate as PromptTemplateInterface,
 } from './types.js';
 import { agentTool } from './tool.js';
+import { ConfigurationError } from './errors.js';
+import { ClaudeCode } from './claude-code.js';
+import type { CliConfigOptions } from './cli-config.js';
+import { makeCliTool } from './cli-config.js';
+import { resolveCliCredentials } from './cli-credentials.js';
+
+// ── Validation constants ──────────────────────────────────
+
+/**
+ * Valid agent name pattern: starts with a letter, followed by letters, digits,
+ * underscores, or hyphens.
+ */
+const VALID_NAME_RE = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 
 // ── PromptTemplate class ──────────────────────────────────
 
@@ -92,7 +105,7 @@ export interface ConversationMemory {
  */
 export interface AgentOptions {
   name: string;
-  model?: string;
+  model?: string | ClaudeCode;
   instructions?: string | PromptTemplate | ((...args: unknown[]) => string);
   tools?: unknown[]; // Normalized via normalizeToolInput at serialization
   agents?: Agent[];
@@ -119,7 +132,11 @@ export interface AgentOptions {
   requiredTools?: string[];
   gate?: GateCondition;
   codeExecutionConfig?: CodeExecutionConfig;
-  cliConfig?: CliConfig;
+  cliConfig?: CliConfig | CliConfigOptions;
+  /** Shorthand: enable CLI command execution. */
+  cliCommands?: boolean;
+  /** Shorthand: allowed CLI commands (implies cliCommands=true). */
+  cliAllowedCommands?: string[];
   credentials?: (string | CredentialFile)[];
 }
 
@@ -164,11 +181,30 @@ export class Agent {
   readonly cliConfig?: CliConfig;
   readonly credentials?: (string | CredentialFile)[];
 
+  /** @internal Stored ClaudeCode config when model is ClaudeCode instance. */
+  private readonly _claudeCodeConfig?: ClaudeCode;
+
   constructor(options: AgentOptions) {
+    // ── Name validation ───────────────────────────────────
+    if (!VALID_NAME_RE.test(options.name)) {
+      throw new ConfigurationError(
+        `Invalid agent name '${options.name}'. ` +
+          `Names must start with a letter and contain only letters, digits, underscores, or hyphens.`,
+      );
+    }
+
     this.name = options.name;
-    this.model = options.model;
+
+    // Handle ClaudeCode config object
+    if (options.model instanceof ClaudeCode) {
+      this._claudeCodeConfig = options.model;
+      this.model = options.model.toModelString();
+    } else {
+      this.model = options.model;
+    }
+
     this.instructions = options.instructions;
-    this.tools = options.tools ?? [];
+    this.tools = [...(options.tools ?? [])];
     this.agents = options.agents ?? [];
     this.strategy = options.strategy;
     this.router = options.router;
@@ -193,8 +229,106 @@ export class Agent {
     this.requiredTools = options.requiredTools;
     this.gate = options.gate;
     this.codeExecutionConfig = options.codeExecutionConfig;
-    this.cliConfig = options.cliConfig;
     this.credentials = options.credentials;
+
+    // ── Duplicate sub-agent name detection ────────────────
+    if (this.agents.length > 0) {
+      const names = new Set<string>();
+      for (const sub of this.agents) {
+        if (names.has(sub.name)) {
+          throw new ConfigurationError(
+            `Duplicate sub-agent name '${sub.name}' in agent '${this.name}'. ` +
+              `All sub-agent names must be unique.`,
+          );
+        }
+        names.add(sub.name);
+      }
+    }
+
+    // ── Strategy validation ───────────────────────────────
+    if (this.strategy === 'router' && !this.router) {
+      throw new ConfigurationError(
+        `Agent '${this.name}' uses strategy='router' but no 'router' parameter was provided. ` +
+          `Provide an Agent or function as the router.`,
+      );
+    }
+
+    // Validate claude-code tools are all strings
+    if (this.isClaudeCode && this.tools.length > 0) {
+      for (const t of this.tools) {
+        if (typeof t !== 'string') {
+          throw new Error(
+            `Claude Code agent '${this.name}' tools must be strings ` +
+              `(e.g. 'Read', 'Edit', 'Bash'), got ${typeof t}`,
+          );
+        }
+      }
+    }
+
+    // CLI command execution setup
+    if (options.cliConfig != null) {
+      // Could be a CliConfig (wire format from types.ts) or CliConfigOptions
+      // Both have the same shape, so assign as wire format
+      this.cliConfig = options.cliConfig as CliConfig;
+    } else if (options.cliCommands || options.cliAllowedCommands) {
+      this.cliConfig = {
+        enabled: true,
+        allowedCommands: options.cliAllowedCommands ?? [],
+        timeout: 30,
+        allowShell: false,
+      };
+    }
+
+    // Auto-attach CLI tool when enabled
+    if (this.cliConfig && this.cliConfig.enabled !== false) {
+      const cliTool = makeCliTool(
+        {
+          allowedCommands: this.cliConfig.allowedCommands,
+          timeout: this.cliConfig.timeout,
+          allowShell: this.cliConfig.allowShell,
+        },
+        this.name,
+      );
+      this.tools.push(cliTool);
+    }
+
+    // ── CLI credential auto-mapping ───────────────────────
+    if (
+      this.cliConfig?.enabled !== false &&
+      this.cliConfig?.allowedCommands &&
+      this.cliConfig.allowedCommands.length > 0
+    ) {
+      try {
+        const autoMapped = resolveCliCredentials(
+          this.cliConfig.allowedCommands,
+          this.credentials,
+        );
+        if (autoMapped.length > 0 && !this.credentials) {
+          (this as { credentials: (string | CredentialFile)[] }).credentials =
+            autoMapped;
+        }
+      } catch (err) {
+        throw new ConfigurationError(
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+  }
+
+  // ── Claude Code detection ───────────────────────────────
+
+  /**
+   * True if this agent uses the Claude Agent SDK runtime.
+   */
+  get isClaudeCode(): boolean {
+    return typeof this.model === 'string' && this.model.startsWith('claude-code');
+  }
+
+  /**
+   * The ClaudeCode config object, if this agent was created with one.
+   */
+  get claudeCodeConfig(): ClaudeCode | undefined {
+    return this._claudeCodeConfig;
   }
 
   /**

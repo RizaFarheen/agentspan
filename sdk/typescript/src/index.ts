@@ -161,6 +161,12 @@ export {
   injectCredentials,
 } from './credentials.js';
 
+// ── CLI Credential Mapping ──────────────────────────────
+export {
+  CLI_CREDENTIAL_MAP,
+  resolveCliCredentials,
+} from './cli-credentials.js';
+
 // ── Guardrails ──────────────────────────────────────────
 export type {
   GuardrailOptions,
@@ -178,7 +184,7 @@ export {
 } from './guardrail.js';
 
 // ── Memory ──────────────────────────────────────────────
-export type { MemoryEntry, MemoryStore } from './memory.js';
+export type { MemoryEntry, MemoryStore, SemanticMemoryOptions } from './memory.js';
 export {
   ConversationMemory,
   SemanticMemory,
@@ -198,6 +204,7 @@ export {
 export type { TerminationContext, TerminationResult } from './termination.js';
 
 // ── Handoffs ────────────────────────────────────────────
+export type { HandoffContext } from './handoff.js';
 export {
   OnToolResult,
   OnTextMention,
@@ -216,12 +223,20 @@ export {
 // ── Code Execution ──────────────────────────────────────
 export type { ExecutionResult } from './code-execution.js';
 export {
+  CommandValidator,
   CodeExecutor,
   LocalCodeExecutor,
   DockerCodeExecutor,
   JupyterCodeExecutor,
   ServerlessCodeExecutor,
 } from './code-execution.js';
+
+// ── Claude Code ─────────────────────────────────────────
+export { ClaudeCode, PermissionMode, resolveClaudeCodeModel } from './claude-code.js';
+
+// ── CLI Config ──────────────────────────────────────────
+export type { CliConfigOptions } from './cli-config.js';
+export { makeCliTool } from './cli-config.js';
 
 // ── Extended Agent Types ────────────────────────────────
 export type { UserProxyMode, UserProxyAgentOptions, GPTAssistantAgentOptions } from './ext.js';

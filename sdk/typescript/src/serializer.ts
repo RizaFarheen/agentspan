@@ -105,6 +105,23 @@ export class AgentConfigSerializer {
    * All keys are camelCase. Null/undefined values are omitted.
    */
   serializeAgent(agent: Agent): Record<string, unknown> {
+    // Claude-code agents emit a passthrough stub — all config is consumed
+    // by the worker closure, not sent to the server.
+    if (agent.isClaudeCode) {
+      return {
+        name: agent.name,
+        model: agent.model,
+        metadata: { _framework_passthrough: true },
+        tools: [
+          {
+            name: agent.name,
+            toolType: 'worker',
+            description: 'Claude Agent SDK passthrough worker',
+          },
+        ],
+      };
+    }
+
     const config: Record<string, unknown> = {
       name: agent.name,
     };
