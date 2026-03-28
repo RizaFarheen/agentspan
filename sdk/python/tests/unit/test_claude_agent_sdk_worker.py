@@ -495,12 +495,14 @@ class TestClaudeCodeConfig:
         )
         assert agent.tools == ["Read", "Edit", "Bash"]
 
-    def test_detect_framework_returns_claude_for_agent(self):
+    def test_detect_framework_returns_none_for_claude_code_agent(self):
+        """Agent(model='claude-code/...') is a native Agent — the server handles
+        claude-code routing during execution, not the framework detection path."""
         from agentspan.agents import Agent
         from agentspan.agents.frameworks.serializer import detect_framework
 
         agent = Agent(name="test", model="claude-code/opus", instructions="test", tools=["Read"])
-        assert detect_framework(agent) == "claude_agent_sdk"
+        assert detect_framework(agent) is None
 
     def test_detect_framework_returns_none_for_normal_agent(self):
         from agentspan.agents import Agent
@@ -528,17 +530,17 @@ class TestClaudeCodeConfig:
         assert options.model == "claude-opus-4-6"
         assert options.permission_mode == "bypassPermissions"
 
-    def test_serialize_agent_dispatches_for_claude_code_agent(self):
+    def test_claude_code_agent_goes_through_native_path(self):
+        """Agent(model='claude-code/...') uses the native serialization path,
+        not the framework serializer. The server handles passthrough compilation."""
         from agentspan.agents import Agent
-        from agentspan.agents.frameworks.serializer import serialize_agent
+        from agentspan.agents.frameworks.serializer import detect_framework
 
         agent = Agent(name="test", model="claude-code/opus", instructions="test", tools=["Read"])
-        raw_config, workers = serialize_agent(agent)
-
-        assert raw_config["name"] == "test"
-        assert raw_config["_worker_name"] == "test"
-        assert len(workers) == 1
-        assert workers[0].func is None
+        # Native agents return None from detect_framework
+        assert detect_framework(agent) is None
+        # The agent is still marked as claude-code
+        assert agent.is_claude_code
 
     def test_agent_is_not_external_when_claude_code(self):
         from agentspan.agents import Agent
