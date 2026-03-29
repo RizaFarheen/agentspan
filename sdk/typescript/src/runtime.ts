@@ -251,19 +251,19 @@ export class AgentRuntime {
         this._respond(workflowId, { message }, options?.signal),
 
       pause: () =>
-        this._httpRequest('PUT', `/workflow/${workflowId}/pause`, undefined, options?.signal).then(
+        this._httpRequest('PUT', `/agent/${workflowId}/pause`, undefined, options?.signal).then(
           () => {},
         ),
 
       resume: () =>
-        this._httpRequest('PUT', `/workflow/${workflowId}/resume`, undefined, options?.signal).then(
+        this._httpRequest('PUT', `/agent/${workflowId}/resume`, undefined, options?.signal).then(
           () => {},
         ),
 
       cancel: () =>
         this._httpRequest(
           'DELETE',
-          `/workflow/${workflowId}`,
+          `/agent/${workflowId}/cancel`,
           undefined,
           options?.signal,
         ).then(() => {}),
@@ -1195,19 +1195,19 @@ export class AgentRuntime {
         this._respond(workflowId, { message }, options?.signal),
 
       pause: () =>
-        this._httpRequest('PUT', `/workflow/${workflowId}/pause`, undefined, options?.signal).then(
+        this._httpRequest('PUT', `/agent/${workflowId}/pause`, undefined, options?.signal).then(
           () => {},
         ),
 
       resume: () =>
-        this._httpRequest('PUT', `/workflow/${workflowId}/resume`, undefined, options?.signal).then(
+        this._httpRequest('PUT', `/agent/${workflowId}/resume`, undefined, options?.signal).then(
           () => {},
         ),
 
       cancel: () =>
         this._httpRequest(
           'DELETE',
-          `/workflow/${workflowId}`,
+          `/agent/${workflowId}/cancel`,
           undefined,
           options?.signal,
         ).then(() => {}),

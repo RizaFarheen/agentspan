@@ -8,7 +8,7 @@ plugins {
 
 // ── Version catalog ──────────────────────────────────────────────
 ext {
-    conductorVersion   = '3.22.2'
+    conductorVersion   = '3.3.0.rc3'
     lombokVersion      = '1.18.42'
     log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
     sqliteJdbcVersion  = '3.47.0.0'
@@ -41,7 +41,7 @@ dependencies {
     implementation "org.conductoross:conductor-rest:${conductorVersion}"
     implementation "org.conductoross:conductor-common:${conductorVersion}"
     implementation "org.conductoross:conductor-ai:${conductorVersion}"
-    //implementation "org.conductoross:conductor-metrics:${conductorVersion}"
+    implementation "org.conductoross:conductor-metrics:${conductorVersion}"
 
     // PostgreSQL persistence + queue + indexing + locking
     implementation "org.conductoross:conductor-postgres-persistence:${conductorVersion}"
@@ -53,9 +53,6 @@ dependencies {
     // Common system tasks
     implementation "org.conductoross:conductor-http-task:${conductorVersion}"
     implementation "org.conductoross:conductor-json-jq-task:${conductorVersion}"
-
-    // Metrics
-    implementation "org.conductoross:conductor-metrics:${conductorVersion}"
 
     // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-web'

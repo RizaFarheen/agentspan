@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import _ from "lodash";
+import chain from "lodash/chain";
+import map from "lodash/map";
 import { useFetch } from "utils";
 
 type useEntityAvailableVersionsProps = {
@@ -16,11 +17,11 @@ export const useEntityAvailableVersions = ({
 
   const availableVersions: number[] = useMemo(() => {
     return (
-      _.chain(data)
+      chain(data)
         .groupBy("name")
         .map((group, key) => ({
           name: key,
-          versions: _.map(group, "version"),
+          versions: map(group, "version"),
         }))
         .find((item) => item.name === name)
         .get("versions")

@@ -421,6 +421,21 @@ public class AgentService {
                 .build();
     }
 
+    /** Pause a running agent execution. */
+    public void pauseAgent(String workflowId) {
+        workflowService.pauseWorkflow(workflowId);
+    }
+
+    /** Resume a paused agent execution. */
+    public void resumeAgent(String workflowId) {
+        workflowService.resumeWorkflow(workflowId);
+    }
+
+    /** Cancel a running agent execution. */
+    public void cancelAgent(String workflowId, String reason) {
+        workflowService.terminateWorkflow(workflowId, reason != null ? reason : "Cancelled by user");
+    }
+
     /**
      * Get a workflow execution with its full task list and token usage.
      *

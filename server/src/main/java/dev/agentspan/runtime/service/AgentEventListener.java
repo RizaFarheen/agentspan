@@ -7,6 +7,7 @@ package dev.agentspan.runtime.service;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,6 +26,9 @@ import dev.agentspan.runtime.credentials.CredentialResolutionService;
 import dev.agentspan.runtime.credentials.ExecutionTokenService;
 import dev.agentspan.runtime.model.AgentSSEEvent;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 /**
  * Listens to Conductor task/workflow state changes and translates them into
  * {@link AgentSSEEvent}s pushed to connected SSE clients via
@@ -38,7 +42,12 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     private static final Logger logger = LoggerFactory.getLogger(AgentEventListener.class);
 
+    /** Conductor AI task types that consume LLM/generation API calls. */
+    private static final Set<String> AI_TASK_TYPES =
+            Set.of("LLM_CHAT_COMPLETE", "GENERATE_IMAGE", "GENERATE_AUDIO", "GENERATE_VIDEO");
+
     private final AgentStreamRegistry streamRegistry;
+    private final MeterRegistry meterRegistry;
 
     @Autowired(required = false)
     private ExecutionTokenService executionTokenService;
@@ -47,14 +56,16 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private CredentialResolutionService credentialResolutionService;
 
     @Autowired
-    public AgentEventListener(AgentStreamRegistry streamRegistry) {
+    public AgentEventListener(AgentStreamRegistry streamRegistry, MeterRegistry meterRegistry) {
         this.streamRegistry = streamRegistry;
+        this.meterRegistry = meterRegistry;
         logger.info("AgentEventListener active (TaskStatusListener + WorkflowStatusListener)");
     }
 
     /** Package-private constructor for testing with token revocation. */
     AgentEventListener(AgentStreamRegistry streamRegistry, ExecutionTokenService tokenService) {
         this.streamRegistry = streamRegistry;
+        this.meterRegistry = null;
         this.executionTokenService = tokenService;
     }
 
@@ -215,6 +226,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private void handleWorkflowCompleted(WorkflowModel workflow) {
         String wfId = workflow.getWorkflowId();
         logger.info("onWorkflowCompleted: wfId={}", wfId);
+        recordWorkflowAIMetrics(workflow);
         Map<String, Object> output = workflow.getOutput();
         emit(wfId, AgentSSEEvent.done(wfId, output));
         if (executionTokenService != null) {
@@ -226,6 +238,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private void handleWorkflowTerminated(WorkflowModel workflow) {
         String wfId = workflow.getWorkflowId();
         logger.info("onWorkflowTerminated: wfId={}, reason={}", wfId, workflow.getReasonForIncompletion());
+        recordWorkflowAIMetrics(workflow);
         String reason = workflow.getReasonForIncompletion();
         emit(wfId, AgentSSEEvent.error(wfId, "workflow", reason != null ? reason : "Workflow terminated"));
         if (executionTokenService != null) {
@@ -248,6 +261,119 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
             logger.debug(
                     "Could not revoke execution token for workflow {}: {}", workflow.getWorkflowId(), e.getMessage());
         }
+    }
+
+    // ── Metrics ──────────────────────────────────────────────────────
+
+    /**
+     * Record Prometheus metrics for all AI tasks in a completed/terminated workflow.
+     *
+     * <p>System tasks (LLM_CHAT_COMPLETE, GENERATE_IMAGE, etc.) don't trigger
+     * {@code TaskStatusListener.onTaskCompleted}, so we iterate the full task
+     * list when the workflow finishes.</p>
+     *
+     * <p>Publishes two metric families to {@code /actuator/prometheus}:</p>
+     * <ul>
+     *   <li>{@code agentspan_ai_requests_total} — counter per AI API call</li>
+     *   <li>{@code agentspan_ai_tokens_total} — counter per token type (prompt/completion)</li>
+     * </ul>
+     *
+     * <p>Tags: {@code agent}, {@code model}, {@code provider}, {@code task_type}.</p>
+     */
+    private void recordWorkflowAIMetrics(WorkflowModel workflow) {
+        if (meterRegistry == null
+                || workflow.getTasks() == null
+                || workflow.getTasks().isEmpty()) return;
+
+        String agent;
+        try {
+            agent = workflow.getWorkflowName();
+        } catch (Exception e) {
+            agent = "unknown";
+        }
+
+        for (TaskModel task : workflow.getTasks()) {
+            String taskType = task.getTaskType();
+            if (taskType == null || !AI_TASK_TYPES.contains(taskType)) continue;
+
+            Map<String, Object> input = task.getInputData();
+            Map<String, Object> output = task.getOutputData();
+            if (input == null) input = Map.of();
+            if (output == null) output = Map.of();
+
+            String model = input.get("model") != null ? String.valueOf(input.get("model")) : "unknown";
+            String provider = input.get("llmProvider") != null ? String.valueOf(input.get("llmProvider")) : "unknown";
+
+            String taskLabel =
+                    switch (taskType) {
+                        case "LLM_CHAT_COMPLETE" -> "chat";
+                        case "GENERATE_IMAGE" -> "image";
+                        case "GENERATE_AUDIO" -> "audio";
+                        case "GENERATE_VIDEO" -> "video";
+                        default -> taskType.toLowerCase();
+                    };
+
+            // Request counter
+            Counter.builder("agentspan.ai.requests")
+                    .description("Total AI API requests")
+                    .tag("agent", agent)
+                    .tag("model", model)
+                    .tag("provider", provider)
+                    .tag("task_type", taskLabel)
+                    .register(meterRegistry)
+                    .increment();
+
+            // Token counters
+            int promptTokens = toInt(output.get("promptTokens"));
+            int completionTokens = toInt(output.get("completionTokens"));
+            int totalTokens = toInt(output.get("tokenUsed"));
+
+            if (promptTokens > 0) {
+                Counter.builder("agentspan.ai.tokens")
+                        .description("Total AI tokens consumed")
+                        .tag("agent", agent)
+                        .tag("model", model)
+                        .tag("provider", provider)
+                        .tag("task_type", taskLabel)
+                        .tag("token_type", "prompt")
+                        .register(meterRegistry)
+                        .increment(promptTokens);
+            }
+            if (completionTokens > 0) {
+                Counter.builder("agentspan.ai.tokens")
+                        .description("Total AI tokens consumed")
+                        .tag("agent", agent)
+                        .tag("model", model)
+                        .tag("provider", provider)
+                        .tag("task_type", taskLabel)
+                        .tag("token_type", "completion")
+                        .register(meterRegistry)
+                        .increment(completionTokens);
+            }
+            if (totalTokens > 0) {
+                Counter.builder("agentspan.ai.tokens")
+                        .description("Total AI tokens consumed")
+                        .tag("agent", agent)
+                        .tag("model", model)
+                        .tag("provider", provider)
+                        .tag("task_type", taskLabel)
+                        .tag("token_type", "total")
+                        .register(meterRegistry)
+                        .increment(totalTokens);
+            }
+        }
+    }
+
+    private static int toInt(Object value) {
+        if (value instanceof Number n) return n.intValue();
+        if (value instanceof String s) {
+            try {
+                return Integer.parseInt(s);
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+        return 0;
     }
 
     // ── Internal ─────────────────────────────────────────────────────

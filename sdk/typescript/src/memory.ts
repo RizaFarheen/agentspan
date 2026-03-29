@@ -202,28 +202,58 @@ export class InMemoryStore implements MemoryStore {
 
 // ── SemanticMemory ──────────────────────────────────────
 
+export interface SemanticMemoryOptions {
+  /** Pluggable memory backend. Defaults to InMemoryStore. */
+  store?: MemoryStore;
+  /** Maximum results per search query. Default 5. */
+  maxResults?: number;
+  /** Optional session ID for scoping memories. */
+  sessionId?: string;
+}
+
 /**
  * Semantic memory backed by a pluggable MemoryStore.
  *
  * Uses the store's search to find relevant entries by content similarity.
+ * Supports session-scoped memories and prompt-ready context generation.
  */
 export class SemanticMemory {
   private store: MemoryStore;
+  readonly maxResults: number;
+  readonly sessionId?: string;
 
-  constructor(options: { store: MemoryStore }) {
-    this.store = options.store;
+  constructor(options?: SemanticMemoryOptions) {
+    this.store = options?.store ?? new InMemoryStore();
+    this.maxResults = options?.maxResults ?? 5;
+    this.sessionId = options?.sessionId;
   }
 
   add(content: string, metadata?: Record<string, unknown>): string {
+    const meta = { ...metadata };
+    if (this.sessionId) {
+      meta.sessionId = this.sessionId;
+    }
     return this.store.add({
       content,
-      metadata,
+      metadata: meta,
       timestamp: Date.now(),
     });
   }
 
-  search(query: string, topK = 5): MemoryEntry[] {
-    return this.store.search(query, topK);
+  /**
+   * Search for relevant memories. Returns content strings only.
+   */
+  search(query: string, topK?: number): string[] {
+    const k = topK ?? this.maxResults;
+    return this.store.search(query, k).map((e) => e.content);
+  }
+
+  /**
+   * Search and return full MemoryEntry objects (with id, metadata, timestamp).
+   */
+  searchEntries(query: string, topK?: number): MemoryEntry[] {
+    const k = topK ?? this.maxResults;
+    return this.store.search(query, k);
   }
 
   delete(id: string): void {
@@ -236,5 +266,20 @@ export class SemanticMemory {
 
   listAll(): MemoryEntry[] {
     return this.store.listAll();
+  }
+
+  /**
+   * Get relevant memories formatted for injection into an LLM prompt.
+   *
+   * Returns a formatted string of relevant memories, or empty string if none found.
+   */
+  getContext(query: string): string {
+    const memories = this.search(query);
+    if (memories.length === 0) return '';
+    const lines = ['Relevant context from memory:'];
+    memories.forEach((mem, i) => {
+      lines.push(`  ${i + 1}. ${mem}`);
+    });
+    return lines.join('\n');
   }
 }

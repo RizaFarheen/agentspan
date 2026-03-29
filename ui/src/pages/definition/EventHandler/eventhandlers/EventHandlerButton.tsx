@@ -2,7 +2,7 @@ import { Box, Stack, Tooltip } from "@mui/material";
 import { useSelector } from "@xstate/react";
 import { FunctionComponent, useMemo } from "react";
 import fastDeepEqual from "fast-deep-equal";
-import { omit } from "lodash";
+import omit from "lodash/omit";
 import { colors } from "theme/tokens/variables";
 import Button, { MuiButtonProps } from "components/MuiButton";
 import _isEmpty from "lodash/isEmpty";

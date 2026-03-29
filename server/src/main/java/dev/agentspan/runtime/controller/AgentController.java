@@ -153,6 +153,24 @@ public class AgentController {
         return agentService.getExecutionDetail(executionId);
     }
 
+    /** Pause a running agent execution. */
+    @PutMapping("/{workflowId}/pause")
+    public void pauseAgent(@PathVariable String workflowId) {
+        agentService.pauseAgent(workflowId);
+    }
+
+    /** Resume a paused agent execution. */
+    @PutMapping("/{workflowId}/resume")
+    public void resumeAgent(@PathVariable String workflowId) {
+        agentService.resumeAgent(workflowId);
+    }
+
+    /** Cancel a running agent execution. */
+    @DeleteMapping("/{workflowId}/cancel")
+    public void cancelAgent(@PathVariable String workflowId, @RequestParam(required = false) String reason) {
+        agentService.cancelAgent(workflowId, reason);
+    }
+
     /**
      * Get the current status of a workflow execution.
      * Lightweight polling fallback when SSE is not available.

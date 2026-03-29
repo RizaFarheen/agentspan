@@ -12,7 +12,8 @@ import ConductorInput from "components/v1/ConductorInput";
 import ConductorInputNumber from "components/v1/ConductorInputNumber";
 import ConductorSelect from "components/v1/ConductorSelect";
 import { ConductorFlatMapFormBase } from "components/v1/FlatMapForm/ConductorFlatMapForm";
-import _ from "lodash";
+import chain from "lodash/chain";
+import _map from "lodash/map";
 import _isArray from "lodash/isArray";
 import { useTaskDefinitionFormActor } from "pages/definition/task/form/state/hook";
 import {
@@ -403,11 +404,11 @@ const TaskDefinitionForm = ({ formActor }: TaskDefinitionFormProps) => {
                 emptyText: "Latest Version",
               }}
               mapOptions={(data: SchemaDefinition[]) =>
-                _.chain(data)
+                chain(data)
                   .groupBy("name")
                   .map((group, key) => ({
                     name: key,
-                    versions: _.map(group, "version"),
+                    versions: _map(group, "version"),
                   }))
                   .value()
               }
@@ -437,11 +438,11 @@ const TaskDefinitionForm = ({ formActor }: TaskDefinitionFormProps) => {
                 emptyText: "Latest Version",
               }}
               mapOptions={(data: SchemaDefinition[]) =>
-                _.chain(data)
+                chain(data)
                   .groupBy("name")
                   .map((group, key) => ({
                     name: key,
-                    versions: _.map(group, "version"),
+                    versions: _map(group, "version"),
                   }))
                   .value()
               }

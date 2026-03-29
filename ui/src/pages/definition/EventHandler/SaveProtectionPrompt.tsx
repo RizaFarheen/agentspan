@@ -1,6 +1,6 @@
 import { useSelector } from "@xstate/react";
 import fastDeepEqual from "fast-deep-equal";
-import { omit } from "lodash";
+import omit from "lodash/omit";
 import { FunctionComponent } from "react";
 import BlockNavigationWithConfirmation from "shared/BlockNavigationWithConfirmation";
 import { useSaveProtection } from "shared/useSaveProtection";

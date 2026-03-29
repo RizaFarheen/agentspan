@@ -12,7 +12,7 @@ import MuiCheckbox from "components/MuiCheckbox";
 import UIModal from "components/UIModal";
 import ConductorInput from "components/v1/ConductorInput";
 import { MessageContext } from "components/v1/layout/MessageContext";
-import _ from "lodash";
+import chain from "lodash/chain";
 import _last from "lodash/last";
 import { ChangeEvent, useContext, useEffect, useState } from "react";
 import { useQueryClient } from "react-query";
@@ -57,7 +57,7 @@ const ShareWorkflowDialog = ({
     onSuccess: (data: any) => {
       const allResources = data;
       if (allResources && allResources.length > 0) {
-        const sharedWithList: string[] = _.chain(allResources)
+        const sharedWithList: string[] = chain(allResources)
           .filter(
             (obj) =>
               _last(obj.resourceName.split("#")) === selectedWorkflow?.name,

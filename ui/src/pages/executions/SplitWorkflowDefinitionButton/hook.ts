@@ -1,4 +1,4 @@
-import { fetchWithContext } from "plugins/fetch";
+import { fetchWithContext, FetchError } from "plugins/fetch";
 import { ChangeEvent, DragEvent, useState } from "react";
 import { WORKFLOW_NAME_ERROR_MESSAGE } from "utils/constants/common";
 import { WORKFLOW_NAME_REGEX } from "utils/constants/regex";
@@ -88,9 +88,9 @@ export const useImportBPMWorkflow = ({ onClose }: { onClose: () => void }) => {
         }
       }
     } catch (err: unknown) {
-      if (err instanceof Response) {
+      if (err instanceof FetchError) {
         const errorAsJson = await err.json();
-        setUploadError(errorAsJson.message || "Upload failed");
+        setUploadError(errorAsJson?.message || "Upload failed");
       } else if (err instanceof Error) {
         setUploadError(err.message);
       } else {

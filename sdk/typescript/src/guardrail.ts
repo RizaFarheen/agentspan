@@ -77,6 +77,7 @@ export interface RegexGuardrailOptions {
   position?: Position;
   onFail?: OnFail;
   message?: string;
+  maxRetries?: number;
 }
 
 /**
@@ -93,6 +94,7 @@ export class RegexGuardrail {
   readonly position: Position;
   readonly onFail: OnFail;
   readonly message?: string;
+  readonly maxRetries: number;
 
   constructor(options: RegexGuardrailOptions) {
     this.name = options.name;
@@ -100,6 +102,7 @@ export class RegexGuardrail {
     this.mode = options.mode;
     this.position = options.position ?? 'output';
     this.onFail = options.onFail ?? 'raise';
+    this.maxRetries = options.maxRetries ?? 3;
     if (options.message !== undefined) {
       this.message = options.message;
     }
@@ -116,6 +119,7 @@ export class RegexGuardrail {
       guardrailType: 'regex',
       patterns: this.patterns,
       mode: this.mode,
+      maxRetries: this.maxRetries,
     };
 
     if (this.message !== undefined) {
@@ -134,6 +138,7 @@ export interface LLMGuardrailOptions {
   policy: string;
   position?: Position;
   onFail?: OnFail;
+  maxRetries?: number;
   maxTokens?: number;
 }
 
@@ -147,6 +152,7 @@ export class LLMGuardrail {
   readonly policy: string;
   readonly position: Position;
   readonly onFail: OnFail;
+  readonly maxRetries: number;
   readonly maxTokens?: number;
 
   constructor(options: LLMGuardrailOptions) {
@@ -155,6 +161,7 @@ export class LLMGuardrail {
     this.policy = options.policy;
     this.position = options.position ?? 'output';
     this.onFail = options.onFail ?? 'raise';
+    this.maxRetries = options.maxRetries ?? 3;
     if (options.maxTokens !== undefined) {
       this.maxTokens = options.maxTokens;
     }
@@ -171,6 +178,7 @@ export class LLMGuardrail {
       guardrailType: 'llm',
       model: this.model,
       policy: this.policy,
+      maxRetries: this.maxRetries,
     };
 
     if (this.maxTokens !== undefined) {
