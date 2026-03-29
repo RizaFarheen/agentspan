@@ -5,16 +5,18 @@
 
 package dev.agentspan.runtime.compiler;
 
-import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import dev.agentspan.runtime.model.*;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.model.*;
 
 class AgentCompilerTest {
 

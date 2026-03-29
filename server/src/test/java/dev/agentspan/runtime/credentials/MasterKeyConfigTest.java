@@ -1,12 +1,12 @@
 package dev.agentspan.runtime.credentials;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.*;
 
 import java.nio.file.Path;
 import java.util.Base64;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class MasterKeyConfigTest {
 

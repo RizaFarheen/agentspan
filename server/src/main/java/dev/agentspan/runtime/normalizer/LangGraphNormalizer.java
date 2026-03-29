@@ -5,14 +5,15 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-import dev.agentspan.runtime.model.ToolConfig;
+import java.util.*;
+import java.util.LinkedHashMap;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
-import java.util.LinkedHashMap;
+import dev.agentspan.runtime.model.AgentConfig;
+import dev.agentspan.runtime.model.ToolConfig;
 
 /**
  * Normalizes LangGraph rawConfig into an AgentConfig.

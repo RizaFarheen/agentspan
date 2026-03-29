@@ -5,20 +5,7 @@
 
 package dev.agentspan.runtime.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-import dev.agentspan.runtime.AgentRuntime;
-import org.junit.jupiter.api.Test;
-import dev.agentspan.runtime.model.AgentSSEEvent;
-import dev.agentspan.runtime.service.AgentEventListener;
-import dev.agentspan.runtime.service.AgentHumanTask;
-import dev.agentspan.runtime.service.AgentStreamRegistry;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.test.context.ActiveProfiles;
+import static org.assertj.core.api.Assertions.*;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -31,7 +18,22 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.ActiveProfiles;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
+
+import dev.agentspan.runtime.AgentRuntime;
+import dev.agentspan.runtime.model.AgentSSEEvent;
+import dev.agentspan.runtime.service.AgentEventListener;
+import dev.agentspan.runtime.service.AgentHumanTask;
+import dev.agentspan.runtime.service.AgentStreamRegistry;
 
 /**
  * End-to-end integration test for SSE streaming over real HTTP.

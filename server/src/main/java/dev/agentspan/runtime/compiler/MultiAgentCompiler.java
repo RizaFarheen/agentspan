@@ -5,21 +5,22 @@
 
 package dev.agentspan.runtime.compiler;
 
+import static dev.agentspan.runtime.compiler.AgentCompiler.ref;
+
+import java.util.*;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
 import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ModelParser.ParsedModel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.*;
-import java.util.stream.Collectors;
-
-import static dev.agentspan.runtime.compiler.AgentCompiler.ref;
 
 /**
  * Compiles multi-agent strategies into Conductor workflows.

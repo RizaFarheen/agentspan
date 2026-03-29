@@ -5,14 +5,16 @@
 
 package dev.agentspan.runtime.compiler;
 
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import dev.agentspan.runtime.model.TerminationConfig;
-import dev.agentspan.runtime.util.JavaScriptBuilder;
-import org.springframework.stereotype.Component;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.model.TerminationConfig;
+import dev.agentspan.runtime.util.JavaScriptBuilder;
 
 /**
  * Compiles {@link TerminationConfig} into server-side InlineTask JavaScript.

@@ -5,19 +5,21 @@
 
 package dev.agentspan.runtime.compiler;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
-import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import dev.agentspan.runtime.model.*;
-import dev.agentspan.runtime.util.JavaScriptBuilder;
-import dev.agentspan.runtime.util.ModelParser;
-import dev.agentspan.runtime.util.ModelParser.ParsedModel;
+import java.util.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
+import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.model.*;
+import dev.agentspan.runtime.util.JavaScriptBuilder;
+import dev.agentspan.runtime.util.ModelParser;
+import dev.agentspan.runtime.util.ModelParser.ParsedModel;
 
 /**
  * Compiles an AgentConfig into a Conductor WorkflowDef.

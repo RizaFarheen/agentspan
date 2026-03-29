@@ -5,21 +5,22 @@
 
 package dev.agentspan.runtime.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.netflix.conductor.core.execution.WorkflowExecutor;
-import com.netflix.conductor.core.execution.tasks.WorkflowSystemTask;
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.*;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.core.execution.WorkflowExecutor;
+import com.netflix.conductor.core.execution.tasks.WorkflowSystemTask;
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
 
 /**
  * System task that fetches an API spec (OpenAPI 3.x, Swagger 2.0, or Postman Collection)

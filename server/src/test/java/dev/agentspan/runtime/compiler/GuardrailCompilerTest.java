@@ -5,13 +5,15 @@
 
 package dev.agentspan.runtime.compiler;
 
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import org.junit.jupiter.api.Test;
-import dev.agentspan.runtime.model.GuardrailConfig;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.model.GuardrailConfig;
 
 class GuardrailCompilerTest {
 

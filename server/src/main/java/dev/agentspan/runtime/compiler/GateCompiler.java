@@ -5,11 +5,12 @@
 
 package dev.agentspan.runtime.compiler;
 
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import dev.agentspan.runtime.util.JavaScriptBuilder;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.util.JavaScriptBuilder;
 
 /**
  * Compiles gate conditions into Conductor workflow tasks.

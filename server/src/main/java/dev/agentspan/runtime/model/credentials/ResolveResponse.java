@@ -4,9 +4,10 @@
  */
 package dev.agentspan.runtime.model.credentials;
 
+import java.util.Map;
+
 import lombok.Builder;
 import lombok.Data;
-import java.util.Map;
 
 /** Response body for POST /api/credentials/resolve */
 @Data

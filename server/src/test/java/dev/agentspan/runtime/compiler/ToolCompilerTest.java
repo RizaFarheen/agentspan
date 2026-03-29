@@ -5,15 +5,17 @@
 
 package dev.agentspan.runtime.compiler;
 
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import org.junit.jupiter.api.Test;
-import dev.agentspan.runtime.model.GuardrailConfig;
-import dev.agentspan.runtime.model.ToolConfig;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.model.GuardrailConfig;
+import dev.agentspan.runtime.model.ToolConfig;
 
 class ToolCompilerTest {
 

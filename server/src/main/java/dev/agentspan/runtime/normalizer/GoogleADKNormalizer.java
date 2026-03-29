@@ -5,12 +5,13 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.*;
+import java.util.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import dev.agentspan.runtime.model.*;
 
 /**
  * Normalizes Google ADK agent raw configs into the canonical {@link AgentConfig}.

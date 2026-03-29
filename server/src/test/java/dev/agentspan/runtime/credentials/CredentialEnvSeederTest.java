@@ -4,7 +4,12 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import dev.agentspan.runtime.AgentRuntime;
+import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
+import static org.assertj.core.api.Assertions.*;
+
+import java.util.Map;
+import java.util.function.Function;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,11 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.util.Map;
-import java.util.function.Function;
-
-import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
-import static org.assertj.core.api.Assertions.*;
+import dev.agentspan.runtime.AgentRuntime;
 
 /**
  * Integration test for CredentialEnvSeeder — uses real DB, no mocks.

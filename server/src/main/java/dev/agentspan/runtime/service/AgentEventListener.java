@@ -5,24 +5,25 @@
 
 package dev.agentspan.runtime.service;
 
-import com.netflix.conductor.core.listener.TaskStatusListener;
-import com.netflix.conductor.core.listener.WorkflowStatusListener;
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
-import dev.agentspan.runtime.model.AgentSSEEvent;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.netflix.conductor.core.listener.TaskStatusListener;
+import com.netflix.conductor.core.listener.WorkflowStatusListener;
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
+
+import dev.agentspan.runtime.credentials.CredentialResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import dev.agentspan.runtime.model.AgentSSEEvent;
 
 /**
  * Listens to Conductor task/workflow state changes and translates them into

@@ -4,18 +4,14 @@
  */
 package dev.agentspan.runtime.ai;
 
-import com.google.genai.Client;
-import com.google.genai.types.Content;
-import com.google.genai.types.GenerateContentConfig;
-import com.google.genai.types.GenerateContentResponse;
-import com.google.genai.types.Part;
-import org.conductoross.conductor.ai.AIModel;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.conductoross.conductor.ai.models.*;
+import org.conductoross.conductor.ai.models.ChatCompletion;
 import org.conductoross.conductor.ai.providers.gemini.GeminiVertex;
 import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
-import org.conductoross.conductor.ai.models.ChatCompletion;
 import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
@@ -25,8 +21,11 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.google.genai.Client;
+import com.google.genai.types.Content;
+import com.google.genai.types.GenerateContentConfig;
+import com.google.genai.types.GenerateContentResponse;
+import com.google.genai.types.Part;
 
 /**
  * Gemini model that uses the Google GenAI Java SDK with API key authentication.

@@ -5,10 +5,13 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-import org.junit.jupiter.api.Test;
-import java.util.Map;
 import static org.assertj.core.api.Assertions.*;
+
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import dev.agentspan.runtime.model.AgentConfig;
 
 class LangChainNormalizerTest {
 

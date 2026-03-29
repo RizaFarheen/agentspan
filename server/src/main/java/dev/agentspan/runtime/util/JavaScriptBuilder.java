@@ -5,10 +5,10 @@
 
 package dev.agentspan.runtime.util;
 
+import java.util.List;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.util.List;
 
 /**
  * Helper for building JavaScript snippets for Conductor InlineTask scripts.

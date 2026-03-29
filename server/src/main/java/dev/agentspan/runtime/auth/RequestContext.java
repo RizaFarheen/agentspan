@@ -4,11 +4,12 @@
  */
 package dev.agentspan.runtime.auth;
 
+import java.time.Instant;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.time.Instant;
 
 /**
  * Per-request context stored in ThreadLocal for the duration of each request.

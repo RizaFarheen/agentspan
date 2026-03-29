@@ -4,9 +4,15 @@
  */
 package dev.agentspan.runtime.controller;
 
-import dev.agentspan.runtime.auth.*;
-import dev.agentspan.runtime.credentials.*;
-import dev.agentspan.runtime.model.credentials.ResolveRequest;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,14 +23,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.security.SecureRandom;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import dev.agentspan.runtime.auth.*;
+import dev.agentspan.runtime.credentials.*;
+import dev.agentspan.runtime.model.credentials.ResolveRequest;
 
 @ExtendWith(MockitoExtension.class)
 class CredentialResolveTest {

@@ -4,11 +4,18 @@
  */
 package dev.agentspan.runtime.auth;
 
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import java.io.IOException;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,12 +25,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.io.IOException;
-import java.time.Instant;
-import java.util.Base64;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 /**
  * Auth filter — populates RequestContextHolder on every request.

@@ -6,10 +6,12 @@
 package dev.agentspan.runtime.config;
 
 import jakarta.annotation.PostConstruct;
-import dev.agentspan.runtime.service.AgentStreamRegistry;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Configuration;
+
+import dev.agentspan.runtime.service.AgentStreamRegistry;
 
 /**
  * Registers a JVM shutdown hook (runs on SIGINT / SIGTERM only) that

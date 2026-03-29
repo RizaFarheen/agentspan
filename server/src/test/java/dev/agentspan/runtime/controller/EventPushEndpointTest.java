@@ -5,19 +5,21 @@
 
 package dev.agentspan.runtime.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.agentspan.runtime.AgentRuntime;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.test.context.ActiveProfiles;
+import static org.assertj.core.api.Assertions.*;
 
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.ActiveProfiles;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import dev.agentspan.runtime.AgentRuntime;
 
 @SpringBootTest(
         classes = AgentRuntime.class,

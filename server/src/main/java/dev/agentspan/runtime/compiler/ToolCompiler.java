@@ -5,6 +5,17 @@
 
 package dev.agentspan.runtime.compiler;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 
 import dev.agentspan.runtime.model.GuardrailConfig;
@@ -14,17 +25,6 @@ import dev.agentspan.runtime.util.ModelParser;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Compiles tool definitions into Conductor workflow task structures.

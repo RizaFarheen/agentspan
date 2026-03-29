@@ -5,6 +5,10 @@
 
 package dev.agentspan.runtime.ai;
 
+import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HTTP;
+import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SIMPLE;
+import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SUB_WORKFLOW;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -20,6 +24,8 @@ import org.conductoross.conductor.ai.models.Media;
 import org.conductoross.conductor.ai.models.ToolCall;
 import org.conductoross.conductor.ai.tasks.mapper.AIModelTaskMapper;
 import org.conductoross.conductor.config.AIIntegrationEnabledCondition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Conditional;
@@ -28,21 +34,14 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-
 import com.netflix.conductor.core.exception.TerminateWorkflowException;
 import com.netflix.conductor.core.execution.mapper.TaskMapperContext;
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
 
 import dev.agentspan.runtime.model.AgentSSEEvent;
 import dev.agentspan.runtime.service.AgentStreamRegistry;
 import dev.agentspan.runtime.util.ModelContextWindows;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HTTP;
-import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SIMPLE;
-import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SUB_WORKFLOW;
 
 /**
  * Custom override of Conductor's ChatCompleteTaskMapper that properly

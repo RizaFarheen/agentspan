@@ -5,11 +5,12 @@
 
 package dev.agentspan.runtime.model;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.Map;
 
 @Data
 @NoArgsConstructor

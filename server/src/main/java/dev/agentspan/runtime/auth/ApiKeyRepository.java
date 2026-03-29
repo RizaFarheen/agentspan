@@ -4,11 +4,6 @@
  */
 package dev.agentspan.runtime.auth;
 
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.jdbc.core.ResultSetExtractor;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.stereotype.Repository;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -18,6 +13,11 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.ResultSetExtractor;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
 
 /**
  * Manages API keys. Raw keys are shown once on creation (asp_ prefix + 32 random bytes base64).

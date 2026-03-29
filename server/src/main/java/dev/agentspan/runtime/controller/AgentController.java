@@ -5,6 +5,13 @@
 
 package dev.agentspan.runtime.controller;
 
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
 import dev.agentspan.runtime.model.AgentExecutionDetail;
 import dev.agentspan.runtime.model.AgentRun;
 import dev.agentspan.runtime.model.AgentSummary;
@@ -17,15 +24,8 @@ import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
 import dev.agentspan.runtime.service.AgentDagService;
 import dev.agentspan.runtime.service.AgentService;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import lombok.RequiredArgsConstructor;
-
-import java.util.List;
-import java.util.Map;
 
 @Component
 @RestController

@@ -4,21 +4,21 @@
  */
 package dev.agentspan.runtime.service;
 
-import com.netflix.conductor.model.WorkflowModel;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import static org.mockito.Mockito.*;
+
+import java.security.SecureRandom;
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.security.SecureRandom;
-import java.util.List;
-import java.util.Map;
+import com.netflix.conductor.model.WorkflowModel;
 
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 @ExtendWith(MockitoExtension.class)
 class AgentEventListenerTokenRevocationTest {

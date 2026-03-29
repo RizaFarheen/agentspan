@@ -4,9 +4,9 @@
  */
 package dev.agentspan.runtime.ai;
 
-import dev.agentspan.runtime.auth.RequestContextHolder;
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import java.util.List;
+import java.util.Map;
+
 import org.conductoross.conductor.ai.AIModel;
 import org.conductoross.conductor.ai.AIModelProvider;
 import org.conductoross.conductor.ai.ModelConfiguration;
@@ -14,11 +14,11 @@ import org.conductoross.conductor.ai.models.LLMWorkerInput;
 import org.conductoross.conductor.ai.providers.anthropic.AnthropicConfiguration;
 import org.conductoross.conductor.ai.providers.azureopenai.AzureOpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.cohere.CohereAIConfiguration;
+import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
 import org.conductoross.conductor.ai.providers.mistral.MistralAIConfiguration;
 import org.conductoross.conductor.ai.providers.openai.OpenAIConfiguration;
-import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.perplexity.PerplexityAIConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +28,9 @@ import org.springframework.stereotype.Component;
 
 import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
 
-import java.util.List;
-import java.util.Map;
+import dev.agentspan.runtime.auth.RequestContextHolder;
+import dev.agentspan.runtime.credentials.CredentialResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 /**
  * Per-user LLM model provider that creates fresh AIModel instances with

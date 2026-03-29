@@ -5,11 +5,12 @@
 
 package dev.agentspan.runtime.compiler;
 
+import java.util.*;
+
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
 import dev.agentspan.runtime.util.JavaScriptBuilder;
 import dev.agentspan.runtime.util.ModelParser;
-
-import java.util.*;
 
 /**
  * Builds a consistent HUMAN task pipeline for Conductor workflows.

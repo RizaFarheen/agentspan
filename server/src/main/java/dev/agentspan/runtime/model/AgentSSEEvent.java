@@ -5,12 +5,11 @@
 
 package dev.agentspan.runtime.model;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Event DTO for SSE streaming. Each event represents a semantic agent-level

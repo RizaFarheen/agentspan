@@ -5,15 +5,15 @@
 
 package dev.agentspan.runtime.util;
 
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
 import java.util.Map;
 import java.util.Optional;
 
 import org.conductoross.conductor.ai.AIModel;
 import org.conductoross.conductor.ai.AIModelProvider;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 class ProviderValidatorTest {
 

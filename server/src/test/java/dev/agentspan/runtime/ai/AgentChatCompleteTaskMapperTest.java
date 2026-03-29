@@ -5,6 +5,14 @@
 
 package dev.agentspan.runtime.ai;
 
+import static org.assertj.core.api.Assertions.*;
+
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.conductoross.conductor.ai.models.ChatCompletion;
 import org.conductoross.conductor.ai.models.ChatMessage;
 import org.conductoross.conductor.ai.models.ToolCall;
@@ -14,14 +22,6 @@ import org.junit.jupiter.api.Test;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
-
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.*;
 
 /**
  * Tests for AgentChatCompleteTaskMapper.

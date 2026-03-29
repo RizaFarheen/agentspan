@@ -5,15 +5,16 @@
 
 package dev.agentspan.runtime.normalizer;
 
-import dev.agentspan.runtime.model.AgentConfig;
-import dev.agentspan.runtime.model.ToolConfig;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+
+import dev.agentspan.runtime.model.AgentConfig;
+import dev.agentspan.runtime.model.ToolConfig;
 
 class OpenAINormalizerTest {
 

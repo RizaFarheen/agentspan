@@ -4,19 +4,19 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.*;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class ExecutionTokenServiceTest {
 

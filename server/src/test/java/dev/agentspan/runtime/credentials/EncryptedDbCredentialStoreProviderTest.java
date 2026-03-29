@@ -4,7 +4,11 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import dev.agentspan.runtime.model.credentials.CredentialMeta;
+import static org.assertj.core.api.Assertions.*;
+
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,12 +16,9 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+
 import dev.agentspan.runtime.AgentRuntime;
-
-import java.util.List;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.*;
+import dev.agentspan.runtime.model.credentials.CredentialMeta;
 
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")

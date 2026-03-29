@@ -4,16 +4,17 @@
  */
 package dev.agentspan.runtime.controller;
 
-import dev.agentspan.runtime.auth.User;
-import dev.agentspan.runtime.auth.UserRepository;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import dev.agentspan.runtime.auth.User;
+import dev.agentspan.runtime.auth.UserRepository;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 /**
  * Auth endpoints for login (username/password → JWT).

@@ -4,13 +4,14 @@
  */
 package dev.agentspan.runtime.model.credentials;
 
+import java.time.Instant;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.Instant;
 
 /**
  * Credential metadata returned in list and single-item responses.
