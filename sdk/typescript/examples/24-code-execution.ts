@@ -57,16 +57,26 @@ export const sandboxedCoder = new Agent({
 // -- Run -------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('24-code-execution.ts') || process.argv[1]?.endsWith('24-code-execution.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Local Code Execution ---');
-    const result = await runtime.run(
-      coder,
-      'Write a Python function to find the first 10 Fibonacci numbers and print them.',
-    );
-    result.printResult();
+    await runtime.deploy(coder);
+    await runtime.serve(coder);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- Local Code Execution ---');
+    // const result = await runtime.run(
+    // coder,
+    // 'Write a Python function to find the first 10 Fibonacci numbers and print them.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('24-code-execution.ts') || process.argv[1]?.endsWith('24-code-execution.js')) {
+  main().catch(console.error);
 }

@@ -201,11 +201,15 @@ ml_pipeline = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            ml_pipeline,
-            "Build a model to predict California housing prices. The dataset has 20,640 samples "
-            "with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, "
-            "Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). "
-            "Metric: RMSE. Some features have skewed distributions.",
-        )
-        result.print_result()
+        runtime.deploy(ml_pipeline)
+        runtime.serve(ml_pipeline)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # ml_pipeline,
+        # "Build a model to predict California housing prices. The dataset has 20,640 samples "
+        # "with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, "
+        # "Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). "
+        # "Metric: RMSE. Some features have skewed distributions.",
+        # )
+        # result.print_result()

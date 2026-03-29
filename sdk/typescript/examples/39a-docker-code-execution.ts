@@ -34,16 +34,26 @@ export const dockerCoder = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('39a-docker-code-execution.ts') || process.argv[1]?.endsWith('39a-docker-code-execution.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Docker Sandboxed Code Execution ---');
-    const result = await runtime.run(
-      dockerCoder,
-      "Print Python's version and the container's hostname.",
-    );
-    result.printResult();
+    await runtime.deploy(dockerCoder);
+    await runtime.serve(dockerCoder);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- Docker Sandboxed Code Execution ---');
+    // const result = await runtime.run(
+    // dockerCoder,
+    // "Print Python's version and the container's hostname.",
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('39a-docker-code-execution.ts') || process.argv[1]?.endsWith('39a-docker-code-execution.js')) {
+  main().catch(console.error);
 }

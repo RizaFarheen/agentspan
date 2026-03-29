@@ -74,9 +74,17 @@ export const safeWriter = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
-  const result = await runtime.run(safeWriter, 'Write about AI safety best practices.');
-  result.printResult();
-  await runtime.shutdown();
+  try {
+    await runtime.deploy(safeWriter);
+    await runtime.serve(safeWriter);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(safeWriter, 'Write about AI safety best practices.');
+    // result.printResult();
+    // await runtime.shutdown();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 // Only run when executed directly (not when imported for discovery)

@@ -119,9 +119,13 @@ manager = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            manager,
-            "Look up information about Python and Rust, then calculate "
-            "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
-        )
-        result.print_result()
+        runtime.deploy(manager)
+        runtime.serve(manager)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # manager,
+        # "Look up information about Python and Rust, then calculate "
+        # "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
+        # )
+        # result.print_result()

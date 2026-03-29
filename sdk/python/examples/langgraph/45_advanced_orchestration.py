@@ -171,11 +171,15 @@ graph = create_react_agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "Generate a complete executive report for TechStartup Inc., "
-            "a SaaS company in the cloud infrastructure sector with $12M annual revenue "
-            "and 45% year-over-year growth.",
-        )
-        print(f"Status: {result.status}")
-        result.print_result()
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "Generate a complete executive report for TechStartup Inc., "
+        # "a SaaS company in the cloud infrastructure sector with $12M annual revenue "
+        # "and 45% year-over-year growth.",
+        # )
+        # print(f"Status: {result.status}")
+        # result.print_result()

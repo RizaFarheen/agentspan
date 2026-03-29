@@ -94,13 +94,23 @@ export const agent4 = new Agent({
 // -- Run -------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('19-composable-termination.ts') || process.argv[1]?.endsWith('19-composable-termination.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Simple text mention termination ---');
-    const result = await runtime.run(agent1, 'What are AI agents?');
-    result.printResult();
+    await runtime.deploy(agent1);
+    await runtime.serve(agent1);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- Simple text mention termination ---');
+    // const result = await runtime.run(agent1, 'What are AI agents?');
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('19-composable-termination.ts') || process.argv[1]?.endsWith('19-composable-termination.js')) {
+  main().catch(console.error);
 }

@@ -36,18 +36,28 @@ export const jupyterCoder = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('39b-jupyter-code-execution.ts') || process.argv[1]?.endsWith('39b-jupyter-code-execution.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Jupyter Kernel Code Execution ---');
-    const result = await runtime.run(
-      jupyterCoder,
-      "Compute the first 10 Fibonacci numbers using a loop, store them in a " +
-      "list called 'fibs', and print them. Then in a second execution, print " +
-      "the sum of 'fibs' (it should still exist from the first call).",
-    );
-    result.printResult();
+    await runtime.deploy(jupyterCoder);
+    await runtime.serve(jupyterCoder);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- Jupyter Kernel Code Execution ---');
+    // const result = await runtime.run(
+    // jupyterCoder,
+    // "Compute the first 10 Fibonacci numbers using a loop, store them in a " +
+    // "list called 'fibs', and print them. Then in a second execution, print " +
+    // "the sum of 'fibs' (it should still exist from the first call).",
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('39b-jupyter-code-execution.ts') || process.argv[1]?.endsWith('39b-jupyter-code-execution.js')) {
+  main().catch(console.error);
 }

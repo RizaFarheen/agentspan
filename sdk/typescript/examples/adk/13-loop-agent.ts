@@ -55,12 +55,16 @@ export const refinementLoop = new LoopAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      refinementLoop,
-      'Write a haiku about autumn leaves',
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(refinementLoop);
+    await runtime.serve(refinementLoop);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // refinementLoop,
+    // 'Write a haiku about autumn leaves',
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

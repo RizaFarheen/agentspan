@@ -83,17 +83,30 @@ export const serverlessCoder = new Agent({
 // -- Run ----------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('39c-serverless-code-execution.ts') || process.argv[1]?.endsWith('39c-serverless-code-execution.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Serverless Code Execution ---');
-    const result = await runtime.run(
-      serverlessCoder,
-      'Calculate 2**100 and print the result.',
-    );
-    result.printResult();
+    await runtime.deploy(serverlessCoder);
+    await runtime.serve(serverlessCoder);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- Serverless Code Execution ---');
+    // const result = await runtime.run(
+    // serverlessCoder,
+    // 'Calculate 2**100 and print the result.',
+    // );
+    // result.printResult();
+    // } finally {
+    // server.close();
+    // await runtime.shutdown();
+    // }
   } finally {
-    server.close();
     await runtime.shutdown();
   }
+}
+
+if (process.argv[1]?.endsWith('39c-serverless-code-execution.ts') || process.argv[1]?.endsWith('39c-serverless-code-execution.js')) {
+  main().catch(console.error);
 }

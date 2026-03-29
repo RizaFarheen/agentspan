@@ -74,15 +74,25 @@ export const agent = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('48-planner.ts') || process.argv[1]?.endsWith('48-planner.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      agent,
-      'Write a brief report on renewable energy and climate change solutions.',
-    );
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // agent,
+    // 'Write a brief report on renewable energy and climate change solutions.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('48-planner.ts') || process.argv[1]?.endsWith('48-planner.js')) {
+  main().catch(console.error);
 }

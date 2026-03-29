@@ -56,15 +56,25 @@ export const summarizer = new Agent({
 const pipeline = parallelResearch.pipe(summarizer);
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('52-nested-strategies.ts') || process.argv[1]?.endsWith('52-nested-strategies.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      pipeline,
-      'Launching an AI-powered healthcare diagnostics tool in the US',
-    );
-    result.printResult();
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // pipeline,
+    // 'Launching an AI-powered healthcare diagnostics tool in the US',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('52-nested-strategies.ts') || process.argv[1]?.endsWith('52-nested-strategies.js')) {
+  main().catch(console.error);
 }

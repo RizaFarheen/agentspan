@@ -92,9 +92,13 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent,
-            "What's the weather in Tokyo right now? Convert the temperature to "
-            "Fahrenheit and tell me what timezone they're in.",
-        )
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "What's the weather in Tokyo right now? Convert the temperature to "
+        # "Fahrenheit and tell me what timezone they're in.",
+        # )
+        # result.print_result()

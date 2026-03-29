@@ -73,27 +73,37 @@ export const agent = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('36-simple-agent-guardrails.ts') || process.argv[1]?.endsWith('36-simple-agent-guardrails.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(agent, 'Explain why the sky is blue.');
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
 
-    // Verify guardrails
-    const output = String(result.output);
-    const hasBullets = output
-      .split('\n')
-      .some((line) => line.trim().startsWith('-') || line.trim().startsWith('*'));
-    const wordCount = output.split(/\s+/).filter(Boolean).length;
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(agent, 'Explain why the sky is blue.');
+    // result.printResult();
 
-    if (hasBullets) {
-      console.log('[WARN] Output contains bullet points -- guardrail may not have fired');
-    } else if (wordCount < 50) {
-      console.log(`[WARN] Output too short (${wordCount} words)`);
-    } else {
-      console.log(`[OK] Prose response, ${wordCount} words -- guardrails passed`);
-    }
+    // // Verify guardrails
+    // const output = String(result.output);
+    // const hasBullets = output
+    // .split('\n')
+    // .some((line) => line.trim().startsWith('-') || line.trim().startsWith('*'));
+    // const wordCount = output.split(/\s+/).filter(Boolean).length;
+
+    // if (hasBullets) {
+    // console.log('[WARN] Output contains bullet points -- guardrail may not have fired');
+    // } else if (wordCount < 50) {
+    // console.log(`[WARN] Output too short (${wordCount} words)`);
+    // } else {
+    // console.log(`[OK] Prose response, ${wordCount} words -- guardrails passed`);
+    // }
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('36-simple-agent-guardrails.ts') || process.argv[1]?.endsWith('36-simple-agent-guardrails.js')) {
+  main().catch(console.error);
 }

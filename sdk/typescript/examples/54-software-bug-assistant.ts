@@ -247,18 +247,28 @@ export const softwareAssistant = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('54-software-bug-assistant.ts') || process.argv[1]?.endsWith('54-software-bug-assistant.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      softwareAssistant,
-      'Review the latest open issues and PRs on conductor-oss/conductor. ' +
-      'Check if any of them relate to our internal tickets. ' +
-      'Pay attention to the DO_WHILE fix (PR #820) and the scheduler ' +
-      'persistence PRs. Give me a triage summary.',
-    );
-    result.printResult();
+    await runtime.deploy(softwareAssistant);
+    await runtime.serve(softwareAssistant);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // softwareAssistant,
+    // 'Review the latest open issues and PRs on conductor-oss/conductor. ' +
+    // 'Check if any of them relate to our internal tickets. ' +
+    // 'Pay attention to the DO_WHILE fix (PR #820) and the scheduler ' +
+    // 'persistence PRs. Give me a triage summary.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('54-software-bug-assistant.ts') || process.argv[1]?.endsWith('54-software-bug-assistant.js')) {
+  main().catch(console.error);
 }

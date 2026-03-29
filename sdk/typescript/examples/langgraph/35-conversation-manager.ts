@@ -137,13 +137,17 @@ async function main() {
 
   const runtime = new AgentRuntime();
   try {
-    for (const turn of turns) {
-      const result = await runtime.run(graph, turn);
-      console.log(`You: ${turn}`);
-      console.log('Status:', result.status);
-      result.printResult();
-      console.log();
-    }
+    await runtime.deploy(graph);
+    await runtime.serve(graph);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // for (const turn of turns) {
+    // const result = await runtime.run(graph, turn);
+    // console.log(`You: ${turn}`);
+    // console.log('Status:', result.status);
+    // result.printResult();
+    // console.log();
+    // }
   } finally {
     await runtime.shutdown();
   }

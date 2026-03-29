@@ -101,15 +101,25 @@ export const coordinator = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('46-transfer-control.ts') || process.argv[1]?.endsWith('46-transfer-control.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      coordinator,
-      'Collect data from the sales database, analyze trends, and write a summary.',
-    );
-    result.printResult();
+    await runtime.deploy(coordinator);
+    await runtime.serve(coordinator);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // coordinator,
+    // 'Collect data from the sales database, analyze trends, and write a summary.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('46-transfer-control.ts') || process.argv[1]?.endsWith('46-transfer-control.js')) {
+  main().catch(console.error);
 }

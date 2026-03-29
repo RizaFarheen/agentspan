@@ -69,35 +69,45 @@ export const agent = new Agent({
 // -- Run -------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('25-semantic-memory.ts') || process.argv[1]?.endsWith('25-semantic-memory.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Query 1: Billing question ---');
-    const result = await runtime.run(
-      agent,
-      'I have a question about my billing -- is there an issue with my account?',
-    );
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
 
-    console.log('\n--- Query 2: Plan question ---');
-    const result2 = await runtime.run(
-      agent,
-      'What plan am I on and when did I sign up?',
-    );
-    result2.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- Query 1: Billing question ---');
+    // const result = await runtime.run(
+    // agent,
+    // 'I have a question about my billing -- is there an issue with my account?',
+    // );
+    // result.printResult();
+
+    // console.log('\n--- Query 2: Plan question ---');
+    // const result2 = await runtime.run(
+    // agent,
+    // 'What plan am I on and when did I sign up?',
+    // );
+    // result2.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
 
-  // -- Direct memory operations ------------------------------------------------
+    // // -- Direct memory operations ------------------------------------------------
 
-  console.log('\n--- Memory contents ---');
-  for (const entry of memory.listAll()) {
-    console.log(`  [${entry.id.slice(0, 8)}] ${entry.content}`);
-  }
+    // console.log('\n--- Memory contents ---');
+    // for (const entry of memory.listAll()) {
+    // console.log(`  [${entry.id.slice(0, 8)}] ${entry.content}`);
+    // }
 
-  console.log('\n--- Search for "billing" ---');
-  for (const entry of memory.search('billing invoice')) {
-    console.log(`  -> ${entry.content}`);
-  }
+    // console.log('\n--- Search for "billing" ---');
+    // for (const entry of memory.search('billing invoice')) {
+    // console.log(`  -> ${entry.content}`);
+    // }
+}
+
+if (process.argv[1]?.endsWith('25-semantic-memory.ts') || process.argv[1]?.endsWith('25-semantic-memory.js')) {
+  main().catch(console.error);
 }

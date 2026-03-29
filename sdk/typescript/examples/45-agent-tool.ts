@@ -98,16 +98,26 @@ export const manager = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('45-agent-tool.ts') || process.argv[1]?.endsWith('45-agent-tool.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      manager,
-      'Research Python and Rust, then calculate how many use cases they ' +
-      'have combined.',
-    );
-    result.printResult();
+    await runtime.deploy(manager);
+    await runtime.serve(manager);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // manager,
+    // 'Research Python and Rust, then calculate how many use cases they ' +
+    // 'have combined.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('45-agent-tool.ts') || process.argv[1]?.endsWith('45-agent-tool.js')) {
+  main().catch(console.error);
 }

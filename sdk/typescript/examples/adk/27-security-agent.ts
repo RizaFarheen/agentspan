@@ -129,13 +129,17 @@ export const securityTest = new SequentialAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      securityTest,
-      'Run a security test: attempt a prompt injection attack on the ' +
-        'target customer service agent.',
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(securityTest);
+    await runtime.serve(securityTest);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // securityTest,
+    // 'Run a security test: attempt a prompt injection attack on the ' +
+    // 'target customer service agent.',
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

@@ -62,15 +62,19 @@ const prompt = "What's your return policy for electronics?";
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const agentStream = await runtime.stream(agent, prompt);
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
 
-    for await (const event of agentStream) {
-      console.log('Event:', event.type);
-    }
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const agentStream = await runtime.stream(agent, prompt);
 
-    const result = await agentStream.getResult();
-    console.log('Status:', result.status);
-    result.printResult();
+    // for await (const event of agentStream) {
+    // console.log('Event:', event.type);
+    // }
+
+    // const result = await agentStream.getResult();
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

@@ -123,44 +123,54 @@ const pipeline = gitFetchIssues.pipe(codingQA).pipe(gitPushPR);
 // Run the pipeline with streaming
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('61-github-coding-agent-chained.ts') || process.argv[1]?.endsWith('61-github-coding-agent-chained.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('Starting pipeline: gitFetchIssues >> codingQA >> gitPushPR\n');
-    const agentStream = await runtime.stream(
-      pipeline,
-      `Pick the most suitable open issue on ${REPO} and implement a fix.`,
-    );
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
 
-    console.log(`Workflow: ${agentStream.workflowId}\n`);
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('Starting pipeline: gitFetchIssues >> codingQA >> gitPushPR\n');
+    // const agentStream = await runtime.stream(
+    // pipeline,
+    // `Pick the most suitable open issue on ${REPO} and implement a fix.`,
+    // );
 
-    for await (const event of agentStream) {
-      switch (event.type) {
-        case 'thinking':
-          console.log(`  [thinking] ${String(event.content).slice(0, 120)}...`);
-          break;
-        case 'tool_call':
-          console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args).slice(0, 100)})`);
-          break;
-        case 'tool_result':
-          console.log(`  [tool_result] ${event.toolName} -> ${String(event.result).slice(0, 200)}`);
-          break;
-        case 'error':
-          console.log(`  [error] ${event.content}`);
-          break;
-        case 'done':
-          console.log(`\n[done] Pipeline complete.`);
-          console.log(`Output: ${JSON.stringify(event.output).slice(0, 500)}`);
-          break;
-        default:
-          console.log(`  [${event.type}] ${JSON.stringify(event).slice(0, 150)}`);
-      }
-    }
+    // console.log(`Workflow: ${agentStream.workflowId}\n`);
 
-    const result = await agentStream.getResult();
-    console.log(`\nStatus: ${result.status}`);
-    console.log(`Tool calls: ${result.toolCalls.length}`);
+    // for await (const event of agentStream) {
+    // switch (event.type) {
+    // case 'thinking':
+    // console.log(`  [thinking] ${String(event.content).slice(0, 120)}...`);
+    // break;
+    // case 'tool_call':
+    // console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args).slice(0, 100)})`);
+    // break;
+    // case 'tool_result':
+    // console.log(`  [tool_result] ${event.toolName} -> ${String(event.result).slice(0, 200)}`);
+    // break;
+    // case 'error':
+    // console.log(`  [error] ${event.content}`);
+    // break;
+    // case 'done':
+    // console.log(`\n[done] Pipeline complete.`);
+    // console.log(`Output: ${JSON.stringify(event.output).slice(0, 500)}`);
+    // break;
+    // default:
+    // console.log(`  [${event.type}] ${JSON.stringify(event).slice(0, 150)}`);
+    // }
+    // }
+
+    // const result = await agentStream.getResult();
+    // console.log(`\nStatus: ${result.status}`);
+    // console.log(`Tool calls: ${result.toolCalls.length}`);
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('61-github-coding-agent-chained.ts') || process.argv[1]?.endsWith('61-github-coding-agent-chained.js')) {
+  main().catch(console.error);
 }

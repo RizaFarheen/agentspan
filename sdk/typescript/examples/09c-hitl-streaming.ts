@@ -75,68 +75,78 @@ export const agent = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('09c-hitl-streaming.ts') || process.argv[1]?.endsWith('09c-hitl-streaming.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    // stream() starts the workflow and returns an AgentStream —
-    // iterable for events, with HITL controls built in.
-    const streamHandle = await runtime.stream(
-      agent,
-      'The payments service is down. Check it, restart it, and clear its stale cache data.',
-    );
-    console.log(`Workflow started: ${streamHandle.workflowId}\n`);
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
 
-    for await (const event of streamHandle) {
-      switch (event.type) {
-        case 'thinking':
-          console.log(`  [thinking] ${event.content}`);
-          break;
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // // stream() starts the workflow and returns an AgentStream —
+    // // iterable for events, with HITL controls built in.
+    // const streamHandle = await runtime.stream(
+    // agent,
+    // 'The payments service is down. Check it, restart it, and clear its stale cache data.',
+    // );
+    // console.log(`Workflow started: ${streamHandle.workflowId}\n`);
 
-        case 'tool_call':
-          console.log(
-            `  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`,
-          );
-          break;
+    // for await (const event of streamHandle) {
+    // switch (event.type) {
+    // case 'thinking':
+    // console.log(`  [thinking] ${event.content}`);
+    // break;
 
-        case 'tool_result':
-          console.log(
-            `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
-          );
-          break;
+    // case 'tool_call':
+    // console.log(
+    // `  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`,
+    // );
+    // break;
 
-        case 'waiting':
-          console.log(`\n--- Approval required ---`);
-          // Auto-approve since we can't do interactive stdin
-          console.log('  Auto-approving for demo...');
-          await streamHandle.approve();
-          console.log('  Approved!\n');
-          break;
+    // case 'tool_result':
+    // console.log(
+    // `  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result)}`,
+    // );
+    // break;
 
-        case 'guardrail_pass':
-          console.log(`  [guardrail] ${event.guardrailName} passed`);
-          break;
+    // case 'waiting':
+    // console.log(`\n--- Approval required ---`);
+    // // Auto-approve since we can't do interactive stdin
+    // console.log('  Auto-approving for demo...');
+    // await streamHandle.approve();
+    // console.log('  Approved!\n');
+    // break;
 
-        case 'guardrail_fail':
-          console.log(
-            `  [guardrail] ${event.guardrailName} FAILED: ${event.content}`,
-          );
-          break;
+    // case 'guardrail_pass':
+    // console.log(`  [guardrail] ${event.guardrailName} passed`);
+    // break;
 
-        case 'error':
-          console.log(`  [error] ${event.content}`);
-          break;
+    // case 'guardrail_fail':
+    // console.log(
+    // `  [guardrail] ${event.guardrailName} FAILED: ${event.content}`,
+    // );
+    // break;
 
-        case 'done':
-          console.log(`\n  [done] ${JSON.stringify(event.output)}`);
-          break;
-      }
-    }
+    // case 'error':
+    // console.log(`  [error] ${event.content}`);
+    // break;
 
-    // After iteration, the full result is available
-    const final = await streamHandle.getResult();
-    console.log(`\nTool calls made: ${final.toolCalls.length}`);
-    console.log(`Status: ${final.status}`);
+    // case 'done':
+    // console.log(`\n  [done] ${JSON.stringify(event.output)}`);
+    // break;
+    // }
+    // }
+
+    // // After iteration, the full result is available
+    // const final = await streamHandle.getResult();
+    // console.log(`\nTool calls made: ${final.toolCalls.length}`);
+    // console.log(`Status: ${final.status}`);
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('09c-hitl-streaming.ts') || process.argv[1]?.endsWith('09c-hitl-streaming.js')) {
+  main().catch(console.error);
 }

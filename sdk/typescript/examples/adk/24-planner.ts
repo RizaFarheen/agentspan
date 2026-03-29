@@ -91,13 +91,17 @@ export const agent = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      agent,
-      'Write a brief report on the current state of renewable energy ' +
-        'and climate change solutions.',
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // agent,
+    // 'Write a brief report on the current state of renewable energy ' +
+    // 'and climate change solutions.',
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

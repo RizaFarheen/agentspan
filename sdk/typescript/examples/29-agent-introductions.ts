@@ -69,16 +69,26 @@ export const designReview = new Agent({
 // -- Run -------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('29-agent-introductions.ts') || process.argv[1]?.endsWith('29-agent-introductions.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      designReview,
-      'We need to design a new user authentication system for our SaaS platform. ' +
-        'Should we use OAuth 2.0, SAML, or build our own JWT-based system?',
-    );
-    result.printResult();
+    await runtime.deploy(designReview);
+    await runtime.serve(designReview);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // designReview,
+    // 'We need to design a new user authentication system for our SaaS platform. ' +
+    // 'Should we use OAuth 2.0, SAML, or build our own JWT-based system?',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('29-agent-introductions.ts') || process.argv[1]?.endsWith('29-agent-introductions.js')) {
+  main().catch(console.error);
 }

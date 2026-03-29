@@ -61,17 +61,27 @@ export const coordinator = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('49-include-contents.ts') || process.argv[1]?.endsWith('49-include-contents.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      coordinator,
-      "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
-      "This sentence contains every letter of the alphabet and is commonly " +
-      "used for typography testing.'",
-    );
-    result.printResult();
+    await runtime.deploy(coordinator);
+    await runtime.serve(coordinator);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // coordinator,
+    // "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
+    // "This sentence contains every letter of the alphabet and is commonly " +
+    // "used for typography testing.'",
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('49-include-contents.ts') || process.argv[1]?.endsWith('49-include-contents.js')) {
+  main().catch(console.error);
 }

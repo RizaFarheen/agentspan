@@ -109,6 +109,10 @@ graph = builder.compile(name="map_reduce_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(graph, "renewable energy breakthroughs in 2024")
-        print(f"Status: {result.status}")
-        result.print_result()
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(graph, "renewable energy breakthroughs in 2024")
+        # print(f"Status: {result.status}")
+        # result.print_result()

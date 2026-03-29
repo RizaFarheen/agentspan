@@ -86,7 +86,16 @@ const PROMPT =
 // Run
 // ---------------------------------------------------------------------------
 async function main() {
-  await streamToConsole(PROMPT);
+  const runtime = new AgentRuntime();
+  try {
+    await runtime.deploy(graph);
+    await runtime.serve(graph);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await streamToConsole(PROMPT);
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 // Only run when executed directly (not when imported for discovery)

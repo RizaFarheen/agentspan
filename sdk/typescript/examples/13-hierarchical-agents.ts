@@ -97,17 +97,27 @@ export const ceo = new Agent({
 // ── Run ───────────────────────────────────────────────────
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('13-hierarchical-agents.ts') || process.argv[1]?.endsWith('13-hierarchical-agents.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Technical question (CEO -> Engineering -> Backend) ---');
-    const result = await runtime.run(
-      ceo,
-      'Design a REST API for a user management system with authentication ' +
-      'and then come up with a marketing campaign for the system',
-    );
-    result.printResult();
+    await runtime.deploy(ceo);
+    await runtime.serve(ceo);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- Technical question (CEO -> Engineering -> Backend) ---');
+    // const result = await runtime.run(
+    // ceo,
+    // 'Design a REST API for a user management system with authentication ' +
+    // 'and then come up with a marketing campaign for the system',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('13-hierarchical-agents.ts') || process.argv[1]?.endsWith('13-hierarchical-agents.js')) {
+  main().catch(console.error);
 }

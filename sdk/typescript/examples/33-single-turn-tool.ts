@@ -40,12 +40,22 @@ export const agent = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('33-single-turn-tool.ts') || process.argv[1]?.endsWith('33-single-turn-tool.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(agent, "What's the weather in San Francisco?");
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(agent, "What's the weather in San Francisco?");
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('33-single-turn-tool.ts') || process.argv[1]?.endsWith('33-single-turn-tool.js')) {
+  main().catch(console.error);
 }

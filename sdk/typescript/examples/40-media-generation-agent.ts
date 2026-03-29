@@ -64,19 +64,29 @@ export const mediaAgent = new Agent({
 // -- Run ----------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('40-media-generation-agent.ts') || process.argv[1]?.endsWith('40-media-generation-agent.js')) {
-  console.log('Media Generation Agent');
-  console.log('='.repeat(60));
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      mediaAgent,
-      'Create an image of a serene Japanese garden with a koi pond ' +
-      'at sunset, cherry blossoms falling gently. Use vivid style. ' +
-      'Use that image to generate a video with audio narration describing the image.',
-    );
-    result.printResult();
+    await runtime.deploy(mediaAgent);
+    await runtime.serve(mediaAgent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('Media Generation Agent');
+    // console.log('='.repeat(60));
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // mediaAgent,
+    // 'Create an image of a serene Japanese garden with a koi pond ' +
+    // 'at sunset, cherry blossoms falling gently. Use vivid style. ' +
+    // 'Use that image to generate a video with audio narration describing the image.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('40-media-generation-agent.ts') || process.argv[1]?.endsWith('40-media-generation-agent.js')) {
+  main().catch(console.error);
 }

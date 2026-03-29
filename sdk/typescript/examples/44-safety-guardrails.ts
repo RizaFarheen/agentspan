@@ -122,16 +122,26 @@ export const safetyChecker = new Agent({
 const pipeline = assistant.pipe(safetyChecker);
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('44-safety-guardrails.ts') || process.argv[1]?.endsWith('44-safety-guardrails.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      pipeline,
-      'What are the contact details for our support team? ' +
-      'Include email support@company.com and phone 555-123-4567.',
-    );
-    result.printResult();
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // pipeline,
+    // 'What are the contact details for our support team? ' +
+    // 'Include email support@company.com and phone 555-123-4567.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('44-safety-guardrails.ts') || process.argv[1]?.endsWith('44-safety-guardrails.js')) {
+  main().catch(console.error);
 }

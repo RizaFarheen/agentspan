@@ -99,9 +99,17 @@ export const agent = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
-  const result = await runtime.run(agent, 'Research quantum computing trends.');
-  result.printResult();
-  await runtime.shutdown();
+  try {
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(agent, 'Research quantum computing trends.');
+    // result.printResult();
+    // await runtime.shutdown();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 // Only run when executed directly (not when imported for discovery)

@@ -49,15 +49,25 @@ export const analysis = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('07-parallel-agents.ts') || process.argv[1]?.endsWith('07-parallel-agents.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      analysis,
-      'Launching an AI-powered healthcare diagnostic tool in the US market',
-    );
-    result.printResult();
+    await runtime.deploy(analysis);
+    await runtime.serve(analysis);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // analysis,
+    // 'Launching an AI-powered healthcare diagnostic tool in the US market',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('07-parallel-agents.ts') || process.argv[1]?.endsWith('07-parallel-agents.js')) {
+  main().catch(console.error);
 }

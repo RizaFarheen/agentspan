@@ -166,6 +166,10 @@ graph = builder.compile(name="rag_pipeline")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(graph, "What is LangGraph and how does it differ from LangChain?")
-        print(f"Status: {result.status}")
-        result.print_result()
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(graph, "What is LangGraph and how does it differ from LangChain?")
+        # print(f"Status: {result.status}")
+        # result.print_result()

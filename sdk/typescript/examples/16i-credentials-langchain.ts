@@ -62,15 +62,25 @@ export const agent = new Agent({
 // -- Run ----------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('16i-credentials-langchain.ts') || process.argv[1]?.endsWith('16i-credentials-langchain.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      agent,
-      'Check if the GitHub token is set',
-    );
-    result.printResult();
+    await runtime.deploy(executor);
+    await runtime.serve(executor);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // agent,
+    // 'Check if the GitHub token is set',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('16i-credentials-langchain.ts') || process.argv[1]?.endsWith('16i-credentials-langchain.js')) {
+  main().catch(console.error);
 }

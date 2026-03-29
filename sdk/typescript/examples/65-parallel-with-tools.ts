@@ -73,31 +73,41 @@ export const analysis = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('65-parallel-with-tools.ts') || process.argv[1]?.endsWith('65-parallel-with-tools.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      analysis,
-      'Check account ACC-200 balance and look up order ORD-300 status.',
-    );
-    result.printResult();
+    await runtime.deploy(analysis);
+    await runtime.serve(analysis);
 
-    const output = String(result.output);
-    const checks: string[] = [];
-    if (output.includes('5432')) {
-      checks.push('[OK] Financial analyst retrieved balance');
-    } else {
-      checks.push('[WARN] Expected balance in output');
-    }
-    if (output.toLowerCase().includes('shipped')) {
-      checks.push('[OK] Order analyst retrieved order status');
-    } else {
-      checks.push('[WARN] Expected order status in output');
-    }
-    for (const c of checks) {
-      console.log(c);
-    }
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // analysis,
+    // 'Check account ACC-200 balance and look up order ORD-300 status.',
+    // );
+    // result.printResult();
+
+    // const output = String(result.output);
+    // const checks: string[] = [];
+    // if (output.includes('5432')) {
+    // checks.push('[OK] Financial analyst retrieved balance');
+    // } else {
+    // checks.push('[WARN] Expected balance in output');
+    // }
+    // if (output.toLowerCase().includes('shipped')) {
+    // checks.push('[OK] Order analyst retrieved order status');
+    // } else {
+    // checks.push('[WARN] Expected order status in output');
+    // }
+    // for (const c of checks) {
+    // console.log(c);
+    // }
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('65-parallel-with-tools.ts') || process.argv[1]?.endsWith('65-parallel-with-tools.js')) {
+  main().catch(console.error);
 }

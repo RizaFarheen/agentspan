@@ -90,13 +90,18 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent,
-            "I need a laptop for work. Show me what's available, check stock for your recommendation, "
-            "and calculate the total with express shipping.",
-        )
-        print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "I need a laptop for work. Show me what's available, check stock for your recommendation, "
+        # "and calculate the total with express shipping.",
+        # )
+        # print(f"Status: {result.status}")
+        # print(f"Output: {result.output}")
+
 
 
 if __name__ == "__main__":

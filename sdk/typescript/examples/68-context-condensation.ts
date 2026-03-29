@@ -170,18 +170,28 @@ export const orchestrator = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('68-context-condensation.ts') || process.argv[1]?.endsWith('68-context-condensation.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      orchestrator,
-      'Produce comprehensive analyses for each of the following technology domains ' +
-      'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). ' +
-      `Complete all ${DOMAINS.length} domains, then summarise cross-domain trends. ` +
-      `Domains: ${DOMAINS.join(', ')}.`,
-    );
-    result.printResult();
+    await runtime.deploy(orchestrator);
+    await runtime.serve(orchestrator);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // orchestrator,
+    // 'Produce comprehensive analyses for each of the following technology domains ' +
+    // 'by calling deep_analyst ONCE PER DOMAIN, one domain at a time (not in parallel). ' +
+    // `Complete all ${DOMAINS.length} domains, then summarise cross-domain trends. ` +
+    // `Domains: ${DOMAINS.join(', ')}.`,
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('68-context-condensation.ts') || process.argv[1]?.endsWith('68-context-condensation.js')) {
+  main().catch(console.error);
 }

@@ -73,5 +73,9 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority.")
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority.")
+        # result.print_result()

@@ -84,23 +84,30 @@ export const codingTeam = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
+  try {
+    await runtime.deploy(writingPipeline);
+    await runtime.serve(writingPipeline);
 
-  console.log('=== Sequential Pipeline ===');
-  const seqResult = await runtime.run(writingPipeline, 'Quantum computing');
-  seqResult.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('=== Sequential Pipeline ===');
+    // const seqResult = await runtime.run(writingPipeline, 'Quantum computing');
+    // seqResult.printResult();
 
-  console.log('\n=== Parallel Research ===');
-  const parResult = await runtime.run(researchTeam, 'AI trends in 2026');
-  parResult.printResult();
+    // console.log('\n=== Parallel Research ===');
+    // const parResult = await runtime.run(researchTeam, 'AI trends in 2026');
+    // parResult.printResult();
 
-  console.log('\n=== Handoff Team ===');
-  const handoffResult = await runtime.run(
-    codingTeam,
-    'How do I use async/await in Python?',
-  );
-  handoffResult.printResult();
+    // console.log('\n=== Handoff Team ===');
+    // const handoffResult = await runtime.run(
+    // codingTeam,
+    // 'How do I use async/await in Python?',
+    // );
+    // handoffResult.printResult();
 
-  await runtime.shutdown();
+    // await runtime.shutdown();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 // Only run when executed directly (not when imported for discovery)

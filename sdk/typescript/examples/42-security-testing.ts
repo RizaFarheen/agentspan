@@ -132,16 +132,26 @@ export const evaluator = new Agent({
 const pipeline = redTeam.pipe(target).pipe(evaluator);
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('42-security-testing.ts') || process.argv[1]?.endsWith('42-security-testing.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      pipeline,
-      'Run a security test: attempt a prompt injection attack on the ' +
-      'target customer service agent.',
-    );
-    result.printResult();
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // pipeline,
+    // 'Run a security test: attempt a prompt injection attack on the ' +
+    // 'target customer service agent.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('42-security-testing.ts') || process.argv[1]?.endsWith('42-security-testing.js')) {
+  main().catch(console.error);
 }

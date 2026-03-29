@@ -73,15 +73,25 @@ const pipeline = discussion.pipe(summarizer);
 // -- Run ----------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('15-agent-discussion.ts') || process.argv[1]?.endsWith('15-agent-discussion.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      pipeline,
-      'Should AI agents be allowed to autonomously make financial decisions for individuals?',
-    );
-    result.printResult();
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // pipeline,
+    // 'Should AI agents be allowed to autonomously make financial decisions for individuals?',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('15-agent-discussion.ts') || process.argv[1]?.endsWith('15-agent-discussion.js')) {
+  main().catch(console.error);
 }

@@ -173,18 +173,28 @@ const mlPipeline = dataAnalyst
   .pipe(reporter);
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('55-ml-engineering.ts') || process.argv[1]?.endsWith('55-ml-engineering.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      mlPipeline,
-      'Build a model to predict California housing prices. The dataset has 20,640 samples ' +
-      'with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, ' +
-      'Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). ' +
-      'Metric: RMSE. Some features have skewed distributions.',
-    );
-    result.printResult();
+    await runtime.deploy(mlPipeline);
+    await runtime.serve(mlPipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // mlPipeline,
+    // 'Build a model to predict California housing prices. The dataset has 20,640 samples ' +
+    // 'with 8 features: MedInc, HouseAge, AveRooms, AveBedrms, Population, AveOccup, ' +
+    // 'Latitude, Longitude. Target: MedianHouseValue (continuous, in $100k units). ' +
+    // 'Metric: RMSE. Some features have skewed distributions.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('55-ml-engineering.ts') || process.argv[1]?.endsWith('55-ml-engineering.js')) {
+  main().catch(console.error);
 }

@@ -121,15 +121,25 @@ export const responder = new Agent({
 const pipeline = collector.pipe(validator).pipe(responder);
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('43-data-security-pipeline.ts') || process.argv[1]?.endsWith('43-data-security-pipeline.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      pipeline,
-      'Tell me everything about user U001 including their financial details.',
-    );
-    result.printResult();
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // pipeline,
+    // 'Tell me everything about user U001 including their financial details.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('43-data-security-pipeline.ts') || process.argv[1]?.endsWith('43-data-security-pipeline.js')) {
+  main().catch(console.error);
 }

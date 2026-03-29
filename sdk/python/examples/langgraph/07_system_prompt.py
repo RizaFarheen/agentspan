@@ -43,9 +43,13 @@ graph = create_agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "I want to understand why 1 + 1 = 2. Can you just tell me?",
-        )
-        print(f"Status: {result.status}")
-        result.print_result()
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "I want to understand why 1 + 1 = 2. Can you just tell me?",
+        # )
+        # print(f"Status: {result.status}")
+        # result.print_result()

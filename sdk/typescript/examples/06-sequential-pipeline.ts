@@ -46,26 +46,36 @@ export const editor = new Agent({
 const pipeline = researcher.pipe(writer).pipe(editor);
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('06-sequential-pipeline.ts') || process.argv[1]?.endsWith('06-sequential-pipeline.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      pipeline,
-      'The impact of AI agents on software development in 2025',
-    );
-    result.printResult();
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // pipeline,
+    // 'The impact of AI agents on software development in 2025',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
 
-  // -- Option 2: Using strategy parameter (equivalent) -------------------------
-  //
-  // const pipeline = new Agent({
-  //   name: 'content_pipeline',
-  //   model: llmModel,
-  //   agents: [researcher, writer, editor],
-  //   strategy: 'sequential',
-  // });
-  // const runtime = new AgentRuntime();
-  // const result = await runtime.run(pipeline, 'The impact of AI agents on software development in 2025');
+    // // -- Option 2: Using strategy parameter (equivalent) -------------------------
+    // //
+    // // const pipeline = new Agent({
+    // //   name: 'content_pipeline',
+    // //   model: llmModel,
+    // //   agents: [researcher, writer, editor],
+    // //   strategy: 'sequential',
+    // // });
+    // // const runtime = new AgentRuntime();
+    // // const result = await runtime.run(pipeline, 'The impact of AI agents on software development in 2025');
+}
+
+if (process.argv[1]?.endsWith('06-sequential-pipeline.ts') || process.argv[1]?.endsWith('06-sequential-pipeline.js')) {
+  main().catch(console.error);
 }

@@ -95,9 +95,13 @@ const prompt = "Show me my todo list and add 'Prepare demo for Friday' as high p
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(agent, prompt);
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(agent, prompt);
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

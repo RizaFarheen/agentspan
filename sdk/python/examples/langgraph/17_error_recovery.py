@@ -97,12 +97,16 @@ graph = builder.compile(name="error_recovery_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        print("=== Happy path ===")
-        result = runtime.run(graph, "sales data for Q4")
-        print(f"Status: {result.status}")
-        result.print_result()
+        runtime.deploy(graph)
+        runtime.serve(graph)
 
-        print("\n=== Error recovery path ===")
-        result = runtime.run(graph, "intentionally fail this query")
-        print(f"Status: {result.status}")
-        result.print_result()
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("=== Happy path ===")
+        # result = runtime.run(graph, "sales data for Q4")
+        # print(f"Status: {result.status}")
+        # result.print_result()
+
+        # print("\n=== Error recovery path ===")
+        # result = runtime.run(graph, "intentionally fail this query")
+        # print(f"Status: {result.status}")
+        # result.print_result()

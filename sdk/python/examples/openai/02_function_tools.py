@@ -75,9 +75,13 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent,
-            "What's the weather in San Francisco? Also, what's the population there "
-            "and what's the square root of that number (just the digits)?",
-        )
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "What's the weather in San Francisco? Also, what's the population there "
+        # "and what's the square root of that number (just the digits)?",
+        # )
+        # result.print_result()

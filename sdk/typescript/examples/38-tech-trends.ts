@@ -318,19 +318,29 @@ const pipeline = researcher.pipe(analyst).pipe(pdfGenerator);
 // -- Run ----------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('38-tech-trends.ts') || process.argv[1]?.endsWith('38-tech-trends.js')) {
-  console.log('Starting Tech Trend Analyzer: Python vs Rust');
-  console.log('='.repeat(60));
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      pipeline,
-      'Compare Python and Rust: which has stronger developer mindshare and ' +
-      'ecosystem momentum right now? Use real HackerNews data and package ' +
-      'download statistics to support your analysis.',
-    );
-    result.printResult();
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('Starting Tech Trend Analyzer: Python vs Rust');
+    // console.log('='.repeat(60));
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // pipeline,
+    // 'Compare Python and Rust: which has stronger developer mindshare and ' +
+    // 'ecosystem momentum right now? Use real HackerNews data and package ' +
+    // 'download statistics to support your analysis.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('38-tech-trends.ts') || process.argv[1]?.endsWith('38-tech-trends.js')) {
+  main().catch(console.error);
 }

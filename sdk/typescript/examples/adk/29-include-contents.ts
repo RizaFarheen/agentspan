@@ -56,14 +56,18 @@ export const coordinator = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      coordinator,
-      "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
-        'This sentence contains every letter of the alphabet and is commonly ' +
-        "used for typography testing.'",
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(coordinator);
+    await runtime.serve(coordinator);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // coordinator,
+    // "Please summarize this: 'The quick brown fox jumps over the lazy dog. " +
+    // 'This sentence contains every letter of the alphabet and is commonly ' +
+    // "used for typography testing.'",
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

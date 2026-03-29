@@ -50,21 +50,25 @@ export const preciseAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Creative Agent (temp=0.9) ---');
-    const creativeResult = await runtime.run(
-      creativeAgent,
-      'Write a two-sentence story about a robot learning to paint.',
-    );
-    console.log('Status:', creativeResult.status);
-    creativeResult.printResult();
+    await runtime.deploy(creativeAgent);
+    await runtime.serve(creativeAgent);
 
-    console.log('\n--- Precise Agent (temp=0.1) ---');
-    const preciseResult = await runtime.run(
-      preciseAgent,
-      'Review this Python code: `data = eval(user_input)`',
-    );
-    console.log('Status:', preciseResult.status);
-    preciseResult.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('--- Creative Agent (temp=0.9) ---');
+    // const creativeResult = await runtime.run(
+    // creativeAgent,
+    // 'Write a two-sentence story about a robot learning to paint.',
+    // );
+    // console.log('Status:', creativeResult.status);
+    // creativeResult.printResult();
+
+    // console.log('\n--- Precise Agent (temp=0.1) ---');
+    // const preciseResult = await runtime.run(
+    // preciseAgent,
+    // 'Review this Python code: `data = eval(user_input)`',
+    // );
+    // console.log('Status:', preciseResult.status);
+    // preciseResult.printResult();
   } finally {
     await runtime.shutdown();
   }

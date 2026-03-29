@@ -90,15 +90,25 @@ export const support = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('05-handoffs.ts') || process.argv[1]?.endsWith('05-handoffs.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      support,
-      "What's the balance on account ACC-123?",
-    );
-    result.printResult();
+    await runtime.deploy(support);
+    await runtime.serve(support);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // support,
+    // "What's the balance on account ACC-123?",
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('05-handoffs.ts') || process.argv[1]?.endsWith('05-handoffs.js')) {
+  main().catch(console.error);
 }

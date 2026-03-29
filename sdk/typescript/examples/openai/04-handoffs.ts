@@ -111,9 +111,13 @@ const prompt = "I'd like a refund for order ORD-002, the product arrived damaged
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(triageAgent, prompt);
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(triageAgent);
+    await runtime.serve(triageAgent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(triageAgent, prompt);
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

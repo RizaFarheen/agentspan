@@ -68,16 +68,26 @@ export const support = new Agent({
 // -- Run ----------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('17-swarm-orchestration.ts') || process.argv[1]?.endsWith('17-swarm-orchestration.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Refund scenario ---');
-    const result = await runtime.run(
-      support,
-      'I bought a product last week and it arrived damaged. I want my money back.',
-    );
-    result.printResult();
+    await runtime.deploy(support);
+    await runtime.serve(support);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- Refund scenario ---');
+    // const result = await runtime.run(
+    // support,
+    // 'I bought a product last week and it arrived damaged. I want my money back.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('17-swarm-orchestration.ts') || process.argv[1]?.endsWith('17-swarm-orchestration.js')) {
+  main().catch(console.error);
 }

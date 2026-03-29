@@ -151,26 +151,36 @@ export const agent = new Agent({
 // ── Run ───────────────────────────────────────────────────
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('10-guardrails.ts') || process.argv[1]?.endsWith('10-guardrails.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    // This prompt triggers both tools:
-    //   1. get_order_status("ORD-42")   → safe data, passes guardrail
-    //   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
-    const result = await runtime.run(
-      agent,
-      'I need a full summary: What\'s the status of order ORD-42, ' +
-      'and what\'s the profile for customer CUST-7?',
-    );
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
 
-    // Verify the guardrail worked — no raw card number in the output
-    if (result.output && String(result.output).includes('4532-0150-1234-5678')) {
-      console.log('[WARN] PII leaked through the guardrail!');
-    } else {
-      console.log('[OK] PII was redacted from the final output.');
-    }
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // // This prompt triggers both tools:
+    // //   1. get_order_status("ORD-42")   → safe data, passes guardrail
+    // //   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
+    // const result = await runtime.run(
+    // agent,
+    // 'I need a full summary: What\'s the status of order ORD-42, ' +
+    // 'and what\'s the profile for customer CUST-7?',
+    // );
+    // result.printResult();
+
+    // // Verify the guardrail worked — no raw card number in the output
+    // if (result.output && String(result.output).includes('4532-0150-1234-5678')) {
+    // console.log('[WARN] PII leaked through the guardrail!');
+    // } else {
+    // console.log('[OK] PII was redacted from the final output.');
+    // }
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('10-guardrails.ts') || process.argv[1]?.endsWith('10-guardrails.js')) {
+  main().catch(console.error);
 }

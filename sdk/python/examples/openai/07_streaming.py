@@ -53,8 +53,12 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        print("Streaming events:\n")
-        for event in runtime.stream(agent, "What's your return policy for electronics?"):
-            detail = event.content or event.tool_name or event.output or ""
-            print(f"  [{event.type}] {detail}")
-        print("\nStream complete.")
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("Streaming events:\n")
+        # for event in runtime.stream(agent, "What's your return policy for electronics?"):
+        # detail = event.content or event.tool_name or event.output or ""
+        # print(f"  [{event.type}] {detail}")
+        # print("\nStream complete.")

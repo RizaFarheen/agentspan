@@ -67,12 +67,20 @@ export const researchAgent = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
-  const result = await runtime.run(
-    researchAgent,
-    'What do we know about quantum error correction?',
-  );
-  result.printResult();
-  await runtime.shutdown();
+  try {
+    await runtime.deploy(researchAgent);
+    await runtime.serve(researchAgent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // researchAgent,
+    // 'What do we know about quantum error correction?',
+    // );
+    // result.printResult();
+    // await runtime.shutdown();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 // Only run when executed directly (not when imported for discovery)

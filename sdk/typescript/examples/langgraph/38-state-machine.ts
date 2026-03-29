@@ -182,21 +182,25 @@ const graph = builder.compile();
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      graph,
-      JSON.stringify({
-        order_id: 'ORD-2025-001',
-        items: ['Python Book', 'Mechanical Keyboard', 'USB-C Hub'],
-        customer: 'Alice Smith',
-        shipping_address: '123 Main St, San Francisco, CA 94105',
-        current_status: 'NEW',
-        status_history: [],
-        tracking_number: '',
-        summary: '',
-      }),
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(graph);
+    await runtime.serve(graph);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // graph,
+    // JSON.stringify({
+    // order_id: 'ORD-2025-001',
+    // items: ['Python Book', 'Mechanical Keyboard', 'USB-C Hub'],
+    // customer: 'Alice Smith',
+    // shipping_address: '123 Main St, San Francisco, CA 94105',
+    // current_status: 'NEW',
+    // status_history: [],
+    // tracking_number: '',
+    // summary: '',
+    // }),
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

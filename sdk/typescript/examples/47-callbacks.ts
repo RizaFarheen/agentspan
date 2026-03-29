@@ -66,12 +66,22 @@ export const agent = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('47-callbacks.ts') || process.argv[1]?.endsWith('47-callbacks.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(agent, 'Tell me interesting facts about AI and space.');
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(agent, 'Tell me interesting facts about AI and space.');
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('47-callbacks.ts') || process.argv[1]?.endsWith('47-callbacks.js')) {
+  main().catch(console.error);
 }

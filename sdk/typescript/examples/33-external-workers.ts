@@ -128,20 +128,30 @@ export const supportAgent = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('33-external-workers.ts') || process.argv[1]?.endsWith('33-external-workers.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('=== External Worker Tools ===');
-    console.log('Agent has 1 local tool + 3 external worker references.\n');
+    await runtime.deploy(supportAgent);
+    await runtime.serve(supportAgent);
 
-    const result = await runtime.run(
-      supportAgent,
-      'Customer C-1234 wants to cancel order ORD-5678. ' +
-      'Look up the customer, check if we have the product in stock, ' +
-      'and process the cancellation.',
-    );
-    result.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('=== External Worker Tools ===');
+    // console.log('Agent has 1 local tool + 3 external worker references.\n');
+
+    // const result = await runtime.run(
+    // supportAgent,
+    // 'Customer C-1234 wants to cancel order ORD-5678. ' +
+    // 'Look up the customer, check if we have the product in stock, ' +
+    // 'and process the cancellation.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('33-external-workers.ts') || process.argv[1]?.endsWith('33-external-workers.js')) {
+  main().catch(console.error);
 }

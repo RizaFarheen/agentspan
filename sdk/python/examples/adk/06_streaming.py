@@ -64,7 +64,11 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        print("Streaming events:\n")
-        for event in runtime.stream(agent, "How do I authenticate with the API?"):
-            print(f"  [{event.type}] {event.data}")
-        print("\nStream complete.")
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("Streaming events:\n")
+        # for event in runtime.stream(agent, "How do I authenticate with the API?"):
+        # print(f"  [{event.type}] {event.data}")
+        # print("\nStream complete.")

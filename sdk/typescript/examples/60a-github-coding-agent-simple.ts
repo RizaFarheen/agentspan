@@ -111,36 +111,46 @@ const prompt =
   'feature or fix the bug, get it reviewed by QA, and create a PR.';
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('60a-github-coding-agent-simple.ts') || process.argv[1]?.endsWith('60a-github-coding-agent-simple.js')) {
-  console.log('='.repeat(60));
-  console.log('  GitHub Coding Agent (Simplified)');
-  console.log(`  Repo: ${REPO}`);
-  console.log(`  Work dir: ${WORK_DIR}`);
-  console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
-  console.log('  Tools: built-in code execution (any language)');
-  console.log('='.repeat(60));
-  console.log(`\nPrompt: ${prompt}\n`);
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(codingTeam, prompt);
+    await runtime.deploy(codingTeam);
+    await runtime.serve(codingTeam);
 
-    const output = result.output;
-    const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
-    if (output && typeof output === 'object' && !Array.isArray(output)) {
-      for (const [key, text] of Object.entries(output as Record<string, string>)) {
-        if (skipKeys.has(key) || !text) continue;
-        console.log(`\n${'─'.repeat(60)}`);
-        console.log(`  [${key}]`);
-        console.log('─'.repeat(60));
-        console.log(text);
-      }
-    } else {
-      console.log(output);
-    }
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('='.repeat(60));
+    // console.log('  GitHub Coding Agent (Simplified)');
+    // console.log(`  Repo: ${REPO}`);
+    // console.log(`  Work dir: ${WORK_DIR}`);
+    // console.log('  coding_team -> github_agent <-> coder <-> qa_tester (swarm)');
+    // console.log('  Tools: built-in code execution (any language)');
+    // console.log('='.repeat(60));
+    // console.log(`\nPrompt: ${prompt}\n`);
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(codingTeam, prompt);
 
-    console.log(`\nFinish reason: ${result.finishReason}`);
-    console.log(`Workflow ID: ${result.workflowId}`);
+    // const output = result.output;
+    // const skipKeys = new Set(['finishReason', 'rejectionReason', 'is_transfer', 'transfer_to']);
+    // if (output && typeof output === 'object' && !Array.isArray(output)) {
+    // for (const [key, text] of Object.entries(output as Record<string, string>)) {
+    // if (skipKeys.has(key) || !text) continue;
+    // console.log(`\n${'─'.repeat(60)}`);
+    // console.log(`  [${key}]`);
+    // console.log('─'.repeat(60));
+    // console.log(text);
+    // }
+    // } else {
+    // console.log(output);
+    // }
+
+    // console.log(`\nFinish reason: ${result.finishReason}`);
+    // console.log(`Workflow ID: ${result.workflowId}`);
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('60a-github-coding-agent-simple.ts') || process.argv[1]?.endsWith('60a-github-coding-agent-simple.js')) {
+  main().catch(console.error);
 }

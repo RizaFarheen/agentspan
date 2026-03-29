@@ -71,6 +71,10 @@ graph = builder.compile(name="query_pipeline")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(graph, "Tell me about Python")
-        print(f"Status: {result.status}")
-        result.print_result()
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(graph, "Tell me about Python")
+        # print(f"Status: {result.status}")
+        # result.print_result()

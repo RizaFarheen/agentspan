@@ -116,19 +116,29 @@ export const githubAgent = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('71-api-tool.ts') || process.argv[1]?.endsWith('71-api-tool.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Example 1: Petstore
-    console.log('=== Petstore API ===');
-    const result = await runtime.run(petAgent, "List all available pets with status 'available'");
-    result.printResult();
+    await runtime.deploy(petAgent);
+    await runtime.serve(petAgent);
 
-    // Example 3: Mixed tools
-    console.log('\n=== Mixed Tools ===');
-    const result2 = await runtime.run(multiToolAgent, "What's sqrt(144)? Also find pets named 'doggie'.");
-    result2.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // // Example 1: Petstore
+    // console.log('=== Petstore API ===');
+    // const result = await runtime.run(petAgent, "List all available pets with status 'available'");
+    // result.printResult();
+
+    // // Example 3: Mixed tools
+    // console.log('\n=== Mixed Tools ===');
+    // const result2 = await runtime.run(multiToolAgent, "What's sqrt(144)? Also find pets named 'doggie'.");
+    // result2.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('71-api-tool.ts') || process.argv[1]?.endsWith('71-api-tool.js')) {
+  main().catch(console.error);
 }

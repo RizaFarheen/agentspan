@@ -55,9 +55,14 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        result = runtime.run(parallel_analysis, "Analyze Tesla's electric vehicle business")
-        print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        runtime.deploy(parallel_analysis)
+        runtime.serve(parallel_analysis)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(parallel_analysis, "Analyze Tesla's electric vehicle business")
+        # print(f"Status: {result.status}")
+        # print(f"Output: {result.output}")
+
 
 
 if __name__ == "__main__":

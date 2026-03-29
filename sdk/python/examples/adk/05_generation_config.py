@@ -51,16 +51,20 @@ creative_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        print("=== Factual Agent (temp=0.1) ===")
-        result = runtime.run(
-            factual_agent,
-            "What is the speed of light in a vacuum?",
-        )
-        result.print_result()
+        runtime.deploy(factual_agent)
+        runtime.serve(factual_agent)
 
-        print("\n=== Creative Agent (temp=0.9) ===")
-        result = runtime.run(
-            creative_agent,
-            "Write a two-sentence story about a cat who discovered a hidden library.",
-        )
-        result.print_result()
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("=== Factual Agent (temp=0.1) ===")
+        # result = runtime.run(
+        # factual_agent,
+        # "What is the speed of light in a vacuum?",
+        # )
+        # result.print_result()
+
+        # print("\n=== Creative Agent (temp=0.9) ===")
+        # result = runtime.run(
+        # creative_agent,
+        # "Write a two-sentence story about a cat who discovered a hidden library.",
+        # )
+        # result.print_result()

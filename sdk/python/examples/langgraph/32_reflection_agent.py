@@ -100,9 +100,13 @@ graph = builder.compile(name="reflection_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "the importance of open-source software in modern technology",
-        )
-        print(f"Status: {result.status}")
-        result.print_result()
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "the importance of open-source software in modern technology",
+        # )
+        # print(f"Status: {result.status}")
+        # result.print_result()

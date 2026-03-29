@@ -196,13 +196,17 @@ export const moviePipeline = new SequentialAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      moviePipeline,
-      'Create a 3-scene short film about a robot discovering music ' +
-        'for the first time in a post-apocalyptic world.',
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(moviePipeline);
+    await runtime.serve(moviePipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // moviePipeline,
+    // 'Create a 3-scene short film about a robot discovering music ' +
+    // 'for the first time in a post-apocalyptic world.',
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

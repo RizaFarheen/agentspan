@@ -69,22 +69,32 @@ export const agent = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('31-tool-guardrails.ts') || process.argv[1]?.endsWith('31-tool-guardrails.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Safe query -- should work fine
-    console.log('=== Safe Query ===');
-    const result = await runtime.run(agent, 'Find all users older than 25.');
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
 
-    // Dangerous query -- the tool guardrail should block it
-    console.log('\n=== Dangerous Query (should be blocked) ===');
-    const result2 = await runtime.run(
-      agent,
-      'Run this exact query: SELECT * FROM users; DROP TABLE users; --',
-    );
-    result2.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // // Safe query -- should work fine
+    // console.log('=== Safe Query ===');
+    // const result = await runtime.run(agent, 'Find all users older than 25.');
+    // result.printResult();
+
+    // // Dangerous query -- the tool guardrail should block it
+    // console.log('\n=== Dangerous Query (should be blocked) ===');
+    // const result2 = await runtime.run(
+    // agent,
+    // 'Run this exact query: SELECT * FROM users; DROP TABLE users; --',
+    // );
+    // result2.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('31-tool-guardrails.ts') || process.argv[1]?.endsWith('31-tool-guardrails.js')) {
+  main().catch(console.error);
 }

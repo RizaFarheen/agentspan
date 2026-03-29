@@ -300,13 +300,23 @@ const ticketId = process.argv[2] ?? '12345';
 const prompt = `Investigate Zendesk ticket #${ticketId} and provide a full analysis with solution and priority.`;
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('70-ce-support-agent.ts') || process.argv[1]?.endsWith('70-ce-support-agent.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log(`\n--- Investigating ticket #${ticketId} ---\n`);
-    const result = await runtime.run(ceSupportAgent, prompt);
-    console.log(result.output);
+    await runtime.deploy(ceSupportAgent);
+    await runtime.serve(ceSupportAgent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log(`\n--- Investigating ticket #${ticketId} ---\n`);
+    // const result = await runtime.run(ceSupportAgent, prompt);
+    // console.log(result.output);
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('70-ce-support-agent.ts') || process.argv[1]?.endsWith('70-ce-support-agent.js')) {
+  main().catch(console.error);
 }

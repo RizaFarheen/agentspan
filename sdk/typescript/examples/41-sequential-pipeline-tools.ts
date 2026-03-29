@@ -197,16 +197,26 @@ const pipeline = conceptDeveloper
   .pipe(producer);
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('41-sequential-pipeline-tools.ts') || process.argv[1]?.endsWith('41-sequential-pipeline-tools.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      pipeline,
-      'Create a 3-scene short film about a robot discovering music ' +
-      'for the first time in a post-apocalyptic world.',
-    );
-    result.printResult();
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // pipeline,
+    // 'Create a 3-scene short film about a robot discovering music ' +
+    // 'for the first time in a post-apocalyptic world.',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('41-sequential-pipeline-tools.ts') || process.argv[1]?.endsWith('41-sequential-pipeline-tools.js')) {
+  main().catch(console.error);
 }

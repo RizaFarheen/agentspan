@@ -392,17 +392,21 @@ async function main() {
 
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      graph,
-      'Produce comprehensive analyses for each of the following 25 technology domains ' +
-        'by calling deep_analyst once per domain, then summarise the cross-domain trends. ' +
-        'Domains: ' +
-        DOMAINS.join(', ') +
-        '.',
-    );
+    await runtime.deploy(graph);
+    await runtime.serve(graph);
 
-    console.log(`\nStatus: ${result.status}`);
-    result.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // graph,
+    // 'Produce comprehensive analyses for each of the following 25 technology domains ' +
+    // 'by calling deep_analyst once per domain, then summarise the cross-domain trends. ' +
+    // 'Domains: ' +
+    // DOMAINS.join(', ') +
+    // '.',
+    // );
+
+    // console.log(`\nStatus: ${result.status}`);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

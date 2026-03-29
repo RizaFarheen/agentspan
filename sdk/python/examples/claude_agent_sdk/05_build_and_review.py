@@ -75,29 +75,33 @@ build_review_swarm = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            build_review_swarm,
-            prompt=(
-                f"Create a React app in {PROJECT_DIR}/ using Vite + React + TypeScript.\n"
-                f"Run: npm create vite@latest {PROJECT_DIR} -- --template react-ts\n"
-                f"Then edit {PROJECT_DIR}/src/App.tsx to show a Hello World page with:\n"
-                "- A centered heading saying 'Hello, World!'\n"
-                "- A subtitle with a welcome message\n"
-                "- A counter button that increments on click\n"
-                "- Clean, accessible HTML with proper aria labels\n\n"
-                "Start by delegating to builder."
-            ),
-            timeout=600000,
-        )
-        print(f"\n{'=' * 60}")
-        print(f"Status: {result.status}")
-        print(f"Workflow ID: {result.workflow_id}")
-        print(f"Output: {result.output}")
-        print(f"{'=' * 60}")
+        runtime.deploy(build_review_swarm)
+        runtime.serve(build_review_swarm)
 
-        # Show final file
-        try:
-            with open(f"{PROJECT_DIR}/src/App.tsx") as f:
-                print(f"\nFinal App.tsx:\n{f.read()}")
-        except FileNotFoundError:
-            print("\n(App.tsx not found)")
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # build_review_swarm,
+        # prompt=(
+        # f"Create a React app in {PROJECT_DIR}/ using Vite + React + TypeScript.\n"
+        # f"Run: npm create vite@latest {PROJECT_DIR} -- --template react-ts\n"
+        # f"Then edit {PROJECT_DIR}/src/App.tsx to show a Hello World page with:\n"
+        # "- A centered heading saying 'Hello, World!'\n"
+        # "- A subtitle with a welcome message\n"
+        # "- A counter button that increments on click\n"
+        # "- Clean, accessible HTML with proper aria labels\n\n"
+        # "Start by delegating to builder."
+        # ),
+        # timeout=600000,
+        # )
+        # print(f"\n{'=' * 60}")
+        # print(f"Status: {result.status}")
+        # print(f"Workflow ID: {result.workflow_id}")
+        # print(f"Output: {result.output}")
+        # print(f"{'=' * 60}")
+
+        # # Show final file
+        # try:
+        # with open(f"{PROJECT_DIR}/src/App.tsx") as f:
+        # print(f"\nFinal App.tsx:\n{f.read()}")
+        # except FileNotFoundError:
+        # print("\n(App.tsx not found)")

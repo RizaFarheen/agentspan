@@ -51,15 +51,25 @@ export const team = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('08-router-agent.ts') || process.argv[1]?.endsWith('08-router-agent.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      team,
-      'Write a Python function to validate email addresses using regex',
-    );
-    result.printResult();
+    await runtime.deploy(team);
+    await runtime.serve(team);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // team,
+    // 'Write a Python function to validate email addresses using regex',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('08-router-agent.ts') || process.argv[1]?.endsWith('08-router-agent.js')) {
+  main().catch(console.error);
 }

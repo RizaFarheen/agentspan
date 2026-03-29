@@ -40,15 +40,25 @@ export const agent = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('04-mcp-weather.ts') || process.argv[1]?.endsWith('04-mcp-weather.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      agent,
-      "What's the weather like in San Francisco (CA) right now?",
-    );
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // agent,
+    // "What's the weather like in San Francisco (CA) right now?",
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('04-mcp-weather.ts') || process.argv[1]?.endsWith('04-mcp-weather.js')) {
+  main().catch(console.error);
 }

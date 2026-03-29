@@ -62,41 +62,51 @@ export const coordinator = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('66-handoff-to-parallel.ts') || process.argv[1]?.endsWith('66-handoff-to-parallel.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Scenario 1: Deep analysis (handoff to parallel group)
-    console.log('='.repeat(60));
-    console.log('  Scenario 1: Deep analysis (handoff -> parallel group)');
-    console.log('='.repeat(60));
-    const result = await runtime.run(
-      coordinator,
-      'Provide a deep analysis of entering the AI healthcare market.',
-    );
-    result.printResult();
+    await runtime.deploy(coordinator);
+    await runtime.serve(coordinator);
 
-    if (result.status === 'COMPLETED') {
-      console.log('[OK] Handoff to parallel group completed successfully');
-    } else {
-      console.log(`[WARN] Unexpected status: ${result.status}`);
-    }
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // // Scenario 1: Deep analysis (handoff to parallel group)
+    // console.log('='.repeat(60));
+    // console.log('  Scenario 1: Deep analysis (handoff -> parallel group)');
+    // console.log('='.repeat(60));
+    // const result = await runtime.run(
+    // coordinator,
+    // 'Provide a deep analysis of entering the AI healthcare market.',
+    // );
+    // result.printResult();
 
-    // Scenario 2: Quick check (handoff to single agent)
-    console.log('\n' + '='.repeat(60));
-    console.log('  Scenario 2: Quick check (handoff -> single agent)');
-    console.log('='.repeat(60));
-    const result2 = await runtime.run(
-      coordinator,
-      'Is the mobile app market still growing?',
-    );
-    result2.printResult();
+    // if (result.status === 'COMPLETED') {
+    // console.log('[OK] Handoff to parallel group completed successfully');
+    // } else {
+    // console.log(`[WARN] Unexpected status: ${result.status}`);
+    // }
 
-    if (result2.status === 'COMPLETED') {
-      console.log('[OK] Quick check completed successfully');
-    } else {
-      console.log(`[WARN] Unexpected status: ${result2.status}`);
-    }
+    // // Scenario 2: Quick check (handoff to single agent)
+    // console.log('\n' + '='.repeat(60));
+    // console.log('  Scenario 2: Quick check (handoff -> single agent)');
+    // console.log('='.repeat(60));
+    // const result2 = await runtime.run(
+    // coordinator,
+    // 'Is the mobile app market still growing?',
+    // );
+    // result2.printResult();
+
+    // if (result2.status === 'COMPLETED') {
+    // console.log('[OK] Quick check completed successfully');
+    // } else {
+    // console.log(`[WARN] Unexpected status: ${result2.status}`);
+    // }
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('66-handoff-to-parallel.ts') || process.argv[1]?.endsWith('66-handoff-to-parallel.js')) {
+  main().catch(console.error);
 }

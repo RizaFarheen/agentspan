@@ -44,31 +44,41 @@ export const agent = new Agent({
 // -- Run -------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('23-token-tracking.ts') || process.argv[1]?.endsWith('23-token-tracking.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      agent,
-      'Calculate the compound interest on $10,000 at 5% annual rate ' +
-        'compounded monthly for 3 years.',
-    );
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
 
-    // Token usage is automatically extracted from the workflow
-    if (result.tokenUsage) {
-      console.log('Token Usage Summary:');
-      console.log(`  Prompt tokens:     ${result.tokenUsage.promptTokens}`);
-      console.log(`  Completion tokens: ${result.tokenUsage.completionTokens}`);
-      console.log(`  Total tokens:      ${result.tokenUsage.totalTokens}`);
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // agent,
+    // 'Calculate the compound interest on $10,000 at 5% annual rate ' +
+    // 'compounded monthly for 3 years.',
+    // );
+    // result.printResult();
 
-      // Estimate cost (example pricing -- adjust for your model)
-      const promptCost = result.tokenUsage.promptTokens * 0.0025 / 1000;
-      const completionCost = result.tokenUsage.completionTokens * 0.01 / 1000;
-      console.log(`\n  Estimated cost: $${(promptCost + completionCost).toFixed(4)}`);
-    } else {
-      console.log('(Token usage not available from workflow)');
-    }
+    // // Token usage is automatically extracted from the workflow
+    // if (result.tokenUsage) {
+    // console.log('Token Usage Summary:');
+    // console.log(`  Prompt tokens:     ${result.tokenUsage.promptTokens}`);
+    // console.log(`  Completion tokens: ${result.tokenUsage.completionTokens}`);
+    // console.log(`  Total tokens:      ${result.tokenUsage.totalTokens}`);
+
+    // // Estimate cost (example pricing -- adjust for your model)
+    // const promptCost = result.tokenUsage.promptTokens * 0.0025 / 1000;
+    // const completionCost = result.tokenUsage.completionTokens * 0.01 / 1000;
+    // console.log(`\n  Estimated cost: $${(promptCost + completionCost).toFixed(4)}`);
+    // } else {
+    // console.log('(Token usage not available from workflow)');
+    // }
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('23-token-tracking.ts') || process.argv[1]?.endsWith('23-token-tracking.js')) {
+  main().catch(console.error);
 }

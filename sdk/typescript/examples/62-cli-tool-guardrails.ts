@@ -61,18 +61,28 @@ export const opsAgent = new Agent({
 const prompt = 'Show me the disk usage summary and list files in the current directory.';
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('62-cli-tool-guardrails.ts') || process.argv[1]?.endsWith('62-cli-tool-guardrails.js')) {
-  console.log('='.repeat(60));
-  console.log('  CLI Tool with Guardrails');
-  console.log('  Allowed: ls, cat, df, du, git, ps, uname, wc');
-  console.log('  Blocked: rm -rf, sudo, mkfs, dd');
-  console.log('='.repeat(60));
-  console.log(`\nPrompt: ${prompt}\n`);
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(opsAgent, prompt);
-    result.printResult();
+    await runtime.deploy(opsAgent);
+    await runtime.serve(opsAgent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('='.repeat(60));
+    // console.log('  CLI Tool with Guardrails');
+    // console.log('  Allowed: ls, cat, df, du, git, ps, uname, wc');
+    // console.log('  Blocked: rm -rf, sudo, mkfs, dd');
+    // console.log('='.repeat(60));
+    // console.log(`\nPrompt: ${prompt}\n`);
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(opsAgent, prompt);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('62-cli-tool-guardrails.ts') || process.argv[1]?.endsWith('62-cli-tool-guardrails.js')) {
+  main().catch(console.error);
 }

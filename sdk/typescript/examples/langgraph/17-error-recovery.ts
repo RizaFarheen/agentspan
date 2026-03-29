@@ -117,15 +117,19 @@ const graph = builder.compile();
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('=== Happy path ===');
-    let result = await runtime.run(graph, 'sales data for Q4');
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(graph);
+    await runtime.serve(graph);
 
-    console.log('\n=== Error recovery path ===');
-    result = await runtime.run(graph, 'intentionally fail this query');
-    console.log('Status:', result.status);
-    result.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('=== Happy path ===');
+    // let result = await runtime.run(graph, 'sales data for Q4');
+    // console.log('Status:', result.status);
+    // result.printResult();
+
+    // console.log('\n=== Error recovery path ===');
+    // result = await runtime.run(graph, 'intentionally fail this query');
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

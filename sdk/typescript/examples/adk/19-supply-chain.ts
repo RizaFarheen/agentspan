@@ -168,13 +168,17 @@ export const coordinator = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      coordinator,
-      'Give me a full supply chain status report. Check both warehouses, ' +
-        'identify any items below reorder points, and recommend restocking actions.',
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(coordinator);
+    await runtime.serve(coordinator);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // coordinator,
+    // 'Give me a full supply chain status report. Check both warehouses, ' +
+    // 'identify any items below reorder points, and recommend restocking actions.',
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

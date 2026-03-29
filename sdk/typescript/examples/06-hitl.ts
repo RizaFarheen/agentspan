@@ -43,43 +43,50 @@ export const publishingAgent = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
+  try {
+    await runtime.deploy(publishingAgent);
+    await runtime.serve(publishingAgent);
 
-  const agentStream = await runtime.stream(
-    publishingAgent,
-    'Write a short article about TypeScript and publish it.',
-  );
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const agentStream = await runtime.stream(
+    // publishingAgent,
+    // 'Write a short article about TypeScript and publish it.',
+    // );
 
-  let attempt = 0;
+    // let attempt = 0;
 
-  for await (const event of agentStream) {
-    if (event.type === EventTypes.WAITING) {
-      attempt++;
-      console.log(`\n--- HITL: Approval required (attempt ${attempt}) ---`);
+    // for await (const event of agentStream) {
+    // if (event.type === EventTypes.WAITING) {
+    // attempt++;
+    // console.log(`\n--- HITL: Approval required (attempt ${attempt}) ---`);
 
-      if (attempt === 1) {
-        // First: send feedback
-        console.log('Sending feedback...');
-        await agentStream.send('Please make the title more descriptive.');
-      } else if (attempt === 2) {
-        // Second: reject
-        console.log('Rejecting...');
-        await agentStream.reject('Title still needs improvement.');
-      } else {
-        // Third: approve
-        console.log('Approving!');
-        await agentStream.approve();
-      }
-    } else if (event.type === EventTypes.DONE) {
-      console.log('\nDone!');
-    } else if (event.type === EventTypes.MESSAGE) {
-      console.log(`[message] ${(event.content ?? '').slice(0, 100)}`);
-    }
+    // if (attempt === 1) {
+          // First: send feedback
+    // console.log('Sending feedback...');
+    // await agentStream.send('Please make the title more descriptive.');
+    // } else if (attempt === 2) {
+          // Second: reject
+    // console.log('Rejecting...');
+    // await agentStream.reject('Title still needs improvement.');
+    // } else {
+          // Third: approve
+    // console.log('Approving!');
+    // await agentStream.approve();
+    // }
+    // } else if (event.type === EventTypes.DONE) {
+    // console.log('\nDone!');
+    // } else if (event.type === EventTypes.MESSAGE) {
+    // console.log(`[message] ${(event.content ?? '').slice(0, 100)}`);
+    // }
+    // }
+
+    // const result = await agentStream.getResult();
+    // result.printResult();
+
+    // await runtime.shutdown();
+  } finally {
+    await runtime.shutdown();
   }
-
-  const result = await agentStream.getResult();
-  result.printResult();
-
-  await runtime.shutdown();
 }
 
 // Only run when executed directly (not when imported for discovery)

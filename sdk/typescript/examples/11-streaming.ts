@@ -21,66 +21,76 @@ export const agent = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('11-streaming.ts') || process.argv[1]?.endsWith('11-streaming.js')) {
-  console.log('Streaming agent execution:');
-  console.log('-'.repeat(40));
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const agentStream = await runtime.stream(
-      agent,
-      'Write a haiku about Python programming',
-    );
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
 
-    console.log(`Workflow: ${agentStream.workflowId}\n`);
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('Streaming agent execution:');
+    // console.log('-'.repeat(40));
+    // const runtime = new AgentRuntime();
+    // try {
+    // const agentStream = await runtime.stream(
+    // agent,
+    // 'Write a haiku about Python programming',
+    // );
 
-    for await (const event of agentStream) {
-      switch (event.type) {
-        case EventTypes.DONE:
-          console.log(`\nResult: ${JSON.stringify(event.output)}`);
-          console.log(`Workflow: ${agentStream.workflowId}`);
-          break;
+    // console.log(`Workflow: ${agentStream.workflowId}\n`);
 
-        case EventTypes.WAITING:
-          console.log('[Waiting...]');
-          break;
+    // for await (const event of agentStream) {
+    // switch (event.type) {
+    // case EventTypes.DONE:
+    // console.log(`\nResult: ${JSON.stringify(event.output)}`);
+    // console.log(`Workflow: ${agentStream.workflowId}`);
+    // break;
 
-        case EventTypes.ERROR:
-          console.log(`[Error: ${event.content}]`);
-          break;
+    // case EventTypes.WAITING:
+    // console.log('[Waiting...]');
+    // break;
 
-        case EventTypes.THINKING:
-          console.log(`[thinking] ${(event.content ?? '').slice(0, 80)}...`);
-          break;
+    // case EventTypes.ERROR:
+    // console.log(`[Error: ${event.content}]`);
+    // break;
 
-        case EventTypes.TOOL_CALL:
-          console.log(`[tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
-          break;
+    // case EventTypes.THINKING:
+    // console.log(`[thinking] ${(event.content ?? '').slice(0, 80)}...`);
+    // break;
 
-        case EventTypes.TOOL_RESULT:
-          console.log(`[tool_result] ${event.toolName} -> ${String(event.result).slice(0, 80)}`);
-          break;
+    // case EventTypes.TOOL_CALL:
+    // console.log(`[tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+    // break;
 
-        case EventTypes.HANDOFF:
-          console.log(`[handoff] -> ${event.target}`);
-          break;
+    // case EventTypes.TOOL_RESULT:
+    // console.log(`[tool_result] ${event.toolName} -> ${String(event.result).slice(0, 80)}`);
+    // break;
 
-        case EventTypes.GUARDRAIL_PASS:
-          console.log(`[guardrail_pass] ${event.guardrailName}`);
-          break;
+    // case EventTypes.HANDOFF:
+    // console.log(`[handoff] -> ${event.target}`);
+    // break;
 
-        case EventTypes.GUARDRAIL_FAIL:
-          console.log(`[guardrail_fail] ${event.guardrailName}: ${event.content}`);
-          break;
+    // case EventTypes.GUARDRAIL_PASS:
+    // console.log(`[guardrail_pass] ${event.guardrailName}`);
+    // break;
 
-        case EventTypes.MESSAGE:
-          console.log(`[message] ${(event.content ?? '').slice(0, 120)}`);
-          break;
-      }
-    }
+    // case EventTypes.GUARDRAIL_FAIL:
+    // console.log(`[guardrail_fail] ${event.guardrailName}: ${event.content}`);
+    // break;
 
-    const result = await agentStream.getResult();
-    result.printResult();
+    // case EventTypes.MESSAGE:
+    // console.log(`[message] ${(event.content ?? '').slice(0, 120)}`);
+    // break;
+    // }
+    // }
+
+    // const result = await agentStream.getResult();
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('11-streaming.ts') || process.argv[1]?.endsWith('11-streaming.js')) {
+  main().catch(console.error);
 }

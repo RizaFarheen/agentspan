@@ -54,9 +54,14 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        result = runtime.run(refinement_loop, "Write a haiku about autumn leaves")
-        print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        runtime.deploy(refinement_loop)
+        runtime.serve(refinement_loop)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(refinement_loop, "Write a haiku about autumn leaves")
+        # print(f"Status: {result.status}")
+        # print(f"Output: {result.output}")
+
 
 
 if __name__ == "__main__":

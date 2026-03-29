@@ -84,30 +84,40 @@ export const stableAgent = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('34-prompt-templates.ts') || process.argv[1]?.endsWith('34-prompt-templates.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    // --- 1. Template-based instructions ---
-    console.log('=== Support Agent (template instructions) ===');
-    const result1 = await runtime.run(supportAgent, 'What are your return policies?');
-    result1.printResult();
+    await runtime.deploy(supportAgent);
+    await runtime.serve(supportAgent);
 
-    // --- 2. Template with tools ---
-    console.log('\n=== Order Agent (template + tools) ===');
-    const result2 = await runtime.run(orderAgent, 'Can you check order #12345?');
-    result2.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // // --- 1. Template-based instructions ---
+    // console.log('=== Support Agent (template instructions) ===');
+    // const result1 = await runtime.run(supportAgent, 'What are your return policies?');
+    // result1.printResult();
 
-    // --- 3. User prompt from a template ---
-    // Note: In the TS SDK, PromptTemplate is supported for instructions
-    // (server-side resolution). For user prompts, resolve the template
-    // client-side since runtime.run() expects a string prompt.
-    console.log('\n=== User Prompt Template ===');
-    const result3 = await runtime.run(
-      stableAgent,
-      'Please analyze Q4 2025 earnings trends and provide key insights with recommendations.',
-    );
-    result3.printResult();
+    // // --- 2. Template with tools ---
+    // console.log('\n=== Order Agent (template + tools) ===');
+    // const result2 = await runtime.run(orderAgent, 'Can you check order #12345?');
+    // result2.printResult();
+
+    // // --- 3. User prompt from a template ---
+    // // Note: In the TS SDK, PromptTemplate is supported for instructions
+    // // (server-side resolution). For user prompts, resolve the template
+    // // client-side since runtime.run() expects a string prompt.
+    // console.log('\n=== User Prompt Template ===');
+    // const result3 = await runtime.run(
+    // stableAgent,
+    // 'Please analyze Q4 2025 earnings trends and provide key insights with recommendations.',
+    // );
+    // result3.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('34-prompt-templates.ts') || process.argv[1]?.endsWith('34-prompt-templates.js')) {
+  main().catch(console.error);
 }

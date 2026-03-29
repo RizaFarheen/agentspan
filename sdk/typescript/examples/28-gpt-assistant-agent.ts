@@ -45,23 +45,33 @@ const dataAnalyst = new GPTAssistantAgent({
 // -- Run -------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('28-gpt-assistant-agent.ts') || process.argv[1]?.endsWith('28-gpt-assistant-agent.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- GPT Assistant with Code Interpreter ---');
-    console.log(`Using assistant ID: ${assistantId}`);
+    await runtime.deploy(dataAnalyst);
+    await runtime.serve(dataAnalyst);
 
-    if (assistantId === 'asst_placeholder') {
-      console.log('(Skipping run -- set OPENAI_ASSISTANT_ID to use a real assistant)');
-      console.log('[OK] GPTAssistantAgent structure validated');
-    } else {
-      const result = await runtime.run(
-        dataAnalyst,
-        'Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42',
-      );
-      result.printResult();
-    }
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- GPT Assistant with Code Interpreter ---');
+    // console.log(`Using assistant ID: ${assistantId}`);
+
+    // if (assistantId === 'asst_placeholder') {
+    // console.log('(Skipping run -- set OPENAI_ASSISTANT_ID to use a real assistant)');
+    // console.log('[OK] GPTAssistantAgent structure validated');
+    // } else {
+    // const result = await runtime.run(
+    // dataAnalyst,
+    // 'Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42',
+    // );
+    // result.printResult();
+    // }
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('28-gpt-assistant-agent.ts') || process.argv[1]?.endsWith('28-gpt-assistant-agent.js')) {
+  main().catch(console.error);
 }

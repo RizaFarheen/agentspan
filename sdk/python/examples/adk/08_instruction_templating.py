@@ -91,8 +91,12 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent,
-            "I want to learn Python. What tutorials do you recommend?",
-        )
-        result.print_result()
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "I want to learn Python. What tutorials do you recommend?",
+        # )
+        # result.print_result()

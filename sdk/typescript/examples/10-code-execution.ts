@@ -36,12 +36,20 @@ export const codeAgent = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
-  const result = await runtime.run(
-    codeAgent,
-    'Calculate the first 10 Fibonacci numbers using code.',
-  );
-  result.printResult();
-  await runtime.shutdown();
+  try {
+    await runtime.deploy(codeAgent);
+    await runtime.serve(codeAgent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // codeAgent,
+    // 'Calculate the first 10 Fibonacci numbers using code.',
+    // );
+    // result.printResult();
+    // await runtime.shutdown();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 // Only run when executed directly (not when imported for discovery)

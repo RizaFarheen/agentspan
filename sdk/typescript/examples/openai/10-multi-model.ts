@@ -114,9 +114,13 @@ const prompt = 'I need a Python code example for authenticating with the API.';
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(triage, prompt);
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(triage);
+    await runtime.serve(triage);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(triage, prompt);
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

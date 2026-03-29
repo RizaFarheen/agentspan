@@ -128,9 +128,13 @@ const PROMPT = 'I was charged twice for my subscription this month.';
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(graph, PROMPT);
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(graph);
+    await runtime.serve(graph);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(graph, PROMPT);
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

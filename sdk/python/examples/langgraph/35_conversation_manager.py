@@ -118,8 +118,12 @@ if __name__ == "__main__":
     ]
 
     with AgentRuntime() as runtime:
-        for turn in turns:
-            result = runtime.run(graph, turn, session_id="user-session-001")
-            print(f"You: {turn}")
-            result.print_result()
-            print()
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # for turn in turns:
+        # result = runtime.run(graph, turn, session_id="user-session-001")
+        # print(f"You: {turn}")
+        # result.print_result()
+        # print()

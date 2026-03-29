@@ -70,41 +70,51 @@ export const team = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('67-router-to-sequential.ts') || process.argv[1]?.endsWith('67-router-to-sequential.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Scenario 1: Research task (routes to pipeline)
-    console.log('='.repeat(60));
-    console.log('  Scenario 1: Research task (router -> sequential pipeline)');
-    console.log('='.repeat(60));
-    const result = await runtime.run(
-      team,
-      'Research the current state of quantum computing and write a summary.',
-    );
-    result.printResult();
+    await runtime.deploy(team);
+    await runtime.serve(team);
 
-    if (result.status === 'COMPLETED') {
-      console.log('[OK] Router -> sequential pipeline completed');
-    } else {
-      console.log(`[WARN] Unexpected status: ${result.status}`);
-    }
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // // Scenario 1: Research task (routes to pipeline)
+    // console.log('='.repeat(60));
+    // console.log('  Scenario 1: Research task (router -> sequential pipeline)');
+    // console.log('='.repeat(60));
+    // const result = await runtime.run(
+    // team,
+    // 'Research the current state of quantum computing and write a summary.',
+    // );
+    // result.printResult();
 
-    // Scenario 2: Quick question (routes to single agent)
-    console.log('\n' + '='.repeat(60));
-    console.log('  Scenario 2: Quick question (router -> single agent)');
-    console.log('='.repeat(60));
-    const result2 = await runtime.run(
-      team,
-      'What is the capital of France?',
-    );
-    result2.printResult();
+    // if (result.status === 'COMPLETED') {
+    // console.log('[OK] Router -> sequential pipeline completed');
+    // } else {
+    // console.log(`[WARN] Unexpected status: ${result.status}`);
+    // }
 
-    if (result2.status === 'COMPLETED') {
-      console.log('[OK] Router -> quick answer completed');
-    } else {
-      console.log(`[WARN] Unexpected status: ${result2.status}`);
-    }
+    // // Scenario 2: Quick question (routes to single agent)
+    // console.log('\n' + '='.repeat(60));
+    // console.log('  Scenario 2: Quick question (router -> single agent)');
+    // console.log('='.repeat(60));
+    // const result2 = await runtime.run(
+    // team,
+    // 'What is the capital of France?',
+    // );
+    // result2.printResult();
+
+    // if (result2.status === 'COMPLETED') {
+    // console.log('[OK] Router -> quick answer completed');
+    // } else {
+    // console.log(`[WARN] Unexpected status: ${result2.status}`);
+    // }
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('67-router-to-sequential.ts') || process.argv[1]?.endsWith('67-router-to-sequential.js')) {
+  main().catch(console.error);
 }

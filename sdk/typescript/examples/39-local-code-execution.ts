@@ -69,23 +69,33 @@ export const configCoder = new Agent({
 // -- Run ---------------------------------------------------------------------
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('39-local-code-execution.ts') || process.argv[1]?.endsWith('39-local-code-execution.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    console.log('--- Simple Code Execution ---');
-    const result1 = await runtime.run(
-      simpleCoder,
-      'Write a Python function to find the first 10 prime numbers and print them.',
-    );
-    result1.printResult();
+    await runtime.deploy(simpleCoder);
+    await runtime.serve(simpleCoder);
 
-    console.log('\n--- Restricted Code Execution ---');
-    const result2 = await runtime.run(
-      restrictedCoder,
-      'List the files in the current directory using bash.',
-    );
-    result2.printResult();
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // console.log('--- Simple Code Execution ---');
+    // const result1 = await runtime.run(
+    // simpleCoder,
+    // 'Write a Python function to find the first 10 prime numbers and print them.',
+    // );
+    // result1.printResult();
+
+    // console.log('\n--- Restricted Code Execution ---');
+    // const result2 = await runtime.run(
+    // restrictedCoder,
+    // 'List the files in the current directory using bash.',
+    // );
+    // result2.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('39-local-code-execution.ts') || process.argv[1]?.endsWith('39-local-code-execution.js')) {
+  main().catch(console.error);
 }

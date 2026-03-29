@@ -153,13 +153,17 @@ export const coordinator = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      coordinator,
-      'Give me a full platform health assessment. Focus on the payments service ' +
-        'which seems to be having issues.',
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(coordinator);
+    await runtime.serve(coordinator);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // coordinator,
+    // 'Give me a full platform health assessment. Focus on the payments service ' +
+    // 'which seems to be having issues.',
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

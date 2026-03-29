@@ -104,8 +104,12 @@ triage_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            triage_agent,
-            "I'd like a refund for order ORD-002, the product arrived damaged.",
-        )
-        result.print_result()
+        runtime.deploy(triage_agent)
+        runtime.serve(triage_agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # triage_agent,
+        # "I'd like a refund for order ORD-002, the product arrived damaged.",
+        # )
+        # result.print_result()

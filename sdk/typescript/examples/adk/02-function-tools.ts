@@ -90,13 +90,17 @@ export const agent = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      agent,
-      "What's the weather in Tokyo right now? Convert the temperature to " +
-        "Fahrenheit and tell me what timezone they're in.",
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // agent,
+    // "What's the weather in Tokyo right now? Convert the temperature to " +
+    // "Fahrenheit and tell me what timezone they're in.",
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

@@ -48,15 +48,25 @@ export const brainstorm = new Agent({
 });
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('16-random-strategy.ts') || process.argv[1]?.endsWith('16-random-strategy.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      brainstorm,
-      'How should we approach building an AI-powered customer service platform?',
-    );
-    result.printResult();
+    await runtime.deploy(brainstorm);
+    await runtime.serve(brainstorm);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(
+    // brainstorm,
+    // 'How should we approach building an AI-powered customer service platform?',
+    // );
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('16-random-strategy.ts') || process.argv[1]?.endsWith('16-random-strategy.js')) {
+  main().catch(console.error);
 }

@@ -180,12 +180,22 @@ export const githubAwsAgent = new Agent({
 const task = process.argv.slice(2).join(' ') || 'Who am I in AWS, and list my S3 buckets?';
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('16c-credentials-cli-tools.ts') || process.argv[1]?.endsWith('16c-credentials-cli-tools.js')) {
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(githubAwsAgent, task);
-    result.printResult();
+    await runtime.deploy(githubAwsAgent);
+    await runtime.serve(githubAwsAgent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(githubAwsAgent, task);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('16c-credentials-cli-tools.ts') || process.argv[1]?.endsWith('16c-credentials-cli-tools.js')) {
+  main().catch(console.error);
 }

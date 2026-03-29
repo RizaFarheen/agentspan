@@ -62,29 +62,39 @@ const prompt =
   'and calculate their sum.';
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('59-coding-agent.ts') || process.argv[1]?.endsWith('59-coding-agent.js')) {
-  console.log('='.repeat(60));
-  console.log('  Coding Agent + QA Tester (Swarm)');
-  console.log('  coder <-> qa_tester (LLM-driven handoffs)');
-  console.log('='.repeat(60));
-  console.log(`\nPrompt: ${prompt}\n`);
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(coder, prompt);
+    await runtime.deploy(coder);
+    await runtime.serve(coder);
 
-    // Swarm output is a dict keyed by agent name
-    const output = result.output;
-    if (output && typeof output === 'object' && !Array.isArray(output)) {
-      for (const [agentName, text] of Object.entries(output as Record<string, string>)) {
-        console.log(`\n${'─'.repeat(60)}`);
-        console.log(`  [${agentName}]`);
-        console.log('─'.repeat(60));
-        console.log(text);
-      }
-    } else {
-      console.log(output);
-    }
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('='.repeat(60));
+    // console.log('  Coding Agent + QA Tester (Swarm)');
+    // console.log('  coder <-> qa_tester (LLM-driven handoffs)');
+    // console.log('='.repeat(60));
+    // console.log(`\nPrompt: ${prompt}\n`);
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(coder, prompt);
+
+    // // Swarm output is a dict keyed by agent name
+    // const output = result.output;
+    // if (output && typeof output === 'object' && !Array.isArray(output)) {
+    // for (const [agentName, text] of Object.entries(output as Record<string, string>)) {
+    // console.log(`\n${'─'.repeat(60)}`);
+    // console.log(`  [${agentName}]`);
+    // console.log('─'.repeat(60));
+    // console.log(text);
+    // }
+    // } else {
+    // console.log(output);
+    // }
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('59-coding-agent.ts') || process.argv[1]?.endsWith('59-coding-agent.js')) {
+  main().catch(console.error);
 }

@@ -119,12 +119,16 @@ export const pipeline = new SequentialAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      pipeline,
-      'Tell me everything about user U001 including their financial details.',
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(pipeline);
+    await runtime.serve(pipeline);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // pipeline,
+    // 'Tell me everything about user U001 including their financial details.',
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

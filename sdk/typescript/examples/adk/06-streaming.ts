@@ -64,35 +64,39 @@ export const agent = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const streamHandle = await runtime.stream(
-      agent,
-      'How do I authenticate with the API?',
-    );
-    console.log(`Workflow started: ${streamHandle.workflowId}\n`);
-    console.log('Events:');
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
 
-    for await (const event of streamHandle) {
-      switch (event.type) {
-        case 'thinking':
-          console.log(`  [thinking] ${event.content}`);
-          break;
-        case 'tool_call':
-          console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
-          break;
-        case 'tool_result':
-          console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
-          break;
-        case 'done':
-          console.log(`  [done] ${JSON.stringify(event.output).slice(0, 200)}`);
-          break;
-        case 'error':
-          console.log(`  [error] ${event.content}`);
-          break;
-      }
-    }
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const streamHandle = await runtime.stream(
+    // agent,
+    // 'How do I authenticate with the API?',
+    // );
+    // console.log(`Workflow started: ${streamHandle.workflowId}\n`);
+    // console.log('Events:');
 
-    const final = await streamHandle.getResult();
-    console.log(`\nStatus: ${final.status}`);
+    // for await (const event of streamHandle) {
+    // switch (event.type) {
+    // case 'thinking':
+    // console.log(`  [thinking] ${event.content}`);
+    // break;
+    // case 'tool_call':
+    // console.log(`  [tool_call] ${event.toolName}(${JSON.stringify(event.args)})`);
+    // break;
+    // case 'tool_result':
+    // console.log(`  [tool_result] ${event.toolName} -> ${JSON.stringify(event.result).slice(0, 100)}`);
+    // break;
+    // case 'done':
+    // console.log(`  [done] ${JSON.stringify(event.output).slice(0, 200)}`);
+    // break;
+    // case 'error':
+    // console.log(`  [error] ${event.content}`);
+    // break;
+    // }
+    // }
+
+    // const final = await streamHandle.getResult();
+    // console.log(`\nStatus: ${final.status}`);
   } finally {
     await runtime.shutdown();
   }

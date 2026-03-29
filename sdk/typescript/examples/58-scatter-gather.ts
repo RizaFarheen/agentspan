@@ -99,20 +99,30 @@ const coordinator = scatterGather({
 const prompt = `Create a comprehensive profile for each of the ${COUNTRIES.length} countries listed.`;
 
 // Only run when executed directly (not when imported for discovery)
-if (process.argv[1]?.endsWith('58-scatter-gather.ts') || process.argv[1]?.endsWith('58-scatter-gather.js')) {
-  console.log('='.repeat(70));
-  console.log(`  Scatter-Gather: ${COUNTRIES.length} Parallel Sub-Agents`);
-  console.log('  Coordinator: openai/gpt-4o  |  Workers: anthropic/claude-sonnet');
-  console.log('='.repeat(70));
-  console.log(`\nPrompt: ${prompt}`);
-  console.log(`Countries: ${COUNTRIES.length}`);
-  console.log(`Dispatching ${COUNTRIES.length} parallel researcher agents...\n`);
+async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(coordinator, prompt);
-    console.log('--- Coordinator Result ---');
-    console.log(result.output);
+    await runtime.deploy(coordinator);
+    await runtime.serve(coordinator);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // console.log('='.repeat(70));
+    // console.log(`  Scatter-Gather: ${COUNTRIES.length} Parallel Sub-Agents`);
+    // console.log('  Coordinator: openai/gpt-4o  |  Workers: anthropic/claude-sonnet');
+    // console.log('='.repeat(70));
+    // console.log(`\nPrompt: ${prompt}`);
+    // console.log(`Countries: ${COUNTRIES.length}`);
+    // console.log(`Dispatching ${COUNTRIES.length} parallel researcher agents...\n`);
+    // const runtime = new AgentRuntime();
+    // try {
+    // const result = await runtime.run(coordinator, prompt);
+    // console.log('--- Coordinator Result ---');
+    // console.log(result.output);
   } finally {
     await runtime.shutdown();
-  }
+    // }
+}
+
+if (process.argv[1]?.endsWith('58-scatter-gather.ts') || process.argv[1]?.endsWith('58-scatter-gather.js')) {
+  main().catch(console.error);
 }

@@ -218,14 +218,18 @@ const agentRunnable = new RunnableLambda({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      agentRunnable,
-      'Generate a complete executive report for TechStartup Inc., ' +
-        'a SaaS company in the cloud infrastructure sector with $12M annual revenue ' +
-        'and 45% year-over-year growth.'
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(agentRunnable);
+    await runtime.serve(agentRunnable);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // agentRunnable,
+    // 'Generate a complete executive report for TechStartup Inc., ' +
+    // 'a SaaS company in the cloud infrastructure sector with $12M annual revenue ' +
+    // 'and 45% year-over-year growth.'
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

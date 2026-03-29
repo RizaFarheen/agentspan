@@ -32,22 +32,29 @@ export const analyzerAgent = new Agent({
 
 async function main() {
   const runtime = new AgentRuntime();
+  try {
+    await runtime.deploy(analyzerAgent);
+    await runtime.serve(analyzerAgent);
 
-  const result = await runtime.run(
-    analyzerAgent,
-    'Analyze: "Quantum Computing Breakthrough: New Error Correction Method Achieves 99.9% Fidelity"',
-  );
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // analyzerAgent,
+    // 'Analyze: "Quantum Computing Breakthrough: New Error Correction Method Achieves 99.9% Fidelity"',
+    // );
 
-  result.printResult();
+    // result.printResult();
 
-  // The output conforms to the ArticleAnalysis schema
-  console.log('\nStructured output:');
-  console.log('  Title:', result.output['title']);
-  console.log('  Category:', result.output['category']);
-  console.log('  Sentiment:', result.output['sentiment']);
-  console.log('  Key Topics:', result.output['keyTopics']);
+    // The output conforms to the ArticleAnalysis schema
+    // console.log('\nStructured output:');
+    // console.log('  Title:', result.output['title']);
+    // console.log('  Category:', result.output['category']);
+    // console.log('  Sentiment:', result.output['sentiment']);
+    // console.log('  Key Topics:', result.output['keyTopics']);
 
-  await runtime.shutdown();
+    // await runtime.shutdown();
+  } finally {
+    await runtime.shutdown();
+  }
 }
 
 // Only run when executed directly (not when imported for discovery)

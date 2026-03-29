@@ -62,12 +62,16 @@ export const agent = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    const result = await runtime.run(
-      agent,
-      'Explain the difference between supervised and unsupervised machine learning.',
-    );
-    console.log('Status:', result.status);
-    result.printResult();
+    await runtime.deploy(agent);
+    await runtime.serve(agent);
+
+    // Quick test: uncomment below (and comment out serve) to run directly.
+    // const result = await runtime.run(
+    // agent,
+    // 'Explain the difference between supervised and unsupervised machine learning.',
+    // );
+    // console.log('Status:', result.status);
+    // result.printResult();
   } finally {
     await runtime.shutdown();
   }

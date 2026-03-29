@@ -137,9 +137,13 @@ coordinator = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            coordinator,
-            "I want to plan a trip to Japan. I need a flight from San Francisco "
-            "on 2025-04-15 and a hotel for 5 nights. Also, what's the travel advisory?",
-        )
-        result.print_result()
+        runtime.deploy(coordinator)
+        runtime.serve(coordinator)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # coordinator,
+        # "I want to plan a trip to Japan. I need a flight from San Francisco "
+        # "on 2025-04-15 and a hotel for 5 nights. Also, what's the travel advisory?",
+        # )
+        # result.print_result()
