@@ -40,6 +40,7 @@ dependencies {
     implementation "org.conductoross:conductor-rest:${conductorVersion}"
     implementation "org.conductoross:conductor-common:${conductorVersion}"
     implementation "org.conductoross:conductor-ai:${conductorVersion}"
+    //implementation "org.conductoross:conductor-metrics:${conductorVersion}"
 
     // PostgreSQL persistence + queue + indexing + locking
     implementation "org.conductoross:conductor-postgres-persistence:${conductorVersion}"
@@ -122,8 +123,9 @@ configurations.all {
     // BouncyCastle (~9MB) — crypto provider, JDK built-in is sufficient
     exclude group: 'org.bouncycastle'
 
-    // Micrometer StatsD + Spectator Atlas (~8MB) — we keep basic actuator metrics
+    // Micrometer StatsD + Atlas + Spectator (~8MB) — we keep basic actuator metrics only
     exclude group: 'io.micrometer', module: 'micrometer-registry-statsd'
+    exclude group: 'io.micrometer', module: 'micrometer-registry-atlas'
     exclude group: 'com.netflix.spectator'
 
     // Swagger UI (~3.5MB) — API docs not needed in production
