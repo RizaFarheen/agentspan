@@ -26,3 +26,4 @@ node_modules/
 .worktrees
 /ui/dist
 /ui/dist
+/ui/e2e-results
