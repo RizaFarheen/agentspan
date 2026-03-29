@@ -115,5 +115,18 @@ pipeline = git_fetch_issues >> coding_qa >> git_push_pr
 
 if __name__ == "__main__":
     with AgentRuntime() as rt:
+        # Deploy: push definition to server (idempotent — safe to call every startup).
+        # Can also be done via CLI: agentspan deploy examples.production.github_coding_agent
         rt.deploy(pipeline)
+
+        # Option A: Serve workers (production — blocks forever, run from outside)
         rt.serve(pipeline)
+
+        # Option B: Run directly (quick test — uncomment below, comment out serve above)
+        # rt.run() handles deploy + workers internally, no serve needed.
+        # result = rt.run(pipeline, "Pick an open issue and create a PR.", timeout=240000)
+        # result.print_result()
+        #
+        # Or trigger a deployed agent by name from any process:
+        # result = rt.run("github_pipeline", "Pick an open issue and create a PR.")
+        # result.print_result()
