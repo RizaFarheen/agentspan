@@ -16,8 +16,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Base64;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -143,10 +147,10 @@ public class AuthFilter extends OncePerRequestFilter {
         try {
             String[] parts = token.split("\\.");
             if (parts.length != 3) return Optional.empty();
-            String payloadJson = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            String payloadJson = new String(Base64.getUrlDecoder().decode(parts[1]));
+            ObjectMapper mapper = new ObjectMapper();
             @SuppressWarnings("unchecked")
-            java.util.Map<String, Object> claims = mapper.readValue(payloadJson, java.util.Map.class);
+            Map<String, Object> claims = mapper.readValue(payloadJson, Map.class);
             String username = (String) claims.get("sub");
             if (username == null) return Optional.empty();
             return userRepository.findByUsername(username);

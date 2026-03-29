@@ -6,6 +6,7 @@
 package dev.agentspan.runtime.compiler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import dev.agentspan.runtime.model.*;
@@ -770,7 +771,7 @@ public class AgentCompiler {
         if (sub.isExternal()) {
             task.setType("SUB_WORKFLOW");
             task.setName(sub.getName());
-            task.setSubWorkflowParam(new com.netflix.conductor.common.metadata.workflow.SubWorkflowParams());
+            task.setSubWorkflowParam(new SubWorkflowParams());
             task.getSubWorkflowParam().setName(sub.getName());
             task.setInputParameters(inputs);
         } else {
@@ -778,7 +779,7 @@ public class AgentCompiler {
             WorkflowDef subWf = compile(sub);
             task.setType("SUB_WORKFLOW");
             task.setName(sub.getName());
-            task.setSubWorkflowParam(new com.netflix.conductor.common.metadata.workflow.SubWorkflowParams());
+            task.setSubWorkflowParam(new SubWorkflowParams());
             task.getSubWorkflowParam().setName(subWf.getName());
             task.getSubWorkflowParam().setWorkflowDef(subWf);
             task.setInputParameters(inputs);
@@ -1405,8 +1406,8 @@ public class AgentCompiler {
             subTask.setType("SUB_WORKFLOW");
             subTask.setName(subWf.getName());
             subTask.setTaskReferenceName(subRef);
-            com.netflix.conductor.common.metadata.workflow.SubWorkflowParams subParams =
-                new com.netflix.conductor.common.metadata.workflow.SubWorkflowParams();
+            SubWorkflowParams subParams =
+                new SubWorkflowParams();
             subParams.setName(subWf.getName());
             subParams.setWorkflowDef(subWf);
             subTask.setSubWorkflowParam(subParams);
@@ -1846,14 +1847,14 @@ public class AgentCompiler {
         // anyOf: Pydantic uses this for Optional[T] → [T, null] → render as "T | None"
         if (m.containsKey("anyOf")) {
             List<Object> variants = (List<Object>) m.get("anyOf");
-            List<String> parts = new java.util.ArrayList<>();
+            List<String> parts = new ArrayList<>();
             for (Object v : variants) {
                 String s = simplifyNode(v);
                 if (!"None".equals(s)) parts.add(s); // put None last
             }
             parts.add("None");
             // deduplicate
-            java.util.LinkedHashSet<String> unique = new java.util.LinkedHashSet<>(parts);
+            LinkedHashSet<String> unique = new LinkedHashSet<>(parts);
             return String.join(" | ", unique);
         }
 
@@ -1884,7 +1885,7 @@ public class AgentCompiler {
     static Map<String, Object> inlineRefs(Map<String, Object> schema) {
         Map<String, Object> defs = schema.containsKey("$defs")
                 ? (Map<String, Object>) schema.get("$defs")
-                : java.util.Collections.emptyMap();
+                : Collections.emptyMap();
         return (Map<String, Object>) resolveNode(schema, defs);
     }
 
@@ -1907,7 +1908,7 @@ public class AgentCompiler {
                 return m; // unresolvable ref — pass through
             }
             // Recurse into all values, skip $defs (not part of the instance schema)
-            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            Map<String, Object> result = new LinkedHashMap<>();
             for (Map.Entry<?, ?> entry : m.entrySet()) {
                 String key = (String) entry.getKey();
                 if ("$defs".equals(key)) continue; // drop the definitions section
@@ -1916,7 +1917,7 @@ public class AgentCompiler {
             return result;
         }
         if (node instanceof List<?> list) {
-            java.util.List<Object> result = new java.util.ArrayList<>();
+            List<Object> result = new ArrayList<>();
             for (Object item : list) {
                 result.add(resolveNode(item, defs));
             }

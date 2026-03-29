@@ -435,7 +435,7 @@ public class AgentService {
         int promptTokens = 0, completionTokens = 0, totalTokens = 0;
         boolean hasTokens = false;
 
-        List<AgentRun.TaskDetail> tasks = new java.util.ArrayList<>();
+        List<AgentRun.TaskDetail> tasks = new ArrayList<>();
         for (Task task : workflow.getTasks()) {
             AgentRun.TaskDetail.TaskDetailBuilder tb = AgentRun.TaskDetail.builder()
                     .taskType(task.getTaskType())
@@ -446,7 +446,7 @@ public class AgentService {
             tasks.add(tb.build());
 
             if ("LLM_CHAT_COMPLETE".equalsIgnoreCase(task.getTaskType())) {
-                java.util.Map<String, Object> out = task.getOutputData();
+                Map<String, Object> out = task.getOutputData();
                 if (out != null) {
                     promptTokens     += toInt(out.get("promptTokens"));
                     completionTokens += toInt(out.get("completionTokens"));
@@ -579,7 +579,7 @@ public class AgentService {
                     Object nested = tool.getConfig().get("agentConfig");
                     if (nested instanceof Map<?, ?> nestedMap) {
                         try {
-                            AgentConfig nestedConfig = new com.fasterxml.jackson.databind.ObjectMapper()
+                            AgentConfig nestedConfig = new ObjectMapper()
                                 .convertValue(nestedMap, AgentConfig.class);
                             collectCredentialsRecursive(nestedConfig, names);
                         } catch (Exception e) {

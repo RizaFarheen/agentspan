@@ -16,6 +16,9 @@ import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.models.ChatCompletion;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -117,14 +120,14 @@ public class GeminiApiKeyModel extends GeminiVertex {
             }
 
             // Build Spring AI ChatResponse with finish reason and token usage
-            var genMetadata = org.springframework.ai.chat.metadata.ChatGenerationMetadata.builder()
+            var genMetadata = ChatGenerationMetadata.builder()
                     .finishReason("STOP")
                     .build();
             Generation generation = new Generation(new AssistantMessage(text), genMetadata);
 
-            var responseUsage = new org.springframework.ai.chat.metadata.DefaultUsage(
+            var responseUsage = new DefaultUsage(
                     promptTokens, completionTokens, totalTokens);
-            var responseMetadata = org.springframework.ai.chat.metadata.ChatResponseMetadata.builder()
+            var responseMetadata = ChatResponseMetadata.builder()
                     .usage(responseUsage)
                     .model(modelName)
                     .build();

@@ -5,6 +5,8 @@
 
 package dev.agentspan.runtime.compiler;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
 import dev.agentspan.runtime.model.*;
@@ -529,10 +531,10 @@ public class MultiAgentCompiler {
         // Deserialize router from Map to typed object if needed
         if (router instanceof Map<?, ?> routerMap) {
             if (routerMap.containsKey("taskName")) {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                ObjectMapper mapper = new ObjectMapper();
                 router = mapper.convertValue(routerMap, WorkerRef.class);
             } else if (routerMap.containsKey("model") || routerMap.containsKey("name")) {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                ObjectMapper mapper = new ObjectMapper();
                 router = mapper.convertValue(routerMap, AgentConfig.class);
             }
         }
@@ -1023,7 +1025,7 @@ public class MultiAgentCompiler {
         innerTask.setType("SUB_WORKFLOW");
         innerTask.setName(agent.getName() + "_strategy");
         innerTask.setTaskReferenceName(innerRef);
-        innerTask.setSubWorkflowParam(new com.netflix.conductor.common.metadata.workflow.SubWorkflowParams());
+        innerTask.setSubWorkflowParam(new SubWorkflowParams());
         innerTask.getSubWorkflowParam().setName(innerWf.getName());
         innerTask.getSubWorkflowParam().setWorkflowDef(innerWf);
         Map<String, Object> innerInputs = new LinkedHashMap<>();
@@ -1161,7 +1163,7 @@ public class MultiAgentCompiler {
         WorkflowTask subTask = new WorkflowTask();
         subTask.setType("SUB_WORKFLOW");
         subTask.setTaskReferenceName(subRef);
-        subTask.setSubWorkflowParam(new com.netflix.conductor.common.metadata.workflow.SubWorkflowParams());
+        subTask.setSubWorkflowParam(new SubWorkflowParams());
         subTask.getSubWorkflowParam().setName(strategyWf.getName());
         subTask.getSubWorkflowParam().setWorkflowDef(strategyWf);
         Map<String, Object> subInputs = new LinkedHashMap<>();
@@ -1263,7 +1265,7 @@ public class MultiAgentCompiler {
         task.setType("SUB_WORKFLOW");
         task.setName(sub.getName());
         task.setTaskReferenceName(subRef);
-        task.setSubWorkflowParam(new com.netflix.conductor.common.metadata.workflow.SubWorkflowParams());
+        task.setSubWorkflowParam(new SubWorkflowParams());
         task.getSubWorkflowParam().setName(agentWf.getName());
         task.getSubWorkflowParam().setWorkflowDef(agentWf);
         Map<String, Object> subInputs = new LinkedHashMap<>();
@@ -1400,7 +1402,7 @@ public class MultiAgentCompiler {
         subTask.setType("SUB_WORKFLOW");
         subTask.setName(taskRef);
         subTask.setTaskReferenceName(taskRef);
-        subTask.setSubWorkflowParam(new com.netflix.conductor.common.metadata.workflow.SubWorkflowParams());
+        subTask.setSubWorkflowParam(new SubWorkflowParams());
         subTask.getSubWorkflowParam().setName(routerWf.getName());
         subTask.getSubWorkflowParam().setWorkflowDef(routerWf);
         subTask.setInputParameters(Map.of(

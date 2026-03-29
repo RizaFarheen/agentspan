@@ -19,7 +19,10 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Listens to Conductor task/workflow state changes and translates them into
@@ -261,7 +264,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
         // Check for ${NAME} patterns
         boolean hasPlaceholders = false;
-        java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\$\\{(\\w+)}");
+        Pattern p = Pattern.compile("\\$\\{(\\w+)}");
         for (Object v : headerMap.values()) {
             if (v != null && p.matcher(String.valueOf(v)).find()) {
                 hasPlaceholders = true;
@@ -281,15 +284,15 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
         try {
             String userId = executionTokenService.validate(token).userId();
-            Map<String, String> resolved = new java.util.LinkedHashMap<>();
+            Map<String, String> resolved = new LinkedHashMap<>();
             for (Map.Entry<?,?> entry : headerMap.entrySet()) {
                 String value = String.valueOf(entry.getValue());
-                java.util.regex.Matcher m = p.matcher(value);
+                Matcher m = p.matcher(value);
                 StringBuilder sb = new StringBuilder();
                 while (m.find()) {
                     String credName = m.group(1);
                     String credValue = credentialResolutionService.resolve(userId, credName);
-                    m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
+                    m.appendReplacement(sb, Matcher.quoteReplacement(
                         credValue != null ? credValue : ""));
                 }
                 m.appendTail(sb);
@@ -406,7 +409,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         // Matches: <parent>_<strategy>_<idx>_<agent_name>
         // Strategies: handoff (handoff+router), agent (round_robin+swarm),
         //   step (sequential), parallel, and others
-        java.util.regex.Matcher strategyMatcher = java.util.regex.Pattern.compile(
+        Matcher strategyMatcher = Pattern.compile(
                 "^.+?_(?:handoff|agent|step|sequential|parallel|round_robin|router|swarm|random|manual)_(\\d+)_(.*)"
         ).matcher(name);
         if (strategyMatcher.matches()) {
@@ -414,7 +417,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         }
 
         // Step 3: strip leading N_ index prefix (e.g. "0_billing")
-        java.util.regex.Matcher idxMatcher = java.util.regex.Pattern.compile(
+        Matcher idxMatcher = Pattern.compile(
                 "^\\d+_(.*)"
         ).matcher(name);
         if (idxMatcher.matches()) {
