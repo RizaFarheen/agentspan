@@ -2,7 +2,13 @@
 
 Agentspan is a distributed, durable runtime for AI agents. Agents survive crashes, scale across machines, and pause for human approval. Use Python SDK.
 
-## Quickstart (3 lines)
+## Two Use Cases
+
+**Developer building agents:** Define → deploy → serve → trigger by name. Long-lived, versioned, monitored.
+
+**Autonomous agent building ephemeral agents:** Define → `rt.run(agent, prompt)` → get result → move on. No deploy. No serve. One call.
+
+## Quickstart (Ephemeral — for autonomous agents)
 
 ```python
 from agentspan.agents import Agent, AgentRuntime
@@ -11,10 +17,13 @@ agent = Agent(name="helper", model="openai/gpt-4o", instructions="You are a help
 
 with AgentRuntime() as rt:
     result = rt.run(agent, "What is quantum computing?")
-    print(result.output)
+    print(result.output["result"])   # String output
+    # Or: result.print_result()      # Pretty-printed
 ```
 
-## Production Pattern
+`rt.run()` handles deploy + workers + execution internally. The agent is ephemeral — created for this task, discarded after.
+
+## Production Pattern (for developers)
 
 ```python
 from agentspan.agents import Agent, AgentRuntime
@@ -23,28 +32,96 @@ agent = Agent(name="helper", model="openai/gpt-4o", instructions="...")
 
 if __name__ == "__main__":
     with AgentRuntime() as rt:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy my_module
         rt.deploy(agent)   # Push definition to server (idempotent)
-        rt.serve(agent)    # Start workers, poll for tasks (blocks)
+        rt.serve(agent)    # Start workers, poll for tasks (blocks forever)
 ```
 
-Deploy can also be done via CLI (recommended for CI/CD): `agentspan deploy my_module`
-
 Trigger from outside: `agentspan run helper "What is quantum computing?"`
+
+## Configuration
+
+```python
+# Default: reads AGENTSPAN_SERVER_URL from environment
+rt = AgentRuntime()
+
+# Explicit:
+from agentspan.agents import AgentConfig
+config = AgentConfig(server_url="http://localhost:8080/api", api_key="...")
+rt = AgentRuntime(config=config)
+```
+
+Environment variables: `AGENTSPAN_SERVER_URL`, `AGENTSPAN_AUTH_KEY`, `AGENTSPAN_AUTH_SECRET`
 
 ## Agent
 
 ```python
 Agent(
-    name="my_agent",                    # Required. Unique name.
+    name="my_agent",                    # Required. Unique. Alphanumeric + underscore/hyphen.
     model="openai/gpt-4o",             # "provider/model" format
-    instructions="You are a ...",       # System prompt (str or callable)
+    instructions="You are a ...",       # System prompt (str, callable, or PromptTemplate)
     tools=[my_tool],                    # List of @tool functions
     max_turns=25,                       # Max LLM iterations
     timeout_seconds=0,                  # 0 = no timeout
+    max_tokens=None,                    # Max output tokens per LLM call
+    temperature=None,                   # LLM temperature
+    output_type=MyPydanticModel,        # Structured output (Pydantic model)
+    planner=False,                      # Enable planning-first behavior
+    thinking_budget_tokens=None,        # Extended reasoning token budget
+    credentials=["API_KEY"],            # Credentials resolved from server
+    metadata={"team": "backend"},       # Custom metadata
 )
 ```
 
 Model formats: `"openai/gpt-4o"`, `"anthropic/claude-sonnet-4-6"`, `"google_gemini/gemini-2.5-flash"`, `"claude-code/opus"`
+
+### @agent Decorator
+
+```python
+from agentspan.agents import agent
+
+@agent(model="openai/gpt-4o", tools=[search])
+def researcher():
+    """You are a research assistant. Find and summarize information."""
+
+# Use like: rt.run(researcher, "Find info about quantum computing")
+```
+
+The docstring becomes the instructions.
+
+## AgentResult
+
+```python
+result = rt.run(agent, "prompt")
+
+result.output            # Dict: {"result": "..."} or agent-specific shape
+result.output["result"]  # The text output (string)
+result.status            # "COMPLETED", "FAILED", "TERMINATED", "TIMED_OUT"
+result.workflow_id       # Conductor workflow ID
+result.error             # Error message if failed, else None
+result.token_usage       # {"input_tokens": N, "output_tokens": N, ...}
+result.finish_reason     # "stop", "length", "error", "cancelled", "timeout", "guardrail"
+result.is_success        # True if COMPLETED
+result.is_failed         # True if FAILED/TERMINATED
+result.sub_results       # List of sub-agent results (multi-agent)
+result.print_result()    # Pretty-print the output
+```
+
+## Error Handling
+
+```python
+result = rt.run(agent, "prompt")
+
+if result.is_success:
+    print(result.output["result"])
+elif result.is_failed:
+    print(f"Failed: {result.error}")
+    print(f"Status: {result.status}")   # FAILED, TERMINATED, TIMED_OUT
+    print(f"Reason: {result.finish_reason}")
+```
+
+For autonomous agents building ephemeral agents — always check `result.is_success` before using `result.output`.
 
 ## Tools
 
@@ -56,7 +133,7 @@ def search(query: str) -> str:
     """Search the web for information."""
     return f"Results for: {query}"
 
-@tool(approval_required=True)
+@tool(approval_required=True, credentials=["API_KEY"])
 def delete_file(path: str) -> str:
     """Delete a file. Requires human approval."""
     os.remove(path)
@@ -64,6 +141,21 @@ def delete_file(path: str) -> str:
 ```
 
 Tool functions must have type hints and a docstring. The schema is generated automatically.
+
+### ToolContext (dependency injection)
+
+```python
+from agentspan.agents import tool, ToolContext
+
+@tool
+def lookup(query: str, context: ToolContext) -> str:
+    """Search with context."""
+    wf_id = context.workflow_id
+    session = context.session_id
+    state = context.state          # Mutable dict shared across tool calls
+    deps = context.dependencies    # From Agent(dependencies={...})
+    return f"Found in workflow {wf_id}"
+```
 
 ### Server-side tools (no local worker needed)
 
@@ -146,6 +238,34 @@ Agent(
 )
 ```
 
+### Scatter-Gather (fan-out/fan-in)
+
+```python
+from agentspan.agents import scatter_gather
+
+coordinator = scatter_gather(
+    name="multi_search",
+    worker=Agent(name="searcher", model="openai/gpt-4o-mini", instructions="Search and summarize."),
+    timeout_seconds=300,
+)
+# Spawns multiple copies of worker agent in parallel, aggregates results
+```
+
+### Agent as Tool
+
+```python
+from agentspan.agents import agent_tool
+
+specialist = Agent(name="math_expert", model="openai/gpt-4o", instructions="Solve math problems.")
+
+orchestrator = Agent(
+    name="orchestrator",
+    model="openai/gpt-4o",
+    instructions="Delegate math to the specialist.",
+    tools=[agent_tool(specialist, description="Call the math expert")],
+)
+```
+
 ## Guardrails
 
 ```python
@@ -157,6 +277,7 @@ RegexGuardrail(
     patterns=[r"[\w.+-]+@[\w-]+\.[\w.-]+"],
     message="Remove email addresses.",
     on_fail="retry",    # retry | raise | fix | human
+    max_retries=3,
 )
 
 # LLM: policy-based check
@@ -203,6 +324,25 @@ checker = Agent(name="checker", model="openai/gpt-4o",
 fixer = Agent(name="fixer", model="openai/gpt-4o", instructions="Fix the issue.")
 
 pipeline = checker >> fixer  # fixer only runs if checker finds issues
+```
+
+## Memory
+
+```python
+from agentspan.agents import ConversationMemory, SemanticMemory
+
+# Conversation memory (chat history with windowing)
+agent = Agent(
+    name="chatbot",
+    model="openai/gpt-4o",
+    memory=ConversationMemory(max_messages=50),
+)
+
+# Semantic memory (long-term, searchable)
+memory = SemanticMemory()
+memory.add("User prefers Python over JavaScript")
+memory.add("User works at Acme Corp")
+results = memory.search("What language does the user prefer?")
 ```
 
 ## Claude Code Agents
@@ -257,7 +397,7 @@ Agent(
 
 ## Credentials
 
-Credentials are always resolved from the server. No env var fallback.
+Credentials are always resolved from the server. No env var fallback. Missing credentials cause `FAILED_WITH_TERMINAL_ERROR` (non-retryable).
 
 ```bash
 # Store credentials on server
@@ -314,8 +454,8 @@ llm = ChatOpenAI(model="gpt-4o")
 graph = create_react_agent(llm, tools=[my_tool])
 
 with AgentRuntime() as rt:
-    rt.deploy(graph)
-    rt.serve(graph)
+    result = rt.run(graph, "What is 15 * 7?")  # Ephemeral
+    # Or production: rt.deploy(graph); rt.serve(graph)
 ```
 
 ### OpenAI Agents SDK
@@ -327,43 +467,56 @@ from agentspan.agents import AgentRuntime
 agent = OpenAIAgent(name="helper", instructions="...", model="gpt-4o")
 
 with AgentRuntime() as rt:
-    rt.deploy(agent)
-    rt.serve(agent)
+    result = rt.run(agent, "Hello")  # Ephemeral
 ```
 
 ## Execution API
 
 ```python
 with AgentRuntime() as rt:
-    # Deploy: push definition to server
-    rt.deploy(agent)
+    # ── Ephemeral (autonomous agents) ──────────────────────
+    result = rt.run(agent, "prompt")                    # Sync: deploy + run + cleanup
+    result = await rt.run_async(agent, "prompt")        # Async variant
 
-    # Serve: start workers, block (production)
-    rt.serve(agent)
+    # ── With options ───────────────────────────────────────
+    result = rt.run(agent, "prompt",
+        session_id="conv-123",                          # Multi-turn conversation
+        media=["https://example.com/image.png"],        # Multimodal input
+        timeout=60000,                                  # Timeout in ms
+        credentials=["MY_API_KEY"],                     # Runtime credentials
+    )
 
-    # Run: deploy + serve + execute (quickstart)
-    result = rt.run(agent, "prompt")
-
-    # Run by name: trigger a deployed agent
-    result = rt.run("agent_name", "prompt")
-
-    # Stream: real-time events
-    stream = rt.stream(agent, "prompt")
+    # ── Streaming ──────────────────────────────────────────
+    stream = rt.stream(agent, "prompt")                 # Sync stream
     for event in stream:
-        print(event)
+        print(event.type, event.content)
     result = stream.get_result()
 
-    # Start: async handle
-    handle = rt.start(agent, "prompt")
-    status = rt.get_status(handle.workflow_id)
+    stream = await rt.stream_async(agent, "prompt")     # Async stream
+
+    # ── Non-blocking ───────────────────────────────────────
+    handle = rt.start(agent, "prompt")                  # Returns immediately
+    status = rt.get_status(handle.workflow_id)           # Poll status
+    handle.pause()                                       # Pause execution
+    handle.resume()                                      # Resume
+    handle.cancel("no longer needed")                    # Cancel
+
+    # ── By name (trigger deployed agent) ───────────────────
+    result = rt.run("agent_name", "prompt")
+
+    # ── Production ─────────────────────────────────────────
+    rt.deploy(agent)                                     # Push definition
+    rt.serve(agent)                                      # Start workers (blocks)
 ```
 
 ## Key Rules
 
-1. **Agent names must be unique** — alphanumeric + underscore/hyphen, start with letter
+1. **Agent names must be unique** — alphanumeric, underscore, hyphen. Start with letter or underscore.
 2. **Tools need type hints + docstring** — schema is auto-generated
-3. **Credentials come from server** — no env var fallback, `FAILED_WITH_TERMINAL_ERROR` if missing
-4. **Task names are agent-prefixed** — `{agentName}_run_command`, `{agentName}_execute_code`
-5. **Deploy is idempotent** — safe to call on every startup
-6. **Serve blocks** — run triggering comes from outside (CLI, API, another process)
-7. **Claude Code tools are strings** — `["Read", "Edit", "Bash"]`, not @tool functions
+3. **`result.output` is a dict** — use `result.output["result"]` for the text, or `result.print_result()`
+4. **Always check `result.is_success`** — especially in autonomous agent flows
+5. **Credentials come from server** — no env var fallback, `FAILED_WITH_TERMINAL_ERROR` if missing
+6. **Deploy is idempotent** — safe to call on every startup
+7. **Serve blocks forever** — run triggering comes from outside (CLI, API, another process)
+8. **`rt.run()` is self-contained** — handles deploy + workers + execution. Use for ephemeral agents.
+9. **Claude Code tools are strings** — `["Read", "Edit", "Bash"]`, not @tool functions
