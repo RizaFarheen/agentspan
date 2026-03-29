@@ -59,7 +59,7 @@ class MasterKeyConfigTest {
         MasterKeyConfig config = new MasterKeyConfig();
 
         assertThatThrownBy(() -> config.loadOrGenerate("not-valid-base64!!!", tempDir))
-            .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -70,7 +70,7 @@ class MasterKeyConfigTest {
         MasterKeyConfig config = new MasterKeyConfig();
 
         assertThatThrownBy(() -> config.loadOrGenerate(b64, tempDir))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("32 bytes");
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("32 bytes");
     }
 }

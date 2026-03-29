@@ -76,16 +76,13 @@ public class GeminiApiKeyModel extends GeminiVertex {
             for (var message : prompt.getInstructions()) {
                 switch (message.getMessageType()) {
                     case SYSTEM -> systemInstruction = message.getText();
-                    case USER -> contents.add(Content.fromParts(
-                            Part.fromText(message.getText())));
+                    case USER -> contents.add(Content.fromParts(Part.fromText(message.getText())));
                     case ASSISTANT -> {
-                        Content assistantContent = Content.fromParts(
-                                Part.fromText(message.getText()));
+                        Content assistantContent = Content.fromParts(Part.fromText(message.getText()));
                         // Mark as model role
                         contents.add(assistantContent.toBuilder().role("model").build());
                     }
-                    default -> contents.add(Content.fromParts(
-                            Part.fromText(message.getText())));
+                    default -> contents.add(Content.fromParts(Part.fromText(message.getText())));
                 }
             }
 
@@ -98,13 +95,12 @@ public class GeminiApiKeyModel extends GeminiVertex {
             // Build config
             GenerateContentConfig.Builder configBuilder = GenerateContentConfig.builder();
             if (systemInstruction != null) {
-                configBuilder.systemInstruction(Content.fromParts(
-                        Part.fromText(systemInstruction)));
+                configBuilder.systemInstruction(Content.fromParts(Part.fromText(systemInstruction)));
             }
 
             // Call the GenAI API
-            GenerateContentResponse response = client.models.generateContent(
-                    modelName, contents, configBuilder.build());
+            GenerateContentResponse response =
+                    client.models.generateContent(modelName, contents, configBuilder.build());
 
             // Extract text from response
             String text = response.text() != null ? response.text() : "";
@@ -119,13 +115,11 @@ public class GeminiApiKeyModel extends GeminiVertex {
             }
 
             // Build Spring AI ChatResponse with finish reason and token usage
-            var genMetadata = ChatGenerationMetadata.builder()
-                    .finishReason("STOP")
-                    .build();
+            var genMetadata =
+                    ChatGenerationMetadata.builder().finishReason("STOP").build();
             Generation generation = new Generation(new AssistantMessage(text), genMetadata);
 
-            var responseUsage = new DefaultUsage(
-                    promptTokens, completionTokens, totalTokens);
+            var responseUsage = new DefaultUsage(promptTokens, completionTokens, totalTokens);
             var responseMetadata = ChatResponseMetadata.builder()
                     .usage(responseUsage)
                     .model(modelName)

@@ -93,8 +93,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             "AWS_REGION",
             "BEDROCK_API_KEY",
             // Ollama (local inference)
-            "OLLAMA_HOST"
-    );
+            "OLLAMA_HOST");
 
     private final CredentialStoreProvider storeProvider;
     private final Function<String, String> envLookup;
@@ -132,8 +131,10 @@ public class CredentialEnvSeeder implements ApplicationRunner {
 
             String existing = storeProvider.get(ANONYMOUS_USER_ID, name);
             if (existing != null) {
-                log.warn("Credential '{}' already exists in store — skipping env import. " +
-                         "To update the value, use the Credentials UI.", name);
+                log.warn(
+                        "Credential '{}' already exists in store — skipping env import. "
+                                + "To update the value, use the Credentials UI.",
+                        name);
                 skipped++;
                 continue;
             }
@@ -144,8 +145,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
         }
 
         if (created > 0 || skipped > 0) {
-            log.info("Credential env seeding complete: {} created, {} already existed (skipped)",
-                     created, skipped);
+            log.info("Credential env seeding complete: {} created, {} already existed (skipped)", created, skipped);
         }
     }
 }

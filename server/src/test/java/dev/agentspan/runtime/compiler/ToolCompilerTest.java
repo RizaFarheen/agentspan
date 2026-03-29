@@ -22,11 +22,11 @@ class ToolCompilerTest {
     @Test
     void testCompileToolSpecs_Worker() {
         ToolConfig tool = ToolConfig.builder()
-            .name("search")
-            .description("Search the web")
-            .inputSchema(Map.of("type", "object"))
-            .toolType("worker")
-            .build();
+                .name("search")
+                .description("Search the web")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         List<Map<String, Object>> specs = tc.compileToolSpecs(List.of(tool));
@@ -39,11 +39,11 @@ class ToolCompilerTest {
     @Test
     void testCompileToolSpecs_Http() {
         ToolConfig tool = ToolConfig.builder()
-            .name("weather_api")
-            .description("Get weather")
-            .toolType("http")
-            .config(Map.of("url", "https://api.weather.com", "method", "GET"))
-            .build();
+                .name("weather_api")
+                .description("Get weather")
+                .toolType("http")
+                .config(Map.of("url", "https://api.weather.com", "method", "GET"))
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         List<Map<String, Object>> specs = tc.compileToolSpecs(List.of(tool));
@@ -54,11 +54,11 @@ class ToolCompilerTest {
     @Test
     void testCompileToolSpecs_Mcp() {
         ToolConfig tool = ToolConfig.builder()
-            .name("mcp_tool")
-            .description("MCP tool")
-            .toolType("mcp")
-            .config(Map.of("server_url", "http://mcp.example.com", "headers", Map.of("auth", "key")))
-            .build();
+                .name("mcp_tool")
+                .description("MCP tool")
+                .toolType("mcp")
+                .config(Map.of("server_url", "http://mcp.example.com", "headers", Map.of("auth", "key")))
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         List<Map<String, Object>> specs = tc.compileToolSpecs(List.of(tool));
@@ -91,15 +91,15 @@ class ToolCompilerTest {
     @Test
     void testCompileToolSpecs_AgentTool() {
         ToolConfig tool = ToolConfig.builder()
-            .name("research_agent")
-            .description("Invoke the research agent")
-            .toolType("agent_tool")
-            .inputSchema(Map.of(
-                "type", "object",
-                "properties", Map.of("request", Map.of("type", "string")),
-                "required", List.of("request")))
-            .config(Map.of("workflowName", "research_agent_wf"))
-            .build();
+                .name("research_agent")
+                .description("Invoke the research agent")
+                .toolType("agent_tool")
+                .inputSchema(Map.of(
+                        "type", "object",
+                        "properties", Map.of("request", Map.of("type", "string")),
+                        "required", List.of("request")))
+                .config(Map.of("workflowName", "research_agent_wf"))
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         List<Map<String, Object>> specs = tc.compileToolSpecs(List.of(tool));
@@ -112,12 +112,12 @@ class ToolCompilerTest {
     @Test
     void testApprovalRejectionUsesCompletedStatus() {
         ToolConfig tool = ToolConfig.builder()
-            .name("send_email")
-            .description("Send an email")
-            .inputSchema(Map.of("type", "object"))
-            .toolType("worker")
-            .approvalRequired(true)
-            .build();
+                .name("send_email")
+                .description("Send an email")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .approvalRequired(true)
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         WorkflowTask router = tc.buildToolCallRouting("agent", "agent_llm", List.of(tool), true, "openai/gpt-4o");
@@ -169,10 +169,10 @@ class ToolCompilerTest {
     @Test
     void testBuildEnrichTask_AgentTool() {
         ToolConfig agentTool = ToolConfig.builder()
-            .name("researcher")
-            .toolType("agent_tool")
-            .config(Map.of("workflowName", "researcher_agent_wf"))
-            .build();
+                .name("researcher")
+                .toolType("agent_tool")
+                .config(Map.of("workflowName", "researcher_agent_wf"))
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         Object[] result = tc.buildEnrichTask("agent", "agent_llm", List.of(agentTool), "");
@@ -190,14 +190,18 @@ class ToolCompilerTest {
     @Test
     void testBuildEnrichTask_AgentToolWithRetryConfig() {
         ToolConfig agentTool = ToolConfig.builder()
-            .name("researcher")
-            .toolType("agent_tool")
-            .config(Map.of(
-                "workflowName", "researcher_agent_wf",
-                "retryCount", 5,
-                "retryDelaySeconds", 10,
-                "optional", false))
-            .build();
+                .name("researcher")
+                .toolType("agent_tool")
+                .config(Map.of(
+                        "workflowName",
+                        "researcher_agent_wf",
+                        "retryCount",
+                        5,
+                        "retryDelaySeconds",
+                        10,
+                        "optional",
+                        false))
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         Object[] result = tc.buildEnrichTask("agent", "agent_llm", List.of(agentTool), "");
@@ -216,25 +220,25 @@ class ToolCompilerTest {
     @Test
     void testBuildToolCallRoutingWithResult_hasGuardrails() {
         GuardrailConfig guard = GuardrailConfig.builder()
-            .name("no_dangerous_cmds")
-            .guardrailType("regex")
-            .position("input")
-            .onFail("raise")
-            .patterns(List.of("rm\\s+-rf"))
-            .mode("block")
-            .build();
+                .name("no_dangerous_cmds")
+                .guardrailType("regex")
+                .position("input")
+                .onFail("raise")
+                .patterns(List.of("rm\\s+-rf"))
+                .mode("block")
+                .build();
 
         ToolConfig tool = ToolConfig.builder()
-            .name("run_command")
-            .description("Run a CLI command")
-            .inputSchema(Map.of("type", "object"))
-            .toolType("worker")
-            .guardrails(List.of(guard))
-            .build();
+                .name("run_command")
+                .description("Run a CLI command")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .guardrails(List.of(guard))
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         ToolCompiler.ToolCallRoutingResult result =
-            tc.buildToolCallRoutingWithResult("agent", "agent_llm", List.of(tool), false, "openai/gpt-4o");
+                tc.buildToolCallRoutingWithResult("agent", "agent_llm", List.of(tool), false, "openai/gpt-4o");
 
         // Should have a router task
         assertThat(result.getRouterTask().getType()).isEqualTo("SWITCH");
@@ -244,7 +248,8 @@ class ToolCompilerTest {
         assertThat(result.getToolGuardrailRetryRefs()).hasSize(1);
 
         // tool_call case should contain format + guardrail tasks before fork chain
-        List<WorkflowTask> toolCallTasks = result.getRouterTask().getDecisionCases().get("tool_call");
+        List<WorkflowTask> toolCallTasks =
+                result.getRouterTask().getDecisionCases().get("tool_call");
         assertThat(toolCallTasks).isNotEmpty();
 
         // First task should be the format_tool_calls INLINE
@@ -255,50 +260,52 @@ class ToolCompilerTest {
     @Test
     void testBuildToolCallRoutingWithResult_noGuardrails() {
         ToolConfig tool = ToolConfig.builder()
-            .name("search")
-            .description("Search")
-            .inputSchema(Map.of("type", "object"))
-            .toolType("worker")
-            .build();
+                .name("search")
+                .description("Search")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         ToolCompiler.ToolCallRoutingResult result =
-            tc.buildToolCallRoutingWithResult("agent", "agent_llm", List.of(tool), false, "");
+                tc.buildToolCallRoutingWithResult("agent", "agent_llm", List.of(tool), false, "");
 
         // No guardrails -> empty refs
         assertThat(result.getToolGuardrailRefs()).isEmpty();
         assertThat(result.getToolGuardrailRetryRefs()).isEmpty();
 
         // tool_call case should start with enrich (not format_tool_calls)
-        List<WorkflowTask> toolCallTasks = result.getRouterTask().getDecisionCases().get("tool_call");
+        List<WorkflowTask> toolCallTasks =
+                result.getRouterTask().getDecisionCases().get("tool_call");
         assertThat(toolCallTasks.get(0).getTaskReferenceName()).contains("enrich_tools");
     }
 
     @Test
     void testBuildToolCallRoutingWithResult_guardrailsBeforeApproval() {
         GuardrailConfig guard = GuardrailConfig.builder()
-            .name("block_sudo")
-            .guardrailType("regex")
-            .position("input")
-            .onFail("raise")
-            .patterns(List.of("sudo"))
-            .mode("block")
-            .build();
+                .name("block_sudo")
+                .guardrailType("regex")
+                .position("input")
+                .onFail("raise")
+                .patterns(List.of("sudo"))
+                .mode("block")
+                .build();
 
         ToolConfig guardedTool = ToolConfig.builder()
-            .name("run_command")
-            .description("Run a CLI command")
-            .inputSchema(Map.of("type", "object"))
-            .toolType("worker")
-            .guardrails(List.of(guard))
-            .approvalRequired(true)
-            .build();
+                .name("run_command")
+                .description("Run a CLI command")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .guardrails(List.of(guard))
+                .approvalRequired(true)
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         ToolCompiler.ToolCallRoutingResult result =
-            tc.buildToolCallRoutingWithResult("agent", "agent_llm", List.of(guardedTool), true, "openai/gpt-4o");
+                tc.buildToolCallRoutingWithResult("agent", "agent_llm", List.of(guardedTool), true, "openai/gpt-4o");
 
-        List<WorkflowTask> toolCallTasks = result.getRouterTask().getDecisionCases().get("tool_call");
+        List<WorkflowTask> toolCallTasks =
+                result.getRouterTask().getDecisionCases().get("tool_call");
 
         // First task: format_tool_calls (guardrails come first)
         assertThat(toolCallTasks.get(0).getTaskReferenceName()).isEqualTo("agent_format_tool_calls");
@@ -315,11 +322,11 @@ class ToolCompilerTest {
     void testBuildToolCallRoutingWithResult_backwardCompatible() {
         // Existing buildToolCallRouting should still work (returns just the task)
         ToolConfig tool = ToolConfig.builder()
-            .name("search")
-            .description("Search")
-            .inputSchema(Map.of("type", "object"))
-            .toolType("worker")
-            .build();
+                .name("search")
+                .description("Search")
+                .inputSchema(Map.of("type", "object"))
+                .toolType("worker")
+                .build();
 
         ToolCompiler tc = new ToolCompiler();
         WorkflowTask router = tc.buildToolCallRouting("agent", "agent_llm", List.of(tool), false, "");

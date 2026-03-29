@@ -91,8 +91,11 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     public void onTaskInProgress(TaskModel task) {
         // HUMAN tasks are handled by AgentHumanTask.start() directly.
         // This callback is not called for system tasks by Conductor.
-        logger.debug("onTaskInProgress: wfId={}, type={}, ref={}",
-                task.getWorkflowInstanceId(), task.getTaskType(), task.getReferenceTaskName());
+        logger.debug(
+                "onTaskInProgress: wfId={}, type={}, ref={}",
+                task.getWorkflowInstanceId(),
+                task.getTaskType(),
+                task.getReferenceTaskName());
     }
 
     @Override
@@ -233,8 +236,8 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     private void revokeWorkflowToken(WorkflowModel workflow) {
         try {
-            Object ctx = workflow.getVariables() != null
-                ? workflow.getVariables().get("__agentspan_ctx__") : null;
+            Object ctx =
+                    workflow.getVariables() != null ? workflow.getVariables().get("__agentspan_ctx__") : null;
             if (!(ctx instanceof Map)) return;
             Object tokenObj = ((Map<?, ?>) ctx).get("execution_token");
             if (!(tokenObj instanceof String token)) return;
@@ -242,8 +245,8 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
             executionTokenService.revoke(payload.jti(), payload.exp());
             logger.info("Execution token revoked for terminated workflow {}", workflow.getWorkflowId());
         } catch (Exception e) {
-            logger.debug("Could not revoke execution token for workflow {}: {}",
-                workflow.getWorkflowId(), e.getMessage());
+            logger.debug(
+                    "Could not revoke execution token for workflow {}: {}", workflow.getWorkflowId(), e.getMessage());
         }
     }
 
@@ -261,7 +264,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         Object headers = input.get("headers");
         Object ctx = input.get("__agentspan_ctx__");
 
-        if (!(headers instanceof Map<?,?> headerMap) || ctx == null) return;
+        if (!(headers instanceof Map<?, ?> headerMap) || ctx == null) return;
 
         // Check for ${NAME} patterns
         boolean hasPlaceholders = false;
@@ -276,7 +279,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
         // Extract userId from execution token
         String token = null;
-        if (ctx instanceof Map<?,?> ctxMap) {
+        if (ctx instanceof Map<?, ?> ctxMap) {
             token = (String) ctxMap.get("execution_token");
         } else if (ctx instanceof String s) {
             token = s;
@@ -286,15 +289,14 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         try {
             String userId = executionTokenService.validate(token).userId();
             Map<String, String> resolved = new LinkedHashMap<>();
-            for (Map.Entry<?,?> entry : headerMap.entrySet()) {
+            for (Map.Entry<?, ?> entry : headerMap.entrySet()) {
                 String value = String.valueOf(entry.getValue());
                 Matcher m = p.matcher(value);
                 StringBuilder sb = new StringBuilder();
                 while (m.find()) {
                     String credName = m.group(1);
                     String credValue = credentialResolutionService.resolve(userId, credName);
-                    m.appendReplacement(sb, Matcher.quoteReplacement(
-                        credValue != null ? credValue : ""));
+                    m.appendReplacement(sb, Matcher.quoteReplacement(credValue != null ? credValue : ""));
                 }
                 m.appendTail(sb);
                 resolved.put(String.valueOf(entry.getKey()), sb.toString());
@@ -411,16 +413,14 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         // Strategies: handoff (handoff+router), agent (round_robin+swarm),
         //   step (sequential), parallel, and others
         Matcher strategyMatcher = Pattern.compile(
-                "^.+?_(?:handoff|agent|step|sequential|parallel|round_robin|router|swarm|random|manual)_(\\d+)_(.*)"
-        ).matcher(name);
+                        "^.+?_(?:handoff|agent|step|sequential|parallel|round_robin|router|swarm|random|manual)_(\\d+)_(.*)")
+                .matcher(name);
         if (strategyMatcher.matches()) {
             return strategyMatcher.group(2);
         }
 
         // Step 3: strip leading N_ index prefix (e.g. "0_billing")
-        Matcher idxMatcher = Pattern.compile(
-                "^\\d+_(.*)"
-        ).matcher(name);
+        Matcher idxMatcher = Pattern.compile("^\\d+_(.*)").matcher(name);
         if (idxMatcher.matches()) {
             return idxMatcher.group(1);
         }

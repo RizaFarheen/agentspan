@@ -22,7 +22,8 @@ import dev.agentspan.runtime.credentials.ExecutionTokenService;
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
 
-    @Mock private UserRepository userRepository;
+    @Mock
+    private UserRepository userRepository;
 
     private AuthController controller;
 
@@ -37,8 +38,8 @@ class AuthControllerTest {
     @Test
     void login_validCredentials_returnsToken() {
         when(userRepository.checkPassword("alice", "secret")).thenReturn(true);
-        when(userRepository.findByUsername("alice")).thenReturn(
-            java.util.Optional.of(new dev.agentspan.runtime.auth.User("u1", "Alice", null, "alice")));
+        when(userRepository.findByUsername("alice"))
+                .thenReturn(java.util.Optional.of(new dev.agentspan.runtime.auth.User("u1", "Alice", null, "alice")));
 
         ResponseEntity<?> response = controller.login(Map.of("username", "alice", "password", "secret"));
 

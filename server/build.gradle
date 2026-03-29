@@ -140,6 +140,7 @@ configurations.all {
 spotless {
     java {
         target 'src/**/*.java'
+        palantirJavaFormat('2.50.0')
         removeUnusedImports()
         importOrder('java', 'javax', 'jakarta', 'org', 'com', 'dev')
         trimTrailingWhitespace()
@@ -147,9 +148,39 @@ spotless {
     }
 }
 
-// Run spotless check as part of the build
+// ── Detect fully qualified names used inline ─────────────────────
+// Catches patterns like: new com.foo.Bar(), java.util.List<>, etc.
+// in code (not import statements). Fails the build with file:line.
+tasks.register('checkNoInlineFQN') {
+    group = 'verification'
+    description = 'Detect fully qualified class names used inline (should be imports)'
+    doLast {
+        def violations = []
+        def fqnPattern = ~/(?:new\s+|[\s(,<])(?:java|javax|jakarta|com|org|net)\.[a-z]+(?:\.[a-z]+)*\.[A-Z]\w+/
+        fileTree('src/main/java').matching { include '**/*.java' }.each { file ->
+            file.eachLine { line, lineNum ->
+                if (line.trim().startsWith('import ') || line.trim().startsWith('package ')
+                    || line.trim().startsWith('//') || line.trim().startsWith('*')) {
+                    return // skip imports, package, comments
+                }
+                def matcher = fqnPattern.matcher(line)
+                if (matcher.find()) {
+                    violations << "${file.path}:${lineNum}: ${line.trim()}"
+                }
+            }
+        }
+        if (violations) {
+            throw new GradleException(
+                "Found ${violations.size()} inline fully qualified name(s). Use imports instead:\n" +
+                violations.collect { "  ${it}" }.join('\n')
+            )
+        }
+    }
+}
+
+// Run both spotless and FQN check as part of the build
 tasks.named('check') {
-    dependsOn 'spotlessCheck'
+    dependsOn 'spotlessCheck', 'checkNoInlineFQN'
 }
 
 test {

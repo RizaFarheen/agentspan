@@ -64,11 +64,16 @@ public class AgentService {
     private ExecutionTokenService executionTokenService;
 
     /** Package-private constructor for testing with ExecutionTokenService */
-    AgentService(AgentCompiler agentCompiler, NormalizerRegistry normalizerRegistry,
-                 MetadataDAO metadataDAO, WorkflowExecutor workflowExecutor,
-                 WorkflowService workflowService, AgentStreamRegistry streamRegistry,
-                 ExecutionService executionService, ProviderValidator providerValidator,
-                 ExecutionTokenService executionTokenService) {
+    AgentService(
+            AgentCompiler agentCompiler,
+            NormalizerRegistry normalizerRegistry,
+            MetadataDAO metadataDAO,
+            WorkflowExecutor workflowExecutor,
+            WorkflowService workflowService,
+            AgentStreamRegistry streamRegistry,
+            ExecutionService executionService,
+            ProviderValidator providerValidator,
+            ExecutionTokenService executionTokenService) {
         this.agentCompiler = agentCompiler;
         this.normalizerRegistry = normalizerRegistry;
         this.metadataDAO = metadataDAO;
@@ -97,8 +102,8 @@ public class AgentService {
         // Stamp agentDef into the compiled WorkflowDef so it is persisted when
         // the SDK passes the def inline to Conductor's start_workflow.
         String sdk = request.getFramework() != null ? request.getFramework() : "conductor";
-        Map<String, Object> metadata = def.getMetadata() != null
-                ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
+        Map<String, Object> metadata =
+                def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
         def.setMetadata(metadata);
@@ -106,9 +111,9 @@ public class AgentService {
         List<String> requiredWorkers = new ArrayList<>(collectSimpleTaskNames(def));
         Map<String, Object> defMap = MAPPER.convertValue(def, Map.class);
         return CompileResponse.builder()
-            .workflowDef(defMap)
-            .requiredWorkers(requiredWorkers)
-            .build();
+                .workflowDef(defMap)
+                .requiredWorkers(requiredWorkers)
+                .build();
     }
 
     /**
@@ -127,8 +132,8 @@ public class AgentService {
 
         // 1b. Stamp SDK metadata on the workflow definition
         String sdk = request.getFramework() != null ? request.getFramework() : "conductor";
-        Map<String, Object> metadata = def.getMetadata() != null
-                ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
+        Map<String, Object> metadata =
+                def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
         def.setMetadata(metadata);
@@ -140,13 +145,13 @@ public class AgentService {
         registerTaskDefinitions(config);
 
         // Validate provider (warn only, don't terminate)
-        validateModelProvider(config).ifPresent(err ->
-            log.warn("Provider not configured for agent '{}': {}", config.getName(), err));
+        validateModelProvider(config)
+                .ifPresent(err -> log.warn("Provider not configured for agent '{}': {}", config.getName(), err));
 
         return StartResponse.builder()
-            .workflowName(def.getName())
-            .requiredWorkers(new ArrayList<>(collectSimpleTaskNames(def)))
-            .build();
+                .workflowName(def.getName())
+                .requiredWorkers(new ArrayList<>(collectSimpleTaskNames(def)))
+                .build();
     }
 
     /**
@@ -172,8 +177,8 @@ public class AgentService {
 
         // 1b. Stamp SDK metadata on the workflow definition
         String sdk = request.getFramework() != null ? request.getFramework() : "conductor";
-        Map<String, Object> metadata = def.getMetadata() != null
-                ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
+        Map<String, Object> metadata =
+                def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
         def.setMetadata(metadata);
@@ -219,12 +224,11 @@ public class AgentService {
                         }
                     }
                 }
-                User currentUser = RequestContextHolder.get()
-                    .map(ctx -> ctx.getUser())
-                    .orElse(null);
+                User currentUser =
+                        RequestContextHolder.get().map(ctx -> ctx.getUser()).orElse(null);
                 if (currentUser != null) {
                     String token = executionTokenService.mint(
-                        currentUser.getId(), null /* workflowId not known yet */, declaredNames, timeoutSeconds);
+                            currentUser.getId(), null /* workflowId not known yet */, declaredNames, timeoutSeconds);
                     Map<String, Object> agentCtx = new LinkedHashMap<>();
                     agentCtx.put("execution_token", token);
                     input.put("__agentspan_ctx__", agentCtx);
@@ -243,13 +247,15 @@ public class AgentService {
             startReq.setCorrelationId(request.getIdempotencyKey());
             String existing = findExistingExecution(def.getName(), request.getIdempotencyKey());
             if (existing != null) {
-                log.info("Idempotent hit: returning existing workflow {} for key '{}'",
-                        existing, request.getIdempotencyKey());
+                log.info(
+                        "Idempotent hit: returning existing workflow {} for key '{}'",
+                        existing,
+                        request.getIdempotencyKey());
                 return StartResponse.builder()
-                    .workflowId(existing)
-                    .workflowName(def.getName())
-                    .requiredWorkers(requiredWorkers)
-                    .build();
+                        .workflowId(existing)
+                        .workflowName(def.getName())
+                        .requiredWorkers(requiredWorkers)
+                        .build();
             }
         }
 
@@ -264,10 +270,10 @@ public class AgentService {
         }
 
         return StartResponse.builder()
-            .workflowId(workflowId)
-            .workflowName(def.getName())
-            .requiredWorkers(requiredWorkers)
-            .build();
+                .workflowId(workflowId)
+                .workflowName(def.getName())
+                .requiredWorkers(requiredWorkers)
+                .build();
     }
 
     // ── Agent discovery ─────────────────────────────────────────────
@@ -325,17 +331,14 @@ public class AgentService {
     /**
      * Search agent executions with optional filters.
      */
-    public Map<String, Object> searchAgentExecutions(int start, int size, String sort,
-                                                      String freeText, String status,
-                                                      String agentName, String sessionId) {
+    public Map<String, Object> searchAgentExecutions(
+            int start, int size, String sort, String freeText, String status, String agentName, String sessionId) {
         // Determine which workflow types to query
         List<String> workflowNames;
         if (agentName != null && !agentName.isEmpty()) {
             workflowNames = List.of(agentName);
         } else {
-            workflowNames = listAgents().stream()
-                    .map(AgentSummary::getName)
-                    .collect(Collectors.toList());
+            workflowNames = listAgents().stream().map(AgentSummary::getName).collect(Collectors.toList());
         }
 
         if (workflowNames.isEmpty()) {
@@ -346,10 +349,9 @@ public class AgentService {
         }
 
         // Build query string
-        String nameList = workflowNames.stream()
-                .map(n -> "'" + n + "'")
-                .collect(Collectors.joining(","));
-        StringBuilder query = new StringBuilder("workflowType IN (").append(nameList).append(")");
+        String nameList = workflowNames.stream().map(n -> "'" + n + "'").collect(Collectors.joining(","));
+        StringBuilder query =
+                new StringBuilder("workflowType IN (").append(nameList).append(")");
         if (status != null && !status.isEmpty()) {
             query.append(" AND status = '").append(status).append("'");
         }
@@ -360,8 +362,8 @@ public class AgentService {
             searchText = sessionId;
         }
 
-        SearchResult<WorkflowSummary> searchResult = workflowService.searchWorkflows(
-                start, size, sort, searchText, query.toString());
+        SearchResult<WorkflowSummary> searchResult =
+                workflowService.searchWorkflows(start, size, sort, searchText, query.toString());
 
         List<AgentExecutionSummary> results = searchResult.getResults().stream()
                 .map(ws -> AgentExecutionSummary.builder()
@@ -445,9 +447,9 @@ public class AgentService {
             if ("LLM_CHAT_COMPLETE".equalsIgnoreCase(task.getTaskType())) {
                 Map<String, Object> out = task.getOutputData();
                 if (out != null) {
-                    promptTokens     += toInt(out.get("promptTokens"));
+                    promptTokens += toInt(out.get("promptTokens"));
                     completionTokens += toInt(out.get("completionTokens"));
-                    totalTokens      += toInt(out.get("tokenUsed"));
+                    totalTokens += toInt(out.get("tokenUsed"));
                     hasTokens = true;
                 }
             }
@@ -484,9 +486,7 @@ public class AgentService {
     private void stampAgentDef(Map<String, Object> metadata, StartRequest request) {
         Map<String, Object> agentDef = request.getRawConfig() != null
                 ? request.getRawConfig()
-                : (request.getAgentConfig() != null
-                        ? MAPPER.convertValue(request.getAgentConfig(), Map.class)
-                        : null);
+                : (request.getAgentConfig() != null ? MAPPER.convertValue(request.getAgentConfig(), Map.class) : null);
         if (agentDef != null) {
             metadata.put("agentDef", agentDef);
         }
@@ -495,7 +495,10 @@ public class AgentService {
     private static int toInt(Object value) {
         if (value instanceof Number) return ((Number) value).intValue();
         if (value instanceof String) {
-            try { return Integer.parseInt((String) value); } catch (NumberFormatException ignored) {}
+            try {
+                return Integer.parseInt((String) value);
+            } catch (NumberFormatException ignored) {
+            }
         }
         return 0;
     }
@@ -504,10 +507,12 @@ public class AgentService {
     public Map<String, Object> getAgentDef(String name, Integer version) {
         WorkflowDef def;
         if (version != null) {
-            def = metadataDAO.getWorkflowDef(name, version)
+            def = metadataDAO
+                    .getWorkflowDef(name, version)
                     .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name + " v" + version));
         } else {
-            def = metadataDAO.getLatestWorkflowDef(name)
+            def = metadataDAO
+                    .getLatestWorkflowDef(name)
                     .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name));
         }
         Map<String, Object> metadata = def.getMetadata();
@@ -522,7 +527,8 @@ public class AgentService {
             metadataDAO.removeWorkflowDef(name, version);
         } else {
             // Remove latest version
-            WorkflowDef def = metadataDAO.getLatestWorkflowDef(name)
+            WorkflowDef def = metadataDAO
+                    .getLatestWorkflowDef(name)
                     .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name));
             metadataDAO.removeWorkflowDef(name, def.getVersion());
         }
@@ -535,8 +541,8 @@ public class AgentService {
     private String findExistingExecution(String workflowName, String idempotencyKey) {
         try {
             String query = "workflowType = '" + workflowName + "' AND status IN ('RUNNING', 'COMPLETED')";
-            SearchResult<WorkflowSummary> results = workflowService.searchWorkflows(
-                    0, 1, "startTime:DESC", idempotencyKey, query);
+            SearchResult<WorkflowSummary> results =
+                    workflowService.searchWorkflows(0, 1, "startTime:DESC", idempotencyKey, query);
             if (results.getTotalHits() > 0) {
                 WorkflowSummary match = results.getResults().get(0);
                 if (idempotencyKey.equals(match.getCorrelationId())) {
@@ -576,8 +582,7 @@ public class AgentService {
                     Object nested = tool.getConfig().get("agentConfig");
                     if (nested instanceof Map<?, ?> nestedMap) {
                         try {
-                            AgentConfig nestedConfig = new ObjectMapper()
-                                .convertValue(nestedMap, AgentConfig.class);
+                            AgentConfig nestedConfig = new ObjectMapper().convertValue(nestedMap, AgentConfig.class);
                             collectCredentialsRecursive(nestedConfig, names);
                         } catch (Exception e) {
                             // Skip if can't parse nested config
@@ -679,8 +684,7 @@ public class AgentService {
                 registerTaskDef(routerTaskName);
                 registered.add(routerTaskName);
             }
-        } else if (config.getRouter() instanceof WorkerRef workerRef
-                && workerRef.getTaskName() != null) {
+        } else if (config.getRouter() instanceof WorkerRef workerRef && workerRef.getTaskName() != null) {
             if (!registered.contains(workerRef.getTaskName())) {
                 registerTaskDef(workerRef.getTaskName());
                 registered.add(workerRef.getTaskName());
@@ -706,8 +710,10 @@ public class AgentService {
         }
 
         // Register check_transfer worker for hybrid (has both agents AND tools)
-        if (config.getAgents() != null && !config.getAgents().isEmpty() &&
-            config.getTools() != null && !config.getTools().isEmpty()) {
+        if (config.getAgents() != null
+                && !config.getAgents().isEmpty()
+                && config.getTools() != null
+                && !config.getTools().isEmpty()) {
             String taskName = config.getName() + "_check_transfer";
             if (!registered.contains(taskName)) {
                 registerTaskDef(taskName);
@@ -749,8 +755,10 @@ public class AgentService {
         }
 
         // Register transfer_to_ workers for hybrid agents (has both tools and sub-agents)
-        if (config.getAgents() != null && !config.getAgents().isEmpty() &&
-            config.getTools() != null && !config.getTools().isEmpty()) {
+        if (config.getAgents() != null
+                && !config.getAgents().isEmpty()
+                && config.getTools() != null
+                && !config.getTools().isEmpty()) {
             for (AgentConfig sub : config.getAgents()) {
                 String taskName = config.getName() + "_transfer_to_" + sub.getName();
                 if (!registered.contains(taskName)) {
@@ -761,13 +769,11 @@ public class AgentService {
         }
 
         // Register graph-structure node workers and router workers
-        if (config.getMetadata() != null
-                && config.getMetadata().get("_graph_structure") instanceof Map<?, ?> graph) {
+        if (config.getMetadata() != null && config.getMetadata().get("_graph_structure") instanceof Map<?, ?> graph) {
             // Node workers
             if (graph.get("nodes") instanceof List<?> nodes) {
                 for (Object nodeObj : nodes) {
-                    if (nodeObj instanceof Map<?, ?> node
-                            && node.get("_worker_ref") instanceof String workerRef) {
+                    if (nodeObj instanceof Map<?, ?> node && node.get("_worker_ref") instanceof String workerRef) {
                         if (!registered.contains(workerRef)) {
                             registerTaskDef(workerRef);
                             registered.add(workerRef);
@@ -778,8 +784,7 @@ public class AgentService {
             // Conditional edge router workers
             if (graph.get("conditional_edges") instanceof List<?> condEdges) {
                 for (Object ceObj : condEdges) {
-                    if (ceObj instanceof Map<?, ?> ce
-                            && ce.get("_router_ref") instanceof String routerRef) {
+                    if (ceObj instanceof Map<?, ?> ce && ce.get("_router_ref") instanceof String routerRef) {
                         if (!registered.contains(routerRef)) {
                             registerTaskDef(routerRef);
                             registered.add(routerRef);
@@ -824,8 +829,8 @@ public class AgentService {
                 } else if (agentConfigObj instanceof Map) {
                     childConfig = MAPPER.convertValue(agentConfigObj, AgentConfig.class);
                 } else {
-                    log.warn("Unexpected agentConfig type for tool '{}': {}",
-                            tool.getName(), agentConfigObj.getClass());
+                    log.warn(
+                            "Unexpected agentConfig type for tool '{}': {}", tool.getName(), agentConfigObj.getClass());
                     continue;
                 }
 
@@ -835,8 +840,7 @@ public class AgentService {
                 // Compile and register the child agent workflow
                 WorkflowDef childDef = agentCompiler.compile(childConfig);
                 metadataDAO.updateWorkflowDef(childDef);
-                log.info("Registered agent_tool child workflow: {} for tool '{}'",
-                        childDef.getName(), tool.getName());
+                log.info("Registered agent_tool child workflow: {} for tool '{}'", childDef.getName(), tool.getName());
 
                 // Register task definitions for the child's worker tools
                 registerTaskDefinitions(childConfig);
@@ -914,16 +918,14 @@ public class AgentService {
         Workflow workflow = executionService.getExecutionStatus(workflowId, true);
         Task pendingTask = null;
         for (Task task : workflow.getTasks()) {
-            if ("HUMAN".equals(task.getTaskType())
-                    && task.getStatus() == Task.Status.IN_PROGRESS) {
+            if ("HUMAN".equals(task.getTaskType()) && task.getStatus() == Task.Status.IN_PROGRESS) {
                 pendingTask = task;
                 break;
             }
         }
 
         if (pendingTask == null) {
-            throw new IllegalStateException(
-                    "No pending HUMAN task found in workflow " + workflowId);
+            throw new IllegalStateException("No pending HUMAN task found in workflow " + workflowId);
         }
 
         // Update the task with the human's response
@@ -931,8 +933,8 @@ public class AgentService {
         taskResult.setTaskId(pendingTask.getTaskId());
         taskResult.setWorkflowInstanceId(workflowId);
         taskResult.setStatus(TaskResult.Status.COMPLETED);
-        Map<String, Object> outputData = new LinkedHashMap<>(
-                pendingTask.getOutputData() != null ? pendingTask.getOutputData() : Map.of());
+        Map<String, Object> outputData =
+                new LinkedHashMap<>(pendingTask.getOutputData() != null ? pendingTask.getOutputData() : Map.of());
         outputData.putAll(output);
         taskResult.setOutputData(outputData);
         executionService.updateTask(taskResult);
@@ -963,8 +965,7 @@ public class AgentService {
 
         // Find pending HUMAN task
         for (Task task : workflow.getTasks()) {
-            if ("HUMAN".equals(task.getTaskType())
-                    && task.getStatus() == Task.Status.IN_PROGRESS) {
+            if ("HUMAN".equals(task.getTaskType()) && task.getStatus() == Task.Status.IN_PROGRESS) {
                 Map<String, Object> pendingTool = new LinkedHashMap<>();
                 pendingTool.put("taskRefName", task.getReferenceTaskName());
                 if (task.getInputData() != null) {
@@ -989,33 +990,35 @@ public class AgentService {
      */
     public void pushFrameworkEvent(String workflowId, Map<String, Object> event) {
         String type = event.getOrDefault("type", "").toString();
-        AgentSSEEvent sseEvent = switch (type) {
-            case "thinking" -> AgentSSEEvent.thinking(workflowId,
-                event.getOrDefault("content", "").toString());
-            case "tool_call" -> AgentSSEEvent.toolCall(workflowId,
-                event.getOrDefault("toolName", "").toString(),
-                event.get("args"));
-            case "tool_result" -> AgentSSEEvent.toolResult(workflowId,
-                event.getOrDefault("toolName", "").toString(),
-                event.getOrDefault("result", ""));
-            case "context_condensed" -> AgentSSEEvent.contextCondensed(workflowId,
-                event.getOrDefault("trigger", "").toString(),
-                event.get("messagesBefore") instanceof Number n ? n.intValue() : 0,
-                event.get("messagesAfter") instanceof Number n ? n.intValue() : 0,
-                event.get("exchangesCondensed") instanceof Number n ? n.intValue() : 0);
-            case "subagent_start" -> AgentSSEEvent.subagentStart(
-                workflowId,
-                extractSubagentIdentifier(event),
-                event.getOrDefault("prompt", "").toString());
-            case "subagent_stop" -> AgentSSEEvent.subagentStop(
-                workflowId,
-                extractSubagentIdentifier(event),
-                event.getOrDefault("result", "").toString());
-            default -> {
-                log.debug("Unknown framework event type '{}' for workflow {}", type, workflowId);
-                yield null;
-            }
-        };
+        AgentSSEEvent sseEvent =
+                switch (type) {
+                    case "thinking" -> AgentSSEEvent.thinking(
+                            workflowId, event.getOrDefault("content", "").toString());
+                    case "tool_call" -> AgentSSEEvent.toolCall(
+                            workflowId, event.getOrDefault("toolName", "").toString(), event.get("args"));
+                    case "tool_result" -> AgentSSEEvent.toolResult(
+                            workflowId,
+                            event.getOrDefault("toolName", "").toString(),
+                            event.getOrDefault("result", ""));
+                    case "context_condensed" -> AgentSSEEvent.contextCondensed(
+                            workflowId,
+                            event.getOrDefault("trigger", "").toString(),
+                            event.get("messagesBefore") instanceof Number n ? n.intValue() : 0,
+                            event.get("messagesAfter") instanceof Number n ? n.intValue() : 0,
+                            event.get("exchangesCondensed") instanceof Number n ? n.intValue() : 0);
+                    case "subagent_start" -> AgentSSEEvent.subagentStart(
+                            workflowId,
+                            extractSubagentIdentifier(event),
+                            event.getOrDefault("prompt", "").toString());
+                    case "subagent_stop" -> AgentSSEEvent.subagentStop(
+                            workflowId,
+                            extractSubagentIdentifier(event),
+                            event.getOrDefault("result", "").toString());
+                    default -> {
+                        log.debug("Unknown framework event type '{}' for workflow {}", type, workflowId);
+                        yield null;
+                    }
+                };
         if (sseEvent != null) {
             streamRegistry.send(workflowId, sseEvent);
         }
@@ -1098,7 +1101,8 @@ public class AgentService {
             }
             // Inline sub-workflows
             if (task.getSubWorkflowParam() != null && task.getSubWorkflowParam().getWorkflowDef() != null) {
-                collectSimpleTaskNamesFromTasks(task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
+                collectSimpleTaskNamesFromTasks(
+                        task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
             }
         }
     }

@@ -26,11 +26,20 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class AuthFilterTest {
 
-    @Mock private UserRepository userRepository;
-    @Mock private ApiKeyRepository apiKeyRepository;
-    @Mock private HttpServletRequest request;
-    @Mock private HttpServletResponse response;
-    @Mock private FilterChain chain;
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private ApiKeyRepository apiKeyRepository;
+
+    @Mock
+    private HttpServletRequest request;
+
+    @Mock
+    private HttpServletResponse response;
+
+    @Mock
+    private FilterChain chain;
 
     private AuthFilter filter;
     private PrintWriter responseWriter;
@@ -53,9 +62,11 @@ class AuthFilterTest {
         AtomicReference<RequestContext> capturedCtx = new AtomicReference<>();
 
         doAnswer(invocation -> {
-            capturedCtx.set(RequestContextHolder.get().orElse(null));
-            return null;
-        }).when(chain).doFilter(request, response);
+                    capturedCtx.set(RequestContextHolder.get().orElse(null));
+                    return null;
+                })
+                .when(chain)
+                .doFilter(request, response);
 
         anonFilter.doFilterInternal(request, response, chain);
 
@@ -83,9 +94,11 @@ class AuthFilterTest {
         AtomicReference<RequestContext> capturedCtx = new AtomicReference<>();
 
         doAnswer(invocation -> {
-            capturedCtx.set(RequestContextHolder.get().orElse(null));
-            return null;
-        }).when(chain).doFilter(request, response);
+                    capturedCtx.set(RequestContextHolder.get().orElse(null));
+                    return null;
+                })
+                .when(chain)
+                .doFilter(request, response);
 
         filter.doFilterInternal(request, response, chain);
 

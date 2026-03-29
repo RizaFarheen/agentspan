@@ -64,9 +64,9 @@ class EncryptedDbCredentialStoreProviderTest {
         List<CredentialMeta> list = storeProvider.list(USER_ID);
 
         CredentialMeta meta = list.stream()
-            .filter(m -> m.getName().equals("OPENAI_KEY"))
-            .findFirst()
-            .orElseThrow();
+                .filter(m -> m.getName().equals("OPENAI_KEY"))
+                .findFirst()
+                .orElseThrow();
 
         // Partial: first 4 + ... + last 4
         assertThat(meta.getPartial()).isEqualTo("sk-a...mnop");
@@ -88,8 +88,9 @@ class EncryptedDbCredentialStoreProviderTest {
 
         // Read raw bytes from DB
         byte[] raw = jdbc.queryForObject(
-            "SELECT encrypted_value FROM credentials_store WHERE user_id=:uid AND name=:n",
-            Map.of("uid", USER_ID, "n", "SECRET"), byte[].class);
+                "SELECT encrypted_value FROM credentials_store WHERE user_id=:uid AND name=:n",
+                Map.of("uid", USER_ID, "n", "SECRET"),
+                byte[].class);
 
         assertThat(raw).isNotNull();
         assertThat(new String(raw)).doesNotContain("plaintext_value");

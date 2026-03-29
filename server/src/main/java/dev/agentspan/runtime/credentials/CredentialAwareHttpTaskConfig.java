@@ -28,7 +28,6 @@ public class CredentialAwareHttpTaskConfig {
             ObjectMapper objectMapper,
             ExecutionTokenService tokenService,
             CredentialResolutionService resolutionService) {
-        return new CredentialAwareHttpTask(
-            restTemplateProvider, objectMapper, tokenService, resolutionService);
+        return new CredentialAwareHttpTask(restTemplateProvider, objectMapper, tokenService, resolutionService);
     }
 }

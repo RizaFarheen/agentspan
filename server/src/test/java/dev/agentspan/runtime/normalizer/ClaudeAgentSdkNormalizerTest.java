@@ -25,9 +25,8 @@ class ClaudeAgentSdkNormalizerTest {
     @Test
     void normalizeProducesPassthroughConfig() {
         Map<String, Object> raw = Map.of(
-            "name", "my_agent",
-            "_worker_name", "my_agent"
-        );
+                "name", "my_agent",
+                "_worker_name", "my_agent");
 
         AgentConfig config = normalizer.normalize(raw);
 

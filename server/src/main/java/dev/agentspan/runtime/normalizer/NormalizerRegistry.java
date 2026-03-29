@@ -43,8 +43,7 @@ public class NormalizerRegistry {
         AgentConfigNormalizer normalizer = normalizers.get(framework);
         if (normalizer == null) {
             throw new IllegalArgumentException(
-                    "Unsupported agent framework: '" + framework
-                            + "'. Supported frameworks: " + normalizers.keySet());
+                    "Unsupported agent framework: '" + framework + "'. Supported frameworks: " + normalizers.keySet());
         }
         return normalizer.normalize(rawConfig);
     }

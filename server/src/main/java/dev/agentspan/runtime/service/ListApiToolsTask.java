@@ -55,17 +55,18 @@ public class ListApiToolsTask extends WorkflowSystemTask {
             "/v3/api-docs",
             "/swagger/v1/swagger.json",
             "/api-docs",
-            "/.well-known/openapi.json"
-    );
+            "/.well-known/openapi.json");
 
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
 
     public ListApiToolsTask() {
-        this(new ObjectMapper(), HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build());
+        this(
+                new ObjectMapper(),
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(10))
+                        .followRedirects(HttpClient.Redirect.NORMAL)
+                        .build());
     }
 
     /** Visible-for-testing constructor. */
@@ -91,15 +92,13 @@ public class ListApiToolsTask extends WorkflowSystemTask {
         }
 
         @SuppressWarnings("unchecked")
-        Map<String, String> headers = input.get("headers") instanceof Map
-                ? (Map<String, String>) input.get("headers")
-                : Map.of();
+        Map<String, String> headers =
+                input.get("headers") instanceof Map ? (Map<String, String>) input.get("headers") : Map.of();
 
         try {
             FetchResult fetchResult = fetchSpec(specUrl, headers);
             if (fetchResult == null) {
-                fail(task, "Could not retrieve a valid API spec from " + specUrl
-                        + " (also tried well-known paths)");
+                fail(task, "Could not retrieve a valid API spec from " + specUrl + " (also tried well-known paths)");
                 return;
             }
 
@@ -139,8 +138,8 @@ public class ListApiToolsTask extends WorkflowSystemTask {
             task.setOutputData(output);
             task.setStatus(TaskModel.Status.COMPLETED);
 
-            logger.debug("LIST_API_TOOLS completed for {} — {} tools extracted (format={})",
-                    specUrl, tools.size(), format);
+            logger.debug(
+                    "LIST_API_TOOLS completed for {} — {} tools extracted (format={})", specUrl, tools.size(), format);
 
         } catch (Exception e) {
             logger.error("LIST_API_TOOLS failed for {}", specUrl, e);
@@ -192,8 +191,7 @@ public class ListApiToolsTask extends WorkflowSystemTask {
                 headers.forEach(reqBuilder::header);
             }
 
-            HttpResponse<String> response = httpClient.send(
-                    reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpClient.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() >= 400) {
                 return null;
@@ -290,8 +288,8 @@ public class ListApiToolsTask extends WorkflowSystemTask {
         return tools;
     }
 
-    private Map<String, Object> buildToolDescriptor(String method, String path,
-                                                     JsonNode operation, boolean isOpenApi3) {
+    private Map<String, Object> buildToolDescriptor(
+            String method, String path, JsonNode operation, boolean isOpenApi3) {
         Map<String, Object> tool = new LinkedHashMap<>();
 
         // Name
@@ -410,8 +408,8 @@ public class ListApiToolsTask extends WorkflowSystemTask {
             Map<String, Object> tool = new LinkedHashMap<>();
             tool.put("name", slugifyName(currentName));
 
-            String description = item.path("description").asText(
-                    request.path("description").asText(""));
+            String description =
+                    item.path("description").asText(request.path("description").asText(""));
             tool.put("description", description);
 
             String method = request.isTextual()
@@ -476,8 +474,7 @@ public class ListApiToolsTask extends WorkflowSystemTask {
                 JsonNode urlencoded = body.get("urlencoded");
                 if (urlencoded != null && urlencoded.isArray()) {
                     for (JsonNode param : urlencoded) {
-                        properties.put(param.path("key").asText("unknown"),
-                                Map.of("type", "string"));
+                        properties.put(param.path("key").asText("unknown"), Map.of("type", "string"));
                     }
                 }
             } else if ("formdata".equals(mode)) {
@@ -485,8 +482,7 @@ public class ListApiToolsTask extends WorkflowSystemTask {
                 if (formdata != null && formdata.isArray()) {
                     for (JsonNode param : formdata) {
                         String type = "file".equals(param.path("type").asText("")) ? "string" : "string";
-                        properties.put(param.path("key").asText("unknown"),
-                                Map.of("type", type));
+                        properties.put(param.path("key").asText("unknown"), Map.of("type", type));
                     }
                 }
             }
@@ -498,8 +494,7 @@ public class ListApiToolsTask extends WorkflowSystemTask {
             JsonNode query = urlNode.get("query");
             if (query != null && query.isArray()) {
                 for (JsonNode q : query) {
-                    properties.put(q.path("key").asText("unknown"),
-                            Map.of("type", "string", "in", "query"));
+                    properties.put(q.path("key").asText("unknown"), Map.of("type", "string", "in", "query"));
                 }
             }
         }
@@ -601,8 +596,7 @@ public class ListApiToolsTask extends WorkflowSystemTask {
      * Merges properties from a schema object (e.g. requestBody schema) into the
      * accumulated properties map.
      */
-    private void mergeSchemaProperties(JsonNode schema, Map<String, Object> properties,
-                                        List<String> required) {
+    private void mergeSchemaProperties(JsonNode schema, Map<String, Object> properties, List<String> required) {
         JsonNode props = schema.get("properties");
         if (props != null && props.isObject()) {
             props.fields().forEachRemaining(f -> {

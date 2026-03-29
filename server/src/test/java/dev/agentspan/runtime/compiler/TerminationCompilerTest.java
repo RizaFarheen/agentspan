@@ -20,10 +20,10 @@ class TerminationCompilerTest {
     @Test
     void testTextMention() {
         TerminationConfig config = TerminationConfig.builder()
-            .type("text_mention")
-            .text("DONE")
-            .caseSensitive(false)
-            .build();
+                .type("text_mention")
+                .text("DONE")
+                .caseSensitive(false)
+                .build();
 
         WorkflowTask task = TerminationCompiler.compileTermination(config, "agent", "agent_llm");
 
@@ -38,9 +38,9 @@ class TerminationCompilerTest {
     @Test
     void testStopMessage() {
         TerminationConfig config = TerminationConfig.builder()
-            .type("stop_message")
-            .stopMessage("TERMINATE")
-            .build();
+                .type("stop_message")
+                .stopMessage("TERMINATE")
+                .build();
 
         WorkflowTask task = TerminationCompiler.compileTermination(config, "agent", "agent_llm");
         assertThat(task.getType()).isEqualTo("SIMPLE");
@@ -52,10 +52,8 @@ class TerminationCompilerTest {
 
     @Test
     void testMaxMessage() {
-        TerminationConfig config = TerminationConfig.builder()
-            .type("max_message")
-            .maxMessages(10)
-            .build();
+        TerminationConfig config =
+                TerminationConfig.builder().type("max_message").maxMessages(10).build();
 
         WorkflowTask task = TerminationCompiler.compileTermination(config, "agent", "agent_llm");
         assertThat(task.getType()).isEqualTo("SIMPLE");
@@ -65,12 +63,17 @@ class TerminationCompilerTest {
     @Test
     void testAndComposite() {
         TerminationConfig config = TerminationConfig.builder()
-            .type("and")
-            .conditions(List.of(
-                TerminationConfig.builder().type("text_mention").text("DONE").build(),
-                TerminationConfig.builder().type("max_message").maxMessages(5).build()
-            ))
-            .build();
+                .type("and")
+                .conditions(List.of(
+                        TerminationConfig.builder()
+                                .type("text_mention")
+                                .text("DONE")
+                                .build(),
+                        TerminationConfig.builder()
+                                .type("max_message")
+                                .maxMessages(5)
+                                .build()))
+                .build();
 
         WorkflowTask task = TerminationCompiler.compileTermination(config, "agent", "agent_llm");
         assertThat(task.getType()).isEqualTo("SIMPLE");
@@ -93,10 +96,10 @@ class TerminationCompilerTest {
     void testBuildTerminationScript_textMention() {
         // The script builder is still used for reference/documentation, validate it works
         TerminationConfig config = TerminationConfig.builder()
-            .type("text_mention")
-            .text("DONE")
-            .caseSensitive(false)
-            .build();
+                .type("text_mention")
+                .text("DONE")
+                .caseSensitive(false)
+                .build();
 
         String script = TerminationCompiler.buildTerminationScript(config);
         assertThat(script).contains("toLowerCase");
@@ -107,12 +110,17 @@ class TerminationCompilerTest {
     @Test
     void testBuildTerminationScript_andComposite() {
         TerminationConfig config = TerminationConfig.builder()
-            .type("and")
-            .conditions(List.of(
-                TerminationConfig.builder().type("text_mention").text("DONE").build(),
-                TerminationConfig.builder().type("max_message").maxMessages(5).build()
-            ))
-            .build();
+                .type("and")
+                .conditions(List.of(
+                        TerminationConfig.builder()
+                                .type("text_mention")
+                                .text("DONE")
+                                .build(),
+                        TerminationConfig.builder()
+                                .type("max_message")
+                                .maxMessages(5)
+                                .build()))
+                .build();
 
         String script = TerminationCompiler.buildTerminationScript(config);
         assertThat(script).contains("should_continue");

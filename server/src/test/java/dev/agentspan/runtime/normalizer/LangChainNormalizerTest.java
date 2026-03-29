@@ -25,9 +25,8 @@ class LangChainNormalizerTest {
     @Test
     void normalizeProducesPassthroughConfig() {
         Map<String, Object> raw = Map.of(
-            "name", "my_executor",
-            "_worker_name", "my_executor"
-        );
+                "name", "my_executor",
+                "_worker_name", "my_executor");
 
         AgentConfig config = normalizer.normalize(raw);
 

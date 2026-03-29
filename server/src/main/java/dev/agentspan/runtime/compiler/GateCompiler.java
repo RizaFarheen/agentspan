@@ -34,10 +34,7 @@ public class GateCompiler {
      * @return a fully configured WorkflowTask
      */
     @SuppressWarnings("unchecked")
-    public static WorkflowTask compileGate(
-            Map<String, Object> gateConfig,
-            String refName,
-            String prevOutputRef) {
+    public static WorkflowTask compileGate(Map<String, Object> gateConfig, String refName, String prevOutputRef) {
 
         String type = (String) gateConfig.get("type");
 
@@ -58,18 +55,14 @@ public class GateCompiler {
 
         String text = (String) config.get("text");
         Object caseSensitiveObj = config.getOrDefault("caseSensitive", true);
-        boolean caseSensitive = caseSensitiveObj instanceof Boolean
-                ? (Boolean) caseSensitiveObj : true;
+        boolean caseSensitive = caseSensitiveObj instanceof Boolean ? (Boolean) caseSensitiveObj : true;
 
         String script = JavaScriptBuilder.iife(
-                "var content = String($.result || '');" +
-                (caseSensitive ? "" : "content = content.toLowerCase();") +
-                "var sentinel = " + JavaScriptBuilder.toJson(
-                        caseSensitive ? text : text.toLowerCase()
-                ) + ";" +
-                "var found = content.indexOf(sentinel) >= 0;" +
-                "return {decision: found ? 'stop' : 'continue'};"
-        );
+                "var content = String($.result || '');" + (caseSensitive ? "" : "content = content.toLowerCase();")
+                        + "var sentinel = "
+                        + JavaScriptBuilder.toJson(caseSensitive ? text : text.toLowerCase()) + ";"
+                        + "var found = content.indexOf(sentinel) >= 0;"
+                        + "return {decision: found ? 'stop' : 'continue'};");
 
         WorkflowTask task = new WorkflowTask();
         task.setType("INLINE");
@@ -84,8 +77,7 @@ public class GateCompiler {
         return task;
     }
 
-    private static WorkflowTask compileWorkerGate(
-            Map<String, Object> config, String refName, String prevOutputRef) {
+    private static WorkflowTask compileWorkerGate(Map<String, Object> config, String refName, String prevOutputRef) {
 
         WorkflowTask task = new WorkflowTask();
         task.setType("SIMPLE");

@@ -62,8 +62,7 @@ class ApiKeyRepositoryTest {
         apiKeyRepository.findUserByKey(rawKey);
 
         String lastUsed = jdbc.queryForObject(
-            "SELECT last_used_at FROM api_keys WHERE label = 'test_ts-key'",
-            Map.of(), String.class);
+                "SELECT last_used_at FROM api_keys WHERE label = 'test_ts-key'", Map.of(), String.class);
         assertThat(lastUsed).isNotNull();
     }
 }

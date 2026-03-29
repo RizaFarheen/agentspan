@@ -23,7 +23,8 @@ import dev.agentspan.runtime.credentials.ExecutionTokenService;
 @ExtendWith(MockitoExtension.class)
 class AgentEventListenerTokenRevocationTest {
 
-    @Mock private AgentStreamRegistry streamRegistry;
+    @Mock
+    private AgentStreamRegistry streamRegistry;
 
     private ExecutionTokenService tokenService;
     private AgentEventListener listener;
@@ -44,8 +45,7 @@ class AgentEventListenerTokenRevocationTest {
         WorkflowModel workflow = new WorkflowModel();
         workflow.setWorkflowId("wf-1");
         workflow.setStatus(WorkflowModel.Status.TERMINATED);
-        workflow.setVariables(Map.of("__agentspan_ctx__",
-            Map.of("execution_token", token)));
+        workflow.setVariables(Map.of("__agentspan_ctx__", Map.of("execution_token", token)));
 
         listener.onWorkflowTerminatedIfEnabled(workflow);
 
@@ -61,8 +61,7 @@ class AgentEventListenerTokenRevocationTest {
         workflow.setWorkflowId("wf-2");
         workflow.setStatus(WorkflowModel.Status.COMPLETED);
         workflow.setOutput(Map.of());
-        workflow.setVariables(Map.of("__agentspan_ctx__",
-            Map.of("execution_token", token)));
+        workflow.setVariables(Map.of("__agentspan_ctx__", Map.of("execution_token", token)));
 
         listener.onWorkflowCompletedIfEnabled(workflow);
 

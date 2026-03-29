@@ -26,7 +26,7 @@ public class CredentialMeta {
     private String name;
 
     @JsonProperty("partial")
-    private String partial;    // first4 + "..." + last4
+    private String partial; // first4 + "..." + last4
 
     @JsonProperty("created_at")
     private Instant createdAt;

@@ -392,8 +392,7 @@ class AgentEventListenerTest {
 
     @Test
     void emitSwallowsExceptions() {
-        doThrow(new RuntimeException("send failed"))
-                .when(streamRegistry).send(anyString(), any());
+        doThrow(new RuntimeException("send failed")).when(streamRegistry).send(anyString(), any());
 
         TaskModel task = makeTask("wf-1", "LLM_CHAT_COMPLETE", "llm");
 

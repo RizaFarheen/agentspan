@@ -21,10 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.agentspan.runtime.AgentRuntime;
 
-@SpringBootTest(
-        classes = AgentRuntime.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
-)
+@SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 class AgentDagEndpointTest {
 
@@ -35,10 +32,7 @@ class AgentDagEndpointTest {
 
     @Test
     void createTrackingWorkflow_returns200WithWorkflowId() throws Exception {
-        Map<String, Object> body = Map.of(
-                "workflowName", "test-sub-agent",
-                "input", Map.of("prompt", "do the thing")
-        );
+        Map<String, Object> body = Map.of("workflowName", "test-sub-agent", "input", Map.of("prompt", "do the thing"));
 
         HttpURLConnection conn = post("/api/agent/workflow", body);
         assertThat(conn.getResponseCode()).isEqualTo(200);
@@ -57,8 +51,7 @@ class AgentDagEndpointTest {
                 "referenceTaskName", "bash_ref_1",
                 "type", "SIMPLE",
                 "inputData", Map.of("command", "ls"),
-                "status", "IN_PROGRESS"
-        );
+                "status", "IN_PROGRESS");
 
         HttpURLConnection conn = post("/api/agent/" + workflowId + "/tasks", body);
         assertThat(conn.getResponseCode()).isEqualTo(200);
@@ -72,8 +65,7 @@ class AgentDagEndpointTest {
         Map<String, Object> body = Map.of(
                 "taskDefName", "Bash",
                 "referenceTaskName", "bash_ref_1",
-                "type", "SIMPLE"
-        );
+                "type", "SIMPLE");
 
         HttpURLConnection conn = post("/api/agent/nonexistent-workflow-id-xyz/tasks", body);
         assertThat(conn.getResponseCode()).isEqualTo(404);
@@ -82,10 +74,7 @@ class AgentDagEndpointTest {
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private String createTrackingWorkflow() throws Exception {
-        Map<String, Object> body = Map.of(
-                "workflowName", "test-sub-agent",
-                "input", Map.of("prompt", "run")
-        );
+        Map<String, Object> body = Map.of("workflowName", "test-sub-agent", "input", Map.of("prompt", "run"));
         HttpURLConnection conn = post("/api/agent/workflow", body);
         Map<?, ?> resp = MAPPER.readValue(conn.getInputStream(), Map.class);
         return (String) resp.get("workflowId");

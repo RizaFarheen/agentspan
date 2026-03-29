@@ -35,9 +35,10 @@ class CredentialBindingServiceTest {
     @BeforeEach
     void setUp() {
         jdbc.update("DELETE FROM credentials_binding WHERE user_id = :uid", Map.of("uid", USER_ID));
-        jdbc.update("INSERT OR IGNORE INTO users (id, name, email, username, password_hash, created_at) " +
-            "VALUES (:id, 'Binding Test', '', 'binding_test_user', '', datetime('now'))",
-            Map.of("id", USER_ID));
+        jdbc.update(
+                "INSERT OR IGNORE INTO users (id, name, email, username, password_hash, created_at) "
+                        + "VALUES (:id, 'Binding Test', '', 'binding_test_user', '', datetime('now'))",
+                Map.of("id", USER_ID));
     }
 
     @Test
@@ -77,7 +78,6 @@ class CredentialBindingServiceTest {
 
         var bindings = bindingService.listBindings(USER_ID);
 
-        assertThat(bindings).containsEntry("KEY_A", "store-a")
-                             .containsEntry("KEY_B", "store-b");
+        assertThat(bindings).containsEntry("KEY_A", "store-a").containsEntry("KEY_B", "store-b");
     }
 }

@@ -69,21 +69,20 @@ public class CredentialController {
         List<CredentialMeta> all = storeProvider.list(userId);
         log.info("Got: {}", all);
         return all.stream()
-            .filter(m -> m.getName().equals(name))
-            .findFirst()
-            .map(ResponseEntity::ok)
-            .orElse(ResponseEntity.notFound().build());
+                .filter(m -> m.getName().equals(name))
+                .findFirst()
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     /** POST /api/credentials — create a credential { name, value } */
     @PostMapping
     public ResponseEntity<?> createCredential(@RequestBody Map<String, String> body) {
         String userId = currentUserId();
-        String name  = body.get("name");
+        String name = body.get("name");
         String value = body.get("value");
         if (name == null || name.isBlank() || value == null) {
-            return ResponseEntity.badRequest()
-                .body(Map.of("error", "name and value are required"));
+            return ResponseEntity.badRequest().body(Map.of("error", "name and value are required"));
         }
         storeProvider.set(userId, name, value);
         log.info("Credential created: user={}, name={}", userId, name);
@@ -92,8 +91,7 @@ public class CredentialController {
 
     /** PUT /api/credentials/{name} — update a credential value */
     @PutMapping("/{name}")
-    public ResponseEntity<?> updateCredential(@PathVariable String name,
-                                               @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> updateCredential(@PathVariable String name, @RequestBody Map<String, String> body) {
         String userId = currentUserId();
         String value = body.get("value");
         if (value == null) {
@@ -120,15 +118,14 @@ public class CredentialController {
     public ResponseEntity<?> listBindings() {
         Map<String, String> bindings = bindingService.listBindings(currentUserId());
         List<Map<String, String>> list = bindings.entrySet().stream()
-            .map(e -> Map.of("logical_key", e.getKey(), "store_name", e.getValue()))
-            .collect(Collectors.toList());
+                .map(e -> Map.of("logical_key", e.getKey(), "store_name", e.getValue()))
+                .collect(Collectors.toList());
         return ResponseEntity.ok(list);
     }
 
     /** PUT /api/credentials/bindings/{key} — set a binding { store_name } */
     @PutMapping("/bindings/{key}")
-    public ResponseEntity<?> setBinding(@PathVariable String key,
-                                         @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> setBinding(@PathVariable String key, @RequestBody Map<String, String> body) {
         String userId = currentUserId();
         String storeName = body.get("store_name");
         if (storeName == null || storeName.isBlank()) {
@@ -175,8 +172,8 @@ public class CredentialController {
 
         // Reject login tokens — only execution tokens are accepted at /resolve
         if ("login".equals(payload.workflowId())) {
-            return ResponseEntity.status(401).body(Map.of("error",
-                "Execution token required for /resolve — login tokens are not accepted"));
+            return ResponseEntity.status(401)
+                    .body(Map.of("error", "Execution token required for /resolve — login tokens are not accepted"));
         }
 
         // Rate limit check
@@ -187,8 +184,9 @@ public class CredentialController {
         // Bound credential names to those declared at compile time
         List<String> declared = payload.declaredNames();
         List<String> requested = request.getNames();
-        List<String> bounded = declared.isEmpty() ? requested :
-            requested.stream().filter(declared::contains).toList();
+        List<String> bounded = declared.isEmpty()
+                ? requested
+                : requested.stream().filter(declared::contains).toList();
 
         // Resolve each name
         Map<String, String> result = new LinkedHashMap<>();
@@ -202,8 +200,12 @@ public class CredentialController {
         }
 
         // Audit log
-        log.info("AUDIT resolve: userId={} workflowId={} names={} resolved={}",
-            payload.userId(), payload.workflowId(), requested, result.keySet());
+        log.info(
+                "AUDIT resolve: userId={} workflowId={} names={} resolved={}",
+                payload.userId(),
+                payload.workflowId(),
+                requested,
+                result.keySet());
 
         return ResponseEntity.ok(result);
     }
@@ -216,8 +218,7 @@ public class CredentialController {
 
     private boolean checkRateLimit(String jti) {
         long windowStart = System.currentTimeMillis() / 60_000;
-        RateLimitBucket bucket = rateLimitMap.computeIfAbsent(
-            jti + ":" + windowStart, k -> new RateLimitBucket());
+        RateLimitBucket bucket = rateLimitMap.computeIfAbsent(jti + ":" + windowStart, k -> new RateLimitBucket());
         return bucket.increment() <= resolveRateLimit;
     }
 
@@ -233,6 +234,9 @@ public class CredentialController {
 
     private static class RateLimitBucket {
         private final AtomicInteger count = new AtomicInteger(0);
-        int increment() { return count.incrementAndGet(); }
+
+        int increment() {
+            return count.incrementAndGet();
+        }
     }
 }

@@ -52,17 +52,16 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
     /** Maps Conductor provider names to credential env var names. */
     private static final Map<String, String> PROVIDER_TO_ENV_VAR = Map.ofEntries(
-        Map.entry("openai",      "OPENAI_API_KEY"),
-        Map.entry("anthropic",   "ANTHROPIC_API_KEY"),
-        Map.entry("mistral",     "MISTRAL_API_KEY"),
-        Map.entry("cohere",      "COHERE_API_KEY"),
-        Map.entry("grok",        "XAI_API_KEY"),
-        Map.entry("perplexity",  "PERPLEXITY_API_KEY"),
-        Map.entry("huggingface", "HUGGINGFACE_API_KEY"),
-        Map.entry("azureopenai", "AZURE_OPENAI_API_KEY"),
-        Map.entry("gemini",        "GEMINI_API_KEY"),
-        Map.entry("google_gemini", "GEMINI_API_KEY")
-    );
+            Map.entry("openai", "OPENAI_API_KEY"),
+            Map.entry("anthropic", "ANTHROPIC_API_KEY"),
+            Map.entry("mistral", "MISTRAL_API_KEY"),
+            Map.entry("cohere", "COHERE_API_KEY"),
+            Map.entry("grok", "XAI_API_KEY"),
+            Map.entry("perplexity", "PERPLEXITY_API_KEY"),
+            Map.entry("huggingface", "HUGGINGFACE_API_KEY"),
+            Map.entry("azureopenai", "AZURE_OPENAI_API_KEY"),
+            Map.entry("gemini", "GEMINI_API_KEY"),
+            Map.entry("google_gemini", "GEMINI_API_KEY"));
 
     private final CredentialResolutionService resolutionService;
     private final ExecutionTokenService tokenService;
@@ -126,9 +125,8 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
         // Fall back to RequestContextHolder (works during HTTP request, e.g. compile)
         if (userId == null) {
-            userId = RequestContextHolder.get()
-                .map(ctx -> ctx.getUser().getId())
-                .orElse(null);
+            userId =
+                    RequestContextHolder.get().map(ctx -> ctx.getUser().getId()).orElse(null);
         }
 
         // Fall back to anonymous user (OSS / no-auth mode)
@@ -155,7 +153,7 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
             Object agentspanCtx = ctx.getTask().getInputData().get("__agentspan_ctx__");
             String token = null;
-            if (agentspanCtx instanceof Map<?,?> ctxMap) {
+            if (agentspanCtx instanceof Map<?, ?> ctxMap) {
                 token = (String) ctxMap.get("execution_token");
             } else if (agentspanCtx instanceof String s) {
                 token = s;
@@ -174,9 +172,8 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     private String resolveUserCredential(String credentialName) {
         String userId = extractUserIdFromTaskContext();
         if (userId == null) {
-            userId = RequestContextHolder.get()
-                .map(ctx -> ctx.getUser().getId())
-                .orElse(null);
+            userId =
+                    RequestContextHolder.get().map(ctx -> ctx.getUser().getId()).orElse(null);
         }
         if (userId == null) {
             userId = "00000000-0000-0000-0000-000000000000";
@@ -198,31 +195,32 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         AIModel serverModel = getProviderToLLM().get(provider.toLowerCase());
         String baseUrl = null;
 
-        ModelConfiguration<? extends AIModel> config = switch (provider.toLowerCase()) {
-            case "openai" -> {
-                var c = new OpenAIConfiguration(apiKey, null, null);
-                yield c;
-            }
-            case "anthropic" -> {
-                var c = new AnthropicConfiguration(apiKey, null, null, null, null);
-                yield c;
-            }
-            case "azureopenai" -> {
-                var c = new AzureOpenAIConfiguration(apiKey, null, null, null);
-                yield c;
-            }
-            case "mistral" -> new MistralAIConfiguration(apiKey, null);
-            case "cohere" -> new CohereAIConfiguration(apiKey, null);
-            case "grok" -> new GrokAIConfiguration(apiKey, null);
-            case "huggingface" -> {
-                var c = new HuggingFaceConfiguration();
-                c.setApiKey(apiKey);
-                yield c;
-            }
-            case "perplexity" -> new PerplexityAIConfiguration(apiKey, null);
-            case "gemini", "google_gemini" -> null; // Handled below
-            default -> null;
-        };
+        ModelConfiguration<? extends AIModel> config =
+                switch (provider.toLowerCase()) {
+                    case "openai" -> {
+                        var c = new OpenAIConfiguration(apiKey, null, null);
+                        yield c;
+                    }
+                    case "anthropic" -> {
+                        var c = new AnthropicConfiguration(apiKey, null, null, null, null);
+                        yield c;
+                    }
+                    case "azureopenai" -> {
+                        var c = new AzureOpenAIConfiguration(apiKey, null, null, null);
+                        yield c;
+                    }
+                    case "mistral" -> new MistralAIConfiguration(apiKey, null);
+                    case "cohere" -> new CohereAIConfiguration(apiKey, null);
+                    case "grok" -> new GrokAIConfiguration(apiKey, null);
+                    case "huggingface" -> {
+                        var c = new HuggingFaceConfiguration();
+                        c.setApiKey(apiKey);
+                        yield c;
+                    }
+                    case "perplexity" -> new PerplexityAIConfiguration(apiKey, null);
+                    case "gemini", "google_gemini" -> null; // Handled below
+                    default -> null;
+                };
 
         if (config != null) {
             return config.get();

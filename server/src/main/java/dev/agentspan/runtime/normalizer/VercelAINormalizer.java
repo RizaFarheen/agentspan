@@ -68,9 +68,7 @@ public class VercelAINormalizer implements AgentConfigNormalizer {
         if (outputType == null) outputType = raw.get("schema");
         if (outputType instanceof Map) {
             Map<String, Object> otMap = (Map<String, Object>) outputType;
-            config.setOutputType(OutputTypeConfig.builder()
-                    .schema(otMap)
-                    .build());
+            config.setOutputType(OutputTypeConfig.builder().schema(otMap).build());
         }
 
         // Model settings: temperature, max_tokens, maxTokens
@@ -101,11 +99,9 @@ public class VercelAINormalizer implements AgentConfigNormalizer {
         // Nested model object: { modelId: "gpt-4o", provider: "openai", ... }
         if (modelObj instanceof Map) {
             Map<String, Object> modelMap = (Map<String, Object>) modelObj;
-            String modelId = getString(modelMap, "modelId",
-                    getString(modelMap, "model",
-                            getString(modelMap, "name", null)));
-            String provider = getString(modelMap, "provider",
-                    getString(modelMap, "providerId", DEFAULT_PROVIDER));
+            String modelId =
+                    getString(modelMap, "modelId", getString(modelMap, "model", getString(modelMap, "name", null)));
+            String provider = getString(modelMap, "provider", getString(modelMap, "providerId", DEFAULT_PROVIDER));
             if (modelId != null) {
                 return ensureProvider(modelId, provider);
             }

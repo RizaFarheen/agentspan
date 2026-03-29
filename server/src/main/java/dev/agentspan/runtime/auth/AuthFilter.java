@@ -47,8 +47,8 @@ public class AuthFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(AuthFilter.class);
 
-    private static final User ANONYMOUS = new User(
-        "00000000-0000-0000-0000-000000000000", "Anonymous", "", "anonymous");
+    private static final User ANONYMOUS =
+            new User("00000000-0000-0000-0000-000000000000", "Anonymous", "", "anonymous");
 
     private final UserRepository userRepository;
     private final ApiKeyRepository apiKeyRepository;
@@ -58,9 +58,10 @@ public class AuthFilter extends OncePerRequestFilter {
     private ExecutionTokenService executionTokenService;
 
     @Autowired
-    public AuthFilter(UserRepository userRepository,
-                      ApiKeyRepository apiKeyRepository,
-                      @Value("${agentspan.auth.enabled:true}") boolean authEnabled) {
+    public AuthFilter(
+            UserRepository userRepository,
+            ApiKeyRepository apiKeyRepository,
+            @Value("${agentspan.auth.enabled:true}") boolean authEnabled) {
         this.userRepository = userRepository;
         this.apiKeyRepository = apiKeyRepository;
         this.authEnabled = authEnabled;
@@ -73,9 +74,7 @@ public class AuthFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain chain)
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         try {
             if (!authEnabled) {
@@ -123,11 +122,11 @@ public class AuthFilter extends OncePerRequestFilter {
 
     private void setContext(User user, String token, HttpServletRequest request) {
         RequestContext ctx = RequestContext.builder()
-            .requestId(UUID.randomUUID().toString())
-            .user(user)
-            .executionToken(token)
-            .createdAt(Instant.now())
-            .build();
+                .requestId(UUID.randomUUID().toString())
+                .user(user)
+                .executionToken(token)
+                .createdAt(Instant.now())
+                .build();
         RequestContextHolder.set(ctx);
     }
 

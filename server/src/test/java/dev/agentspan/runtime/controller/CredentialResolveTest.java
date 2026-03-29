@@ -30,9 +30,14 @@ import dev.agentspan.runtime.model.credentials.ResolveRequest;
 @ExtendWith(MockitoExtension.class)
 class CredentialResolveTest {
 
-    @Mock private CredentialStoreProvider storeProvider;
-    @Mock private CredentialBindingService bindingService;
-    @Mock private CredentialResolutionService resolutionService;
+    @Mock
+    private CredentialStoreProvider storeProvider;
+
+    @Mock
+    private CredentialBindingService bindingService;
+
+    @Mock
+    private CredentialResolutionService resolutionService;
 
     private ExecutionTokenService tokenService;
 
@@ -48,13 +53,16 @@ class CredentialResolveTest {
         ReflectionTestUtils.setField(controller, "resolveRateLimit", 3); // low limit for test
 
         RequestContextHolder.set(RequestContext.builder()
-            .requestId("r1")
-            .user(new User("u-test", "Test", null, "test"))
-            .createdAt(Instant.now()).build());
+                .requestId("r1")
+                .user(new User("u-test", "Test", null, "test"))
+                .createdAt(Instant.now())
+                .build());
     }
 
     @AfterEach
-    void tearDown() { RequestContextHolder.clear(); }
+    void tearDown() {
+        RequestContextHolder.clear();
+    }
 
     @Test
     @SuppressWarnings("unchecked")

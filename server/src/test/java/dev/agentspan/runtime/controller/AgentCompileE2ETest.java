@@ -35,10 +35,7 @@ import dev.agentspan.runtime.AgentRuntime;
  * workflow structure. No mocks — exercises the complete normalization →
  * compilation pipeline.</p>
  */
-@SpringBootTest(
-        classes = AgentRuntime.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
-)
+@SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 class AgentCompileE2ETest {
 
@@ -89,8 +86,9 @@ class AgentCompileE2ETest {
         }
         int code = conn.getResponseCode();
         if (code != 200) {
-            String errBody = new String(conn.getErrorStream() != null
-                    ? conn.getErrorStream().readAllBytes() : new byte[0], StandardCharsets.UTF_8);
+            String errBody = new String(
+                    conn.getErrorStream() != null ? conn.getErrorStream().readAllBytes() : new byte[0],
+                    StandardCharsets.UTF_8);
             fail("Expected 200 but got " + code + ": " + errBody);
         }
         return MAPPER.readTree(conn.getInputStream());
@@ -153,7 +151,8 @@ class AgentCompileE2ETest {
             }
             // Recurse into SWITCH decisionCases
             if (t.containsKey("decisionCases")) {
-                Map<String, List<Map<String, Object>>> cases = (Map<String, List<Map<String, Object>>>) t.get("decisionCases");
+                Map<String, List<Map<String, Object>>> cases =
+                        (Map<String, List<Map<String, Object>>>) t.get("decisionCases");
                 for (List<Map<String, Object>> branch : cases.values()) {
                     result.addAll(findAllTasksByType(branch, type));
                 }
@@ -199,10 +198,8 @@ class AgentCompileE2ETest {
         Map<String, Object> tool = Map.of(
                 "name", "search",
                 "description", "Search the web",
-                "inputSchema", Map.of("type", "object",
-                        "properties", Map.of("query", Map.of("type", "string"))),
-                "toolType", "worker"
-        );
+                "inputSchema", Map.of("type", "object", "properties", Map.of("query", Map.of("type", "string"))),
+                "toolType", "worker");
         Map<String, Object> config = agentConfig("tool_e2e", "openai/gpt-4o", "Search agent.");
         config.put("tools", List.of(tool));
 
@@ -227,10 +224,8 @@ class AgentCompileE2ETest {
         Map<String, Object> tool = Map.of(
                 "name", "calculate",
                 "description", "Do math",
-                "inputSchema", Map.of("type", "object",
-                        "properties", Map.of("expr", Map.of("type", "string"))),
-                "toolType", "worker"
-        );
+                "inputSchema", Map.of("type", "object", "properties", Map.of("expr", Map.of("type", "string"))),
+                "toolType", "worker");
         Map<String, Object> config = agentConfig("toolspec_e2e", "openai/gpt-4o", "Calculator.");
         config.put("tools", List.of(tool));
 
@@ -276,10 +271,14 @@ class AgentCompileE2ETest {
     void compileSequentialHasCoercionBetweenStages() throws Exception {
         // Tool-using sub-agent in a sequential pipeline should get coercion
         Map<String, Object> tool = Map.of(
-                "name", "lookup", "description", "Lookup data",
-                "inputSchema", Map.of("type", "object"),
-                "toolType", "worker"
-        );
+                "name",
+                "lookup",
+                "description",
+                "Lookup data",
+                "inputSchema",
+                Map.of("type", "object"),
+                "toolType",
+                "worker");
         Map<String, Object> agent1 = agentConfig("tooluser_e2e", "openai/gpt-4o", "Use tools.");
         agent1.put("tools", List.of(tool));
         Map<String, Object> agent2 = agentConfig("summarizer_e2e", "openai/gpt-4o", "Summarize.");
@@ -293,8 +292,7 @@ class AgentCompileE2ETest {
 
         // Should have INLINE coercion task between stages
         List<Map<String, Object>> inlineTasks = findAllTasksByType(tasks, "INLINE");
-        assertThat(inlineTasks).isNotEmpty()
-                .anyMatch(t -> ((String) t.get("taskReferenceName")).contains("coerce"));
+        assertThat(inlineTasks).isNotEmpty().anyMatch(t -> ((String) t.get("taskReferenceName")).contains("coerce"));
     }
 
     @Test
@@ -342,10 +340,11 @@ class AgentCompileE2ETest {
         Map<String, Object> coordinator = agentConfig("constrained_e2e", "openai/gpt-4o", "Route.");
         coordinator.put("agents", List.of(agent1, agent2));
         coordinator.put("strategy", "handoff");
-        coordinator.put("allowedTransitions", Map.of(
-                "collector_e2e", List.of("analyzer_e2e"),
-                "analyzer_e2e", List.of("constrained_e2e")
-        ));
+        coordinator.put(
+                "allowedTransitions",
+                Map.of(
+                        "collector_e2e", List.of("analyzer_e2e"),
+                        "analyzer_e2e", List.of("constrained_e2e")));
 
         // Should compile without error — transitions are metadata for runtime enforcement
         JsonNode resp = postCompile(request(coordinator));
@@ -359,9 +358,15 @@ class AgentCompileE2ETest {
         Map<String, Object> agentTool = new LinkedHashMap<>();
         agentTool.put("name", "research_tool");
         agentTool.put("description", "Research a topic in depth");
-        agentTool.put("inputSchema", Map.of("type", "object",
-                "properties", Map.of("request", Map.of("type", "string")),
-                "required", List.of("request")));
+        agentTool.put(
+                "inputSchema",
+                Map.of(
+                        "type",
+                        "object",
+                        "properties",
+                        Map.of("request", Map.of("type", "string")),
+                        "required",
+                        List.of("request")));
         agentTool.put("toolType", "agent_tool");
         agentTool.put("config", Map.of("agent", childAgent));
 
@@ -392,16 +397,21 @@ class AgentCompileE2ETest {
     void compileWithCallbacks() throws Exception {
         // Callbacks require a tool-using agent (DO_WHILE loop) for before/after_model
         Map<String, Object> tool = Map.of(
-                "name", "search", "description", "Search",
-                "inputSchema", Map.of("type", "object"),
-                "toolType", "worker"
-        );
+                "name",
+                "search",
+                "description",
+                "Search",
+                "inputSchema",
+                Map.of("type", "object"),
+                "toolType",
+                "worker");
         Map<String, Object> config = agentConfig("callback_e2e", "openai/gpt-4o", "Test.");
         config.put("tools", List.of(tool));
-        config.put("callbacks", List.of(
-                Map.of("position", "before_model", "taskName", "callback_e2e_before_model"),
-                Map.of("position", "after_model", "taskName", "callback_e2e_after_model")
-        ));
+        config.put(
+                "callbacks",
+                List.of(
+                        Map.of("position", "before_model", "taskName", "callback_e2e_before_model"),
+                        Map.of("position", "after_model", "taskName", "callback_e2e_after_model")));
 
         JsonNode resp = postCompile(request(config));
         List<Map<String, Object>> tasks = getTasks(resp);
@@ -432,7 +442,8 @@ class AgentCompileE2ETest {
         String systemMsg = messages.stream()
                 .filter(m -> "system".equals(m.get("role")))
                 .map(m -> (String) m.get("message"))
-                .findFirst().orElse("");
+                .findFirst()
+                .orElse("");
         assertThat(systemMsg).contains("step-by-step plan");
     }
 
@@ -483,16 +494,19 @@ class AgentCompileE2ETest {
     @Test
     void compileWithOutputType() throws Exception {
         Map<String, Object> config = agentConfig("structured_e2e", "openai/gpt-4o", "Return structured data.");
-        config.put("outputType", Map.of(
-                "schema", Map.of(
-                        "type", "object",
-                        "properties", Map.of(
-                                "name", Map.of("type", "string"),
-                                "score", Map.of("type", "number")
-                        )
-                ),
-                "className", "Result"
-        ));
+        config.put(
+                "outputType",
+                Map.of(
+                        "schema",
+                        Map.of(
+                                "type",
+                                "object",
+                                "properties",
+                                Map.of(
+                                        "name", Map.of("type", "string"),
+                                        "score", Map.of("type", "number"))),
+                        "className",
+                        "Result"));
 
         JsonNode resp = postCompile(request(config));
         List<Map<String, Object>> llmTasks = findAllTasksByType(getTasks(resp), "LLM_CHAT_COMPLETE");
@@ -505,7 +519,8 @@ class AgentCompileE2ETest {
         String systemMsg = messages.stream()
                 .filter(m -> "system".equals(m.get("role")))
                 .map(m -> (String) m.get("message"))
-                .findFirst().orElse("");
+                .findFirst()
+                .orElse("");
         assertThat(systemMsg).contains("JSON");
     }
 
@@ -549,12 +564,13 @@ class AgentCompileE2ETest {
     @Test
     void compileWithMemory() throws Exception {
         Map<String, Object> config = agentConfig("memory_e2e", "openai/gpt-4o", "Remember context.");
-        config.put("memory", Map.of(
-                "messages", List.of(
-                        Map.of("role", "user", "message", "My name is Alice."),
-                        Map.of("role", "assistant", "message", "Hello Alice!")
-                )
-        ));
+        config.put(
+                "memory",
+                Map.of(
+                        "messages",
+                        List.of(
+                                Map.of("role", "user", "message", "My name is Alice."),
+                                Map.of("role", "assistant", "message", "Hello Alice!"))));
 
         JsonNode resp = postCompile(request(config));
         List<Map<String, Object>> llmTasks = findAllTasksByType(getTasks(resp), "LLM_CHAT_COMPLETE");
@@ -600,13 +616,12 @@ class AgentCompileE2ETest {
         Map<String, Object> rawConfig = new LinkedHashMap<>();
         rawConfig.put("name", "adk_basic_e2e");
         rawConfig.put("model", "gemini-2.0-flash");
-        rawConfig.put("instruction", "You are helpful.");  // ADK uses singular
+        rawConfig.put("instruction", "You are helpful."); // ADK uses singular
 
         Map<String, Object> body = Map.of(
                 "framework", "google_adk",
                 "rawConfig", rawConfig,
-                "prompt", "Hello"
-        );
+                "prompt", "Hello");
 
         JsonNode resp = postCompile(body);
         JsonNode wf = resp.get("workflowDef");
@@ -640,8 +655,7 @@ class AgentCompileE2ETest {
         Map<String, Object> body = Map.of(
                 "framework", "google_adk",
                 "rawConfig", rawConfig,
-                "prompt", "Go"
-        );
+                "prompt", "Go");
 
         JsonNode resp = postCompile(body);
         List<Map<String, Object>> tasks = getTasks(resp);
@@ -677,8 +691,7 @@ class AgentCompileE2ETest {
         Map<String, Object> body = Map.of(
                 "framework", "google_adk",
                 "rawConfig", rawConfig,
-                "prompt", "Go"
-        );
+                "prompt", "Go");
 
         JsonNode resp = postCompile(body);
         List<Map<String, Object>> tasks = getTasks(resp);
@@ -709,8 +722,7 @@ class AgentCompileE2ETest {
         Map<String, Object> body = Map.of(
                 "framework", "google_adk",
                 "rawConfig", rawConfig,
-                "prompt", "Research AI"
-        );
+                "prompt", "Research AI");
 
         JsonNode resp = postCompile(body);
         List<Map<String, Object>> tasks = getTasks(resp);
@@ -751,8 +763,7 @@ class AgentCompileE2ETest {
         Map<String, Object> body = Map.of(
                 "framework", "google_adk",
                 "rawConfig", rawConfig,
-                "prompt", "Go"
-        );
+                "prompt", "Go");
 
         // Should compile without error
         JsonNode resp = postCompile(body);
@@ -770,8 +781,7 @@ class AgentCompileE2ETest {
         Map<String, Object> body = Map.of(
                 "framework", "google_adk",
                 "rawConfig", rawConfig,
-                "prompt", "Research AI safety"
-        );
+                "prompt", "Research AI safety");
 
         JsonNode resp = postCompile(body);
         List<Map<String, Object>> llmTasks = findAllTasksByType(getTasks(resp), "LLM_CHAT_COMPLETE");
@@ -783,7 +793,8 @@ class AgentCompileE2ETest {
         String systemMsg = messages.stream()
                 .filter(m -> "system".equals(m.get("role")))
                 .map(m -> (String) m.get("message"))
-                .findFirst().orElse("");
+                .findFirst()
+                .orElse("");
         assertThat(systemMsg).contains("step-by-step plan");
     }
 
@@ -792,10 +803,7 @@ class AgentCompileE2ETest {
     @Test
     void startAgentCreatesWorkflow() throws Exception {
         Map<String, Object> config = agentConfig("start_e2e", "openai/gpt-4o", "You are helpful.");
-        Map<String, Object> body = Map.of(
-                "agentConfig", config,
-                "prompt", "Hello world"
-        );
+        Map<String, Object> body = Map.of("agentConfig", config, "prompt", "Hello world");
 
         JsonNode resp = postStart(body);
         assertThat(resp.get("workflowId")).isNotNull();
@@ -806,10 +814,7 @@ class AgentCompileE2ETest {
     @Test
     void startAgentStatusEndpointWorks() throws Exception {
         Map<String, Object> config = agentConfig("status_e2e", "openai/gpt-4o", "You are helpful.");
-        Map<String, Object> body = Map.of(
-                "agentConfig", config,
-                "prompt", "Hello"
-        );
+        Map<String, Object> body = Map.of("agentConfig", config, "prompt", "Hello");
 
         JsonNode startResp = postStart(body);
         String workflowId = startResp.get("workflowId").asText();
@@ -837,7 +842,8 @@ class AgentCompileE2ETest {
         JsonNode resp2 = postStart(body2);
 
         // Each start should produce a unique workflow ID
-        assertThat(resp1.get("workflowId").asText()).isNotEqualTo(resp2.get("workflowId").asText());
+        assertThat(resp1.get("workflowId").asText())
+                .isNotEqualTo(resp2.get("workflowId").asText());
         assertThat(resp1.get("workflowName").asText()).isEqualTo("multi_e2e");
         assertThat(resp2.get("workflowName").asText()).isEqualTo("multi_e2e");
     }
@@ -941,15 +947,20 @@ class AgentCompileE2ETest {
         Map<String, Object> tool1 = new LinkedHashMap<>();
         tool1.put("_worker_ref", "get_weather");
         tool1.put("description", "Get current weather");
-        tool1.put("parameters", Map.of("type", "object",
-                "properties", Map.of("city", Map.of("type", "string")),
-                "required", List.of("city")));
+        tool1.put(
+                "parameters",
+                Map.of(
+                        "type",
+                        "object",
+                        "properties",
+                        Map.of("city", Map.of("type", "string")),
+                        "required",
+                        List.of("city")));
 
         Map<String, Object> tool2 = new LinkedHashMap<>();
         tool2.put("_worker_ref", "calculate");
         tool2.put("description", "Do math");
-        tool2.put("parameters", Map.of("type", "object",
-                "properties", Map.of("expr", Map.of("type", "string"))));
+        tool2.put("parameters", Map.of("type", "object", "properties", Map.of("expr", Map.of("type", "string"))));
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "oai_tools_e2e");
@@ -1034,8 +1045,7 @@ class AgentCompileE2ETest {
         Map<String, Object> regularTool = new LinkedHashMap<>();
         regularTool.put("_worker_ref", "analyze");
         regularTool.put("description", "Analyze data");
-        regularTool.put("parameters", Map.of("type", "object",
-                "properties", Map.of("data", Map.of("type", "string"))));
+        regularTool.put("parameters", Map.of("type", "object", "properties", Map.of("data", Map.of("type", "string"))));
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "oai_code_e2e");
@@ -1060,7 +1070,8 @@ class AgentCompileE2ETest {
         String sysMsg = messages.stream()
                 .filter(m -> "system".equals(m.get("role")))
                 .map(m -> (String) m.get("message"))
-                .findFirst().orElse("");
+                .findFirst()
+                .orElse("");
         assertThat(sysMsg).contains("code execution");
     }
 
@@ -1071,8 +1082,7 @@ class AgentCompileE2ETest {
         tool.put("_type", "FunctionTool");
         tool.put("name", "summarize");
         tool.put("description", "Summarize text");
-        tool.put("parameters", Map.of("type", "object",
-                "properties", Map.of("text", Map.of("type", "string"))));
+        tool.put("parameters", Map.of("type", "object", "properties", Map.of("text", Map.of("type", "string"))));
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "oai_functype_e2e");
@@ -1097,8 +1107,8 @@ class AgentCompileE2ETest {
         Map<String, Object> orderTool = new LinkedHashMap<>();
         orderTool.put("_worker_ref", "check_order_status");
         orderTool.put("description", "Check order status");
-        orderTool.put("parameters", Map.of("type", "object",
-                "properties", Map.of("order_id", Map.of("type", "string"))));
+        orderTool.put(
+                "parameters", Map.of("type", "object", "properties", Map.of("order_id", Map.of("type", "string"))));
 
         Map<String, Object> orderAgent = new LinkedHashMap<>();
         orderAgent.put("name", "order_specialist");
@@ -1142,15 +1152,16 @@ class AgentCompileE2ETest {
         // Mirrors: examples/openai/03_structured_output.py
         // output_type is a Pydantic JSON schema
         Map<String, Object> schema = Map.of(
-                "type", "object",
-                "title", "MovieList",
-                "properties", Map.of(
-                        "recommendations", Map.of("type", "array",
-                                "items", Map.of("type", "object")),
-                        "theme", Map.of("type", "string")
-                ),
-                "required", List.of("recommendations", "theme")
-        );
+                "type",
+                "object",
+                "title",
+                "MovieList",
+                "properties",
+                Map.of(
+                        "recommendations", Map.of("type", "array", "items", Map.of("type", "object")),
+                        "theme", Map.of("type", "string")),
+                "required",
+                List.of("recommendations", "theme"));
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "oai_output_e2e");
@@ -1170,7 +1181,8 @@ class AgentCompileE2ETest {
         String sysMsg = messages.stream()
                 .filter(m -> "system".equals(m.get("role")))
                 .map(m -> (String) m.get("message"))
-                .findFirst().orElse("");
+                .findFirst()
+                .orElse("");
         assertThat(sysMsg).contains("JSON");
 
         // Model settings should be applied
@@ -1199,10 +1211,7 @@ class AgentCompileE2ETest {
 
     @Test
     void openaiCamelCaseFieldVariants() throws Exception {
-        Map<String, Object> schema = Map.of(
-                "type", "object",
-                "properties", Map.of("answer", Map.of("type", "string"))
-        );
+        Map<String, Object> schema = Map.of("type", "object", "properties", Map.of("answer", Map.of("type", "string")));
 
         Map<String, Object> outputGuardrail = new LinkedHashMap<>();
         outputGuardrail.put("name", "check_output_safety");
@@ -1228,7 +1237,8 @@ class AgentCompileE2ETest {
         String sysMsg = messages.stream()
                 .filter(m -> "system".equals(m.get("role")))
                 .map(m -> (String) m.get("message"))
-                .findFirst().orElse("");
+                .findFirst()
+                .orElse("");
 
         assertThat(sysMsg).contains("JSON");
         assertThat(inputs.get("temperature")).isEqualTo(0.7);
@@ -1275,8 +1285,7 @@ class AgentCompileE2ETest {
         Map<String, Object> tool = new LinkedHashMap<>();
         tool.put("_worker_ref", "get_account_balance");
         tool.put("description", "Look up balance");
-        tool.put("parameters", Map.of("type", "object",
-                "properties", Map.of("account_id", Map.of("type", "string"))));
+        tool.put("parameters", Map.of("type", "object", "properties", Map.of("account_id", Map.of("type", "string"))));
 
         Map<String, Object> raw = new LinkedHashMap<>();
         raw.put("name", "oai_guard_e2e");
@@ -1310,8 +1319,9 @@ class AgentCompileE2ETest {
         raw.put("name", "oai_dynamic_e2e");
         raw.put("model", "gpt-4o");
         // Dynamic instructions: the serializer replaces the callable with a worker ref
-        raw.put("instructions", Map.of("_worker_ref", "get_dynamic_instructions",
-                "description", "Generate dynamic instructions"));
+        raw.put(
+                "instructions",
+                Map.of("_worker_ref", "get_dynamic_instructions", "description", "Generate dynamic instructions"));
 
         Map<String, Object> tool = new LinkedHashMap<>();
         tool.put("_worker_ref", "get_todo_list");
@@ -1337,7 +1347,8 @@ class AgentCompileE2ETest {
         String sysMsg = messages.stream()
                 .filter(m -> "system".equals(m.get("role")))
                 .map(m -> (String) m.get("message"))
-                .findFirst().orElse("");
+                .findFirst()
+                .orElse("");
         assertThat(sysMsg).contains("${oai_dynamic_e2e_instructions.output.result}");
     }
 
@@ -1347,8 +1358,8 @@ class AgentCompileE2ETest {
         Map<String, Object> sentimentTool = new LinkedHashMap<>();
         sentimentTool.put("_worker_ref", "analyze_sentiment");
         sentimentTool.put("description", "Analyze sentiment");
-        sentimentTool.put("parameters", Map.of("type", "object",
-                "properties", Map.of("text", Map.of("type", "string"))));
+        sentimentTool.put(
+                "parameters", Map.of("type", "object", "properties", Map.of("text", Map.of("type", "string"))));
 
         Map<String, Object> sentimentAgent = new LinkedHashMap<>();
         sentimentAgent.put("name", "sentiment_analyzer");
@@ -1380,8 +1391,8 @@ class AgentCompileE2ETest {
         Map<String, Object> inputs = (Map<String, Object>) llm.get(0).get("inputParameters");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> toolSpecs = (List<Map<String, Object>>) inputs.get("tools");
-        assertThat(toolSpecs).anyMatch(t ->
-                "sentiment_analyzer".equals(t.get("name"))
+        assertThat(toolSpecs)
+                .anyMatch(t -> "sentiment_analyzer".equals(t.get("name"))
                         && "SUB_WORKFLOW".equals(t.get("type"))
                         && t.containsKey("inputSchema"));
     }
@@ -1453,8 +1464,7 @@ class AgentCompileE2ETest {
         Map<String, Object> httpTool = new LinkedHashMap<>();
         httpTool.put("name", "fetch_data");
         httpTool.put("description", "Fetch data from API");
-        httpTool.put("inputSchema", Map.of("type", "object",
-                "properties", Map.of("url", Map.of("type", "string"))));
+        httpTool.put("inputSchema", Map.of("type", "object", "properties", Map.of("url", Map.of("type", "string"))));
         httpTool.put("toolType", "http");
         httpTool.put("config", Map.of("baseUrl", "https://api.example.com"));
 
@@ -1479,8 +1489,9 @@ class AgentCompileE2ETest {
         mcpTool.put("description", "Search via MCP");
         mcpTool.put("inputSchema", Map.of("type", "object"));
         mcpTool.put("toolType", "mcp");
-        mcpTool.put("config", Map.of("server_url", "http://mcp.example.com",
-                "headers", Map.of("Authorization", "Bearer token")));
+        mcpTool.put(
+                "config",
+                Map.of("server_url", "http://mcp.example.com", "headers", Map.of("Authorization", "Bearer token")));
 
         Map<String, Object> config = agentConfig("tc_mcp_e2e", "openai/gpt-4o", "MCP agent.");
         config.put("tools", List.of(mcpTool));
@@ -1553,9 +1564,8 @@ class AgentCompileE2ETest {
 
         // Should have approval SWITCH with "needs_approval" / "approved" cases
         List<Map<String, Object>> switches = findAllTasksByType(tasks, "SWITCH");
-        List<String> switchRefs = switches.stream()
-                .map(t -> (String) t.get("taskReferenceName"))
-                .toList();
+        List<String> switchRefs =
+                switches.stream().map(t -> (String) t.get("taskReferenceName")).toList();
         assertThat(switchRefs).anyMatch(r -> r.contains("approval"));
     }
 
@@ -1617,8 +1627,8 @@ class AgentCompileE2ETest {
         Map<String, Object> imageTool = new LinkedHashMap<>();
         imageTool.put("name", "create_image");
         imageTool.put("description", "Generate an image");
-        imageTool.put("inputSchema", Map.of("type", "object",
-                "properties", Map.of("prompt", Map.of("type", "string"))));
+        imageTool.put(
+                "inputSchema", Map.of("type", "object", "properties", Map.of("prompt", Map.of("type", "string"))));
         imageTool.put("toolType", "generate_image");
 
         Map<String, Object> config = agentConfig("tc_media_e2e", "openai/gpt-4o", "Image agent.");
@@ -1653,8 +1663,7 @@ class AgentCompileE2ETest {
 
         // Should have INLINE enrich task inside the tool routing
         List<Map<String, Object>> inlineTasks = findAllTasksByType(tasks, "INLINE");
-        assertThat(inlineTasks).anyMatch(t ->
-                ((String) t.get("taskReferenceName")).contains("enrich"));
+        assertThat(inlineTasks).anyMatch(t -> ((String) t.get("taskReferenceName")).contains("enrich"));
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -1726,15 +1735,20 @@ class AgentCompileE2ETest {
         Map<String, Object> tool1 = new LinkedHashMap<>();
         tool1.put("_worker_ref", "get_weather");
         tool1.put("description", "Get current weather");
-        tool1.put("parameters", Map.of("type", "object",
-                "properties", Map.of("city", Map.of("type", "string")),
-                "required", List.of("city")));
+        tool1.put(
+                "parameters",
+                Map.of(
+                        "type",
+                        "object",
+                        "properties",
+                        Map.of("city", Map.of("type", "string")),
+                        "required",
+                        List.of("city")));
 
         Map<String, Object> tool2 = new LinkedHashMap<>();
         tool2.put("_worker_ref", "calculate");
         tool2.put("description", "Do math");
-        tool2.put("parameters", Map.of("type", "object",
-                "properties", Map.of("expr", Map.of("type", "string"))));
+        tool2.put("parameters", Map.of("type", "object", "properties", Map.of("expr", Map.of("type", "string"))));
 
         Map<String, Object> rawConfig = new LinkedHashMap<>();
         rawConfig.put("name", "vercel_tools_e2e");

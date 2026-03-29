@@ -42,10 +42,7 @@ import dev.agentspan.runtime.service.AgentStreamRegistry;
  * opens real HTTP connections to the SSE endpoint, and verifies events
  * arrive with correct SSE wire format.</p>
  */
-@SpringBootTest(
-        classes = AgentRuntime.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
-)
+@SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 class AgentControllerSSEIntegrationTest {
 
@@ -76,8 +73,8 @@ class AgentControllerSSEIntegrationTest {
      * Opens a real HTTP SSE connection and collects events until the
      * connection closes or the expected count is reached.
      */
-    private List<SSEWireEvent> collectSSEEvents(String workflowId, Long lastEventId,
-                                                 int expectedCount, long timeoutMs) throws Exception {
+    private List<SSEWireEvent> collectSSEEvents(String workflowId, Long lastEventId, int expectedCount, long timeoutMs)
+            throws Exception {
         URI uri = URI.create(baseUrl() + "/stream/" + workflowId);
         HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
         conn.setRequestMethod("GET");
@@ -89,8 +86,7 @@ class AgentControllerSSEIntegrationTest {
         conn.setReadTimeout((int) timeoutMs);
 
         List<SSEWireEvent> events = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getInputStream()))) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
 
             String currentId = null;
             String currentEvent = null;
@@ -129,8 +125,8 @@ class AgentControllerSSEIntegrationTest {
 
     @Test
     void healthEndpointReturnsHello() throws Exception {
-        HttpURLConnection conn = (HttpURLConnection)
-                URI.create(baseUrl()).toURL().openConnection();
+        HttpURLConnection conn =
+                (HttpURLConnection) URI.create(baseUrl()).toURL().openConnection();
         conn.setRequestMethod("GET");
         assertThat(conn.getResponseCode()).isEqualTo(200);
         String body = new String(conn.getInputStream().readAllBytes());
@@ -146,7 +142,10 @@ class AgentControllerSSEIntegrationTest {
         streamRegistry.send(wfId, AgentSSEEvent.done(wfId, "result"));
 
         CompletableFuture<Void> completer = CompletableFuture.runAsync(() -> {
-            try { Thread.sleep(200); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException ignored) {
+            }
             streamRegistry.complete(wfId);
         });
 
@@ -165,7 +164,10 @@ class AgentControllerSSEIntegrationTest {
 
         // Async: send events after a short delay to allow client to connect
         CompletableFuture<Void> producer = CompletableFuture.runAsync(() -> {
-            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ignored) {
+            }
             streamRegistry.send(wfId, AgentSSEEvent.thinking(wfId, "agent_llm"));
             streamRegistry.send(wfId, AgentSSEEvent.toolCall(wfId, "search", Map.of("q", "hello")));
             streamRegistry.send(wfId, AgentSSEEvent.toolResult(wfId, "search", "found it"));
@@ -230,7 +232,10 @@ class AgentControllerSSEIntegrationTest {
 
         // Complete after a delay so client can read replayed events
         CompletableFuture<Void> completer = CompletableFuture.runAsync(() -> {
-            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ignored) {
+            }
             streamRegistry.complete(wfId);
         });
 
@@ -255,7 +260,10 @@ class AgentControllerSSEIntegrationTest {
 
         // Async: send events from both parent and child
         CompletableFuture<Void> producer = CompletableFuture.runAsync(() -> {
-            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ignored) {
+            }
             streamRegistry.send(parentWfId, AgentSSEEvent.thinking(parentWfId, "parent_llm"));
             streamRegistry.send(childWfId, AgentSSEEvent.thinking(childWfId, "child_llm"));
             streamRegistry.send(childWfId, AgentSSEEvent.toolCall(childWfId, "child_tool", null));
@@ -330,9 +338,11 @@ class AgentControllerSSEIntegrationTest {
         String wfId = "e2e-test-guardrail-fail";
 
         CompletableFuture<Void> producer = CompletableFuture.runAsync(() -> {
-            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
-            streamRegistry.send(wfId,
-                    AgentSSEEvent.guardrailFail(wfId, "pii_filter", "SSN detected in output"));
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ignored) {
+            }
+            streamRegistry.send(wfId, AgentSSEEvent.guardrailFail(wfId, "pii_filter", "SSN detected in output"));
             streamRegistry.send(wfId, AgentSSEEvent.done(wfId, null));
             streamRegistry.complete(wfId);
         });
@@ -353,12 +363,14 @@ class AgentControllerSSEIntegrationTest {
         String wfId = "e2e-test-waiting";
 
         CompletableFuture<Void> producer = CompletableFuture.runAsync(() -> {
-            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ignored) {
+            }
             Map<String, Object> pending = Map.of(
                     "tool_name", "approve_purchase",
                     "parameters", Map.of("amount", 500),
-                    "taskRefName", "hitl_approve"
-            );
+                    "taskRefName", "hitl_approve");
             streamRegistry.send(wfId, AgentSSEEvent.waiting(wfId, pending));
             streamRegistry.send(wfId, AgentSSEEvent.done(wfId, "approved"));
             streamRegistry.complete(wfId);
@@ -369,9 +381,12 @@ class AgentControllerSSEIntegrationTest {
 
         JsonNode waitPayload = MAPPER.readTree(events.get(0).data());
         assertThat(waitPayload.get("type").asText()).isEqualTo("waiting");
-        assertThat(waitPayload.get("pendingTool").get("tool_name").asText())
-                .isEqualTo("approve_purchase");
-        assertThat(waitPayload.get("pendingTool").get("parameters").get("amount").asInt())
+        assertThat(waitPayload.get("pendingTool").get("tool_name").asText()).isEqualTo("approve_purchase");
+        assertThat(waitPayload
+                        .get("pendingTool")
+                        .get("parameters")
+                        .get("amount")
+                        .asInt())
                 .isEqualTo(500);
     }
 
@@ -386,7 +401,10 @@ class AgentControllerSSEIntegrationTest {
 
         // Complete after delay so client can read replayed + new events
         CompletableFuture<Void> completer = CompletableFuture.runAsync(() -> {
-            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ignored) {
+            }
             streamRegistry.send(wfId, AgentSSEEvent.done(wfId, "Final"));
             streamRegistry.complete(wfId);
         });
@@ -412,7 +430,10 @@ class AgentControllerSSEIntegrationTest {
 
         // Simulate full event lifecycle through the real AgentEventListener
         CompletableFuture<Void> producer = CompletableFuture.runAsync(() -> {
-            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ignored) {
+            }
 
             // 1. LLM_CHAT_COMPLETE scheduled → thinking event
             TaskModel llmTask = new TaskModel();
@@ -426,14 +447,15 @@ class AgentControllerSSEIntegrationTest {
             humanWf.setWorkflowId(wfId);
             TaskModel humanTask = new TaskModel();
             humanTask.setReferenceTaskName("hitl_approve");
-            humanTask.setInputData(Map.of(
-                    "tool_name", "publish_article",
-                    "parameters", Map.of("title", "Test Article")
-            ));
+            humanTask.setInputData(
+                    Map.of("tool_name", "publish_article", "parameters", Map.of("title", "Test Article")));
             agentHumanTask.start(humanWf, humanTask, null);
 
             // 3. Workflow completes after approval
-            try { Thread.sleep(200); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException ignored) {
+            }
             WorkflowModel wf = new WorkflowModel();
             wf.setWorkflowId(wfId);
             wf.setOutput(Map.of("result", "Published"));

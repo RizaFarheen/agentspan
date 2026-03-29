@@ -32,8 +32,7 @@ public class CredentialResolutionService {
     private final CredentialStoreProvider storeProvider;
     private final CredentialBindingService bindingService;
 
-    public CredentialResolutionService(CredentialStoreProvider storeProvider,
-                                       CredentialBindingService bindingService) {
+    public CredentialResolutionService(CredentialStoreProvider storeProvider, CredentialBindingService bindingService) {
         this.storeProvider = storeProvider;
         this.bindingService = bindingService;
     }

@@ -42,68 +42,67 @@ class CredentialControllerTest {
     void createAndListCredential() throws Exception {
         // Create
         mvc.perform(post("/api/credentials")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"test-secret\"}"))
-            .andExpect(status().isCreated());
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"test-secret\"}"))
+                .andExpect(status().isCreated());
 
         // List — should contain our credential
         mvc.perform(get("/api/credentials"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')]").exists())
-            .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')].partial").value("test...cret"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')]").exists())
+                .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')].partial").value("test...cret"));
     }
 
     @Test
     void deleteCredential_returns204() throws Exception {
         // Create first
         mvc.perform(post("/api/credentials")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"to-delete\"}"))
-            .andExpect(status().isCreated());
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"to-delete\"}"))
+                .andExpect(status().isCreated());
 
         // Delete
-        mvc.perform(delete("/api/credentials/" + CRED_NAME))
-            .andExpect(status().isNoContent());
+        mvc.perform(delete("/api/credentials/" + CRED_NAME)).andExpect(status().isNoContent());
 
         // Verify gone — list should not contain it
         mvc.perform(get("/api/credentials"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')]").doesNotExist());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')]").doesNotExist());
     }
 
     @Test
     void updateCredential_changesValue() throws Exception {
         // Create
         mvc.perform(post("/api/credentials")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"original-value-here\"}"))
-            .andExpect(status().isCreated());
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"" + CRED_NAME + "\",\"value\":\"original-value-here\"}"))
+                .andExpect(status().isCreated());
 
         // Update
         mvc.perform(put("/api/credentials/" + CRED_NAME)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"value\":\"updated-value-here\"}"))
-            .andExpect(status().isOk());
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"value\":\"updated-value-here\"}"))
+                .andExpect(status().isOk());
 
         // Verify partial changed
         mvc.perform(get("/api/credentials"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')].partial").value("upda...here"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name=='" + CRED_NAME + "')].partial").value("upda...here"));
     }
 
     @Test
     void resolve_withoutToken_returns401() throws Exception {
         mvc.perform(post("/api/credentials/resolve")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"names\":[\"GITHUB_TOKEN\"]}"))
-            .andExpect(status().isUnauthorized());
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"names\":[\"GITHUB_TOKEN\"]}"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
     void resolve_withInvalidToken_returns401() throws Exception {
         mvc.perform(post("/api/credentials/resolve")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"token\":\"garbage-token\",\"names\":[\"GITHUB_TOKEN\"]}"))
-            .andExpect(status().isUnauthorized());
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"garbage-token\",\"names\":[\"GITHUB_TOKEN\"]}"))
+                .andExpect(status().isUnauthorized());
     }
 }

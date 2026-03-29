@@ -45,23 +45,24 @@ class ExecutionTokenServiceTest {
     void validate_expiredToken_throws() throws Exception {
         // mint() enforces max(3600, ttl), so we can't get a sub-3600s token via mint().
         // Instead, forge a structurally valid token with exp set to the past.
-        String header = Base64.getUrlEncoder().withoutPadding()
-            .encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
+        String header = Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
         long pastExp = Instant.now().minusSeconds(3600).getEpochSecond();
-        String payloadJson = "{\"jti\":\"test-jti\",\"sub\":\"user-1\",\"wid\":\"wf-1\"," +
-            "\"iat\":" + (pastExp - 3600) + ",\"exp\":" + pastExp + "," +
-            "\"scope\":\"credentials\",\"declared_names\":[]}";
-        String payloadB64 = Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(payloadJson.getBytes(StandardCharsets.UTF_8));
+        String payloadJson = "{\"jti\":\"test-jti\",\"sub\":\"user-1\",\"wid\":\"wf-1\"," + "\"iat\":"
+                + (pastExp - 3600) + ",\"exp\":" + pastExp + "," + "\"scope\":\"credentials\",\"declared_names\":[]}";
+        String payloadB64 =
+                Base64.getUrlEncoder().withoutPadding().encodeToString(payloadJson.getBytes(StandardCharsets.UTF_8));
         String signingInput = header + "." + payloadB64;
         Mac mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(masterKey, "HmacSHA256"));
-        String sig = Base64.getUrlEncoder().withoutPadding()
-            .encodeToString(mac.doFinal(signingInput.getBytes(StandardCharsets.UTF_8)));
+        String sig = Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(mac.doFinal(signingInput.getBytes(StandardCharsets.UTF_8)));
         String token = signingInput + "." + sig;
 
         assertThatThrownBy(() -> service.validate(token))
-            .isInstanceOf(ExecutionTokenService.TokenExpiredException.class);
+                .isInstanceOf(ExecutionTokenService.TokenExpiredException.class);
     }
 
     @Test
@@ -71,7 +72,7 @@ class ExecutionTokenServiceTest {
         String tampered = token.substring(0, token.length() - 1) + "X";
 
         assertThatThrownBy(() -> service.validate(tampered))
-            .isInstanceOf(ExecutionTokenService.TokenInvalidException.class);
+                .isInstanceOf(ExecutionTokenService.TokenInvalidException.class);
     }
 
     @Test
@@ -79,12 +80,13 @@ class ExecutionTokenServiceTest {
         String token = service.mint("user-1", "wf-1", List.of(), 3600);
         String[] parts = token.split("\\.");
         // Replace payload with a different base64
-        String fakePayload = java.util.Base64.getUrlEncoder().withoutPadding()
-            .encodeToString("{\"sub\":\"attacker\",\"scope\":\"credentials\"}".getBytes());
+        String fakePayload = java.util.Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString("{\"sub\":\"attacker\",\"scope\":\"credentials\"}".getBytes());
         String tampered = parts[0] + "." + fakePayload + "." + parts[2];
 
         assertThatThrownBy(() -> service.validate(tampered))
-            .isInstanceOf(ExecutionTokenService.TokenInvalidException.class);
+                .isInstanceOf(ExecutionTokenService.TokenInvalidException.class);
     }
 
     @Test
@@ -95,7 +97,7 @@ class ExecutionTokenServiceTest {
         service.revoke(payload.jti(), payload.exp());
 
         assertThatThrownBy(() -> service.validate(token))
-            .isInstanceOf(ExecutionTokenService.TokenRevokedException.class);
+                .isInstanceOf(ExecutionTokenService.TokenRevokedException.class);
     }
 
     @Test

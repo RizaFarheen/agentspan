@@ -99,9 +99,7 @@ public class AgentController {
      * </ul></p>
      */
     @PostMapping("/{workflowId}/respond")
-    public void respondToAgent(
-            @PathVariable String workflowId,
-            @RequestBody Map<String, Object> output) {
+    public void respondToAgent(@PathVariable String workflowId, @RequestBody Map<String, Object> output) {
         agentService.respond(workflowId, output);
     }
 
@@ -110,9 +108,7 @@ public class AgentController {
      * Always returns 200 — unknown workflowIds are silently dropped.
      */
     @PostMapping("/events/{workflowId}")
-    public void pushFrameworkEvent(
-            @PathVariable String workflowId,
-            @RequestBody Map<String, Object> event) {
+    public void pushFrameworkEvent(@PathVariable String workflowId, @RequestBody Map<String, Object> event) {
         agentService.pushFrameworkEvent(workflowId, event);
     }
 
@@ -140,16 +136,12 @@ public class AgentController {
     }
 
     @GetMapping("/{name}")
-    public Map<String, Object> getAgentDef(
-            @PathVariable String name,
-            @RequestParam(required = false) Integer version) {
+    public Map<String, Object> getAgentDef(@PathVariable String name, @RequestParam(required = false) Integer version) {
         return agentService.getAgentDef(name, version);
     }
 
     @DeleteMapping("/{name}")
-    public void deleteAgent(
-            @PathVariable String name,
-            @RequestParam(required = false) Integer version) {
+    public void deleteAgent(@PathVariable String name, @RequestParam(required = false) Integer version) {
         agentService.deleteAgent(name, version);
     }
 
@@ -188,9 +180,7 @@ public class AgentController {
      * Writes directly to ExecutionDAO — does not trigger decide().
      */
     @PostMapping("/{workflowId}/tasks")
-    public InjectTaskResponse injectTask(
-            @PathVariable String workflowId,
-            @RequestBody InjectTaskRequest req) {
+    public InjectTaskResponse injectTask(@PathVariable String workflowId, @RequestBody InjectTaskRequest req) {
         return agentDagService.injectTask(workflowId, req);
     }
 
@@ -203,8 +193,7 @@ public class AgentController {
      * so POST /api/agent/workflow does not conflict with GET /api/agent/{name}.
      */
     @PostMapping("/workflow")
-    public CreateTrackingWorkflowResponse createTrackingWorkflow(
-            @RequestBody CreateTrackingWorkflowRequest req) {
+    public CreateTrackingWorkflowResponse createTrackingWorkflow(@RequestBody CreateTrackingWorkflowRequest req) {
         return agentDagService.createTrackingWorkflow(req);
     }
 }

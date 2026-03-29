@@ -42,10 +42,10 @@ public class ClaudeAgentSdkNormalizer implements AgentConfigNormalizer {
         config.setMetadata(metadata);
 
         ToolConfig worker = ToolConfig.builder()
-            .name(workerName)
-            .description("Claude Agent SDK passthrough worker")
-            .toolType("worker")
-            .build();
+                .name(workerName)
+                .description("Claude Agent SDK passthrough worker")
+                .toolType("worker")
+                .build();
         config.setTools(List.of(worker));
 
         return config;

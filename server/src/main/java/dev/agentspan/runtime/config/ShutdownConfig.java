@@ -32,21 +32,25 @@ public class ShutdownConfig {
 
     @PostConstruct
     public void registerShutdownHook() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Shutdown signal received — completing SSE emitters");
-            streamRegistry.completeAll();
+        Runtime.getRuntime()
+                .addShutdownHook(new Thread(
+                        () -> {
+                            logger.info("Shutdown signal received — completing SSE emitters");
+                            streamRegistry.completeAll();
 
-            // Conductor-core's WorkflowSweeper runs in a non-daemon thread with a
-            // tight pollAndSweep loop that ignores interruption. Spring's
-            // ExecutorService.close() waits forever for it. Force-halt as a safety net.
-            try {
-                Thread.sleep(FORCE_HALT_DELAY_SECONDS * 1000L);
-                logger.warn("Forcing JVM halt — conductor-core threads did not stop within {}s",
-                        FORCE_HALT_DELAY_SECONDS);
-                Runtime.getRuntime().halt(0);
-            } catch (InterruptedException e) {
-                // Normal shutdown completed before timeout — good
-            }
-        }, "agent-runtime-shutdown"));
+                            // Conductor-core's WorkflowSweeper runs in a non-daemon thread with a
+                            // tight pollAndSweep loop that ignores interruption. Spring's
+                            // ExecutorService.close() waits forever for it. Force-halt as a safety net.
+                            try {
+                                Thread.sleep(FORCE_HALT_DELAY_SECONDS * 1000L);
+                                logger.warn(
+                                        "Forcing JVM halt — conductor-core threads did not stop within {}s",
+                                        FORCE_HALT_DELAY_SECONDS);
+                                Runtime.getRuntime().halt(0);
+                            } catch (InterruptedException e) {
+                                // Normal shutdown completed before timeout — good
+                            }
+                        },
+                        "agent-runtime-shutdown"));
     }
 }

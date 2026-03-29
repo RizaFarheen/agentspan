@@ -37,10 +37,7 @@ class AgentHumanTaskTest {
 
         TaskModel task = new TaskModel();
         task.setReferenceTaskName("hitl_approve");
-        task.setInputData(Map.of(
-                "tool_name", "publish_article",
-                "parameters", Map.of("title", "Test")
-        ));
+        task.setInputData(Map.of("tool_name", "publish_article", "parameters", Map.of("title", "Test")));
 
         humanTask.start(workflow, task, null);
 
@@ -75,8 +72,7 @@ class AgentHumanTaskTest {
 
     @Test
     void startContinuesEvenIfSseFails() {
-        doThrow(new RuntimeException("SSE send failed"))
-                .when(streamRegistry).send(anyString(), any());
+        doThrow(new RuntimeException("SSE send failed")).when(streamRegistry).send(anyString(), any());
 
         WorkflowModel workflow = new WorkflowModel();
         workflow.setWorkflowId("wf-3");
@@ -84,8 +80,7 @@ class AgentHumanTaskTest {
         task.setReferenceTaskName("hitl");
 
         // Should not throw
-        assertThatCode(() -> humanTask.start(workflow, task, null))
-                .doesNotThrowAnyException();
+        assertThatCode(() -> humanTask.start(workflow, task, null)).doesNotThrowAnyException();
 
         // Task should still be IN_PROGRESS even if SSE failed
         assertThat(task.getStatus()).isEqualTo(TaskModel.Status.IN_PROGRESS);

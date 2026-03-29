@@ -72,6 +72,7 @@ public class AgentRun {
         private String status;
         /** Populated for {@code SUB_WORKFLOW} tasks — the child workflow ID. */
         private String subWorkflowId;
+
         private Map<String, Object> outputData;
     }
 }

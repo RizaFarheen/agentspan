@@ -20,9 +20,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RequestContext {
-    private String  requestId;      // UUID per HTTP request
-    private String  workflowId;     // populated when request is workflow-scoped
-    private String  executionToken; // minted execution token, if present
-    private User    user;
+    private String requestId; // UUID per HTTP request
+    private String workflowId; // populated when request is workflow-scoped
+    private String executionToken; // minted execution token, if present
+    private User user;
     private Instant createdAt;
 }

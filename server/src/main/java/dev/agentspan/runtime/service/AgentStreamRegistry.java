@@ -35,12 +35,10 @@ public class AgentStreamRegistry {
     private static final long HEARTBEAT_INTERVAL_MS = 15_000; // 15 seconds
 
     /** Connected SSE emitters per workflow ID. */
-    private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters =
-            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
     /** Event buffer per workflow ID (for replay on reconnect). */
-    private final ConcurrentHashMap<String, BoundedEventBuffer> buffers =
-            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, BoundedEventBuffer> buffers = new ConcurrentHashMap<>();
 
     /** Child workflow → parent workflow aliases (for sub-workflow event forwarding). */
     private final ConcurrentHashMap<String, String> aliases = new ConcurrentHashMap<>();
@@ -109,8 +107,7 @@ public class AgentStreamRegistry {
         String targetId = aliases.getOrDefault(workflowId, workflowId);
 
         // Assign monotonic sequence ID
-        long seqId = sequences.computeIfAbsent(targetId, k -> new AtomicLong(0))
-                .incrementAndGet();
+        long seqId = sequences.computeIfAbsent(targetId, k -> new AtomicLong(0)).incrementAndGet();
         event.setId(seqId);
 
         // Buffer the event

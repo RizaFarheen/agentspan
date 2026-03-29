@@ -51,13 +51,12 @@ public class MasterKeyConfig {
             try {
                 decoded = Base64.getDecoder().decode(keyBase64.trim());
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException(
-                    "AGENTSPAN_MASTER_KEY is not valid base64: " + e.getMessage(), e);
+                throw new IllegalArgumentException("AGENTSPAN_MASTER_KEY is not valid base64: " + e.getMessage(), e);
             }
             if (decoded.length != KEY_BYTES) {
                 throw new IllegalArgumentException(
-                    "AGENTSPAN_MASTER_KEY must be exactly 32 bytes (256-bit) after base64 decoding, " +
-                    "got " + decoded.length + " bytes. Generate with: openssl rand -base64 32");
+                        "AGENTSPAN_MASTER_KEY must be exactly 32 bytes (256-bit) after base64 decoding, " + "got "
+                                + decoded.length + " bytes. Generate with: openssl rand -base64 32");
             }
             log.info("Credential master key loaded from AGENTSPAN_MASTER_KEY");
             return decoded;
@@ -68,16 +67,18 @@ public class MasterKeyConfig {
     }
 
     private byte[] autoGenerate(Path homeDir) {
-        Path keyDir  = homeDir.resolve(".agentspan");
+        Path keyDir = homeDir.resolve(".agentspan");
         Path keyFile = keyDir.resolve("master.key");
 
         try {
             if (Files.exists(keyFile)) {
-                byte[] existing = Base64.getDecoder().decode(Files.readString(keyFile).trim());
+                byte[] existing =
+                        Base64.getDecoder().decode(Files.readString(keyFile).trim());
                 if (existing.length == KEY_BYTES) {
-                    log.warn("Credential master key loaded from {} — " +
-                             "back up this file; losing it means losing all stored credentials",
-                             keyFile);
+                    log.warn(
+                            "Credential master key loaded from {} — "
+                                    + "back up this file; losing it means losing all stored credentials",
+                            keyFile);
                     return existing;
                 }
                 // Corrupt file — regenerate
@@ -105,8 +106,7 @@ public class MasterKeyConfig {
 
         } catch (IOException e) {
             throw new IllegalStateException(
-                "Failed to auto-generate credential master key at " + keyFile + ": " + e.getMessage(), e);
+                    "Failed to auto-generate credential master key at " + keyFile + ": " + e.getMessage(), e);
         }
     }
-
 }

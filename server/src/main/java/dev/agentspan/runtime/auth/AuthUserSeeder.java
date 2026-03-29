@@ -33,8 +33,7 @@ public class AuthUserSeeder {
     public void seed() {
         for (AuthProperties.UserEntry entry : authProperties.getUsers()) {
             String name = entry.getName() != null ? entry.getName() : entry.getUsername();
-            userRepository.createIfNotExists(
-                entry.getUsername(), name, entry.getEmail(), entry.getPassword());
+            userRepository.createIfNotExists(entry.getUsername(), name, entry.getEmail(), entry.getPassword());
             log.info("Ensured user exists: {}", entry.getUsername());
         }
     }

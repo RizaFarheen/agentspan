@@ -37,9 +37,9 @@ public class ExecutionTokenService {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final long ONE_HOUR_SECONDS = 3600;
     private static final String SCOPE = "credentials";
-    private static final String HEADER =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(
-            "{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
+    private static final String HEADER = Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
 
     private final byte[] masterKey;
     private final ConcurrentHashMap<String, Long> denyList = new ConcurrentHashMap<>();
@@ -57,8 +57,7 @@ public class ExecutionTokenService {
      * @param workflowTimeoutSeconds workflow timeout; TTL = max(3600, workflowTimeoutSeconds)
      * @return signed token string
      */
-    public String mint(String userId, String workflowId,
-                       List<String> declaredNames, long workflowTimeoutSeconds) {
+    public String mint(String userId, String workflowId, List<String> declaredNames, long workflowTimeoutSeconds) {
         long now = Instant.now().getEpochSecond();
         long ttl = Math.max(ONE_HOUR_SECONDS, workflowTimeoutSeconds);
         long exp = now + ttl;
@@ -74,8 +73,9 @@ public class ExecutionTokenService {
 
         try {
             String payloadJson = MAPPER.writeValueAsString(payload);
-            String payloadB64 = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(payloadJson.getBytes(StandardCharsets.UTF_8));
+            String payloadB64 = Base64.getUrlEncoder()
+                    .withoutPadding()
+                    .encodeToString(payloadJson.getBytes(StandardCharsets.UTF_8));
             String signingInput = HEADER + "." + payloadB64;
             String sig = hmacSha256B64(signingInput);
             return signingInput + "." + sig;
@@ -106,8 +106,7 @@ public class ExecutionTokenService {
 
         Map<String, Object> claims;
         try {
-            String payloadJson = new String(
-                Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+            String payloadJson = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
             claims = MAPPER.readValue(payloadJson, Map.class);
         } catch (Exception e) {
             throw new TokenInvalidException("Failed to parse token payload");
@@ -124,13 +123,7 @@ public class ExecutionTokenService {
         }
 
         List<String> names = (List<String>) claims.getOrDefault("declared_names", List.of());
-        return new TokenPayload(
-            jti,
-            (String) claims.get("sub"),
-            (String) claims.get("wid"),
-            exp,
-            names
-        );
+        return new TokenPayload(jti, (String) claims.get("sub"), (String) claims.get("wid"), exp, names);
     }
 
     /**
@@ -186,21 +179,23 @@ public class ExecutionTokenService {
 
     // ── Value types ───────────────────────────────────────────────────
 
-    public record TokenPayload(
-        String jti,
-        String userId,
-        String workflowId,
-        long   exp,
-        List<String> declaredNames
-    ) {}
+    public record TokenPayload(String jti, String userId, String workflowId, long exp, List<String> declaredNames) {}
 
     public static class TokenInvalidException extends RuntimeException {
-        public TokenInvalidException(String msg) { super(msg); }
+        public TokenInvalidException(String msg) {
+            super(msg);
+        }
     }
+
     public static class TokenExpiredException extends RuntimeException {
-        public TokenExpiredException(String msg) { super(msg); }
+        public TokenExpiredException(String msg) {
+            super(msg);
+        }
     }
+
     public static class TokenRevokedException extends RuntimeException {
-        public TokenRevokedException(String msg) { super(msg); }
+        public TokenRevokedException(String msg) {
+            super(msg);
+        }
     }
 }

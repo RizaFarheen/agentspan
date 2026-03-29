@@ -33,10 +33,9 @@ public class AgentCompiler {
 
     private static final List<String> WORKFLOW_INPUTS = List.of("prompt", "session_id", "media", "cwd");
     private static final Map<String, Object> USER_MESSAGE = Map.of(
-        "role", "user",
-        "message", "${workflow.input.prompt}",
-        "media", "${workflow.input.media}"
-    );
+            "role", "user",
+            "message", "${workflow.input.prompt}",
+            "media", "${workflow.input.media}");
 
     private int timeoutSeconds = 0;
     private int llmRetryCount = 3;
@@ -73,12 +72,11 @@ public class AgentCompiler {
             // Graph-structure: custom StateGraph with node/edge workflow
             wf = compileGraphStructure(config);
         } else if (config.isExternal()) {
-            throw new IllegalArgumentException(
-                "Cannot compile external agent '" + config.getName() + "' directly. " +
-                "External agents are compiled as SubWorkflowTask references."
-            );
+            throw new IllegalArgumentException("Cannot compile external agent '" + config.getName() + "' directly. "
+                    + "External agents are compiled as SubWorkflowTask references.");
         } else {
-            boolean hasAgents = config.getAgents() != null && !config.getAgents().isEmpty();
+            boolean hasAgents =
+                    config.getAgents() != null && !config.getAgents().isEmpty();
             boolean hasTools = config.getTools() != null && !config.getTools().isEmpty();
 
             // Multi-agent with NO tools -> delegate to MultiAgentCompiler
@@ -86,8 +84,11 @@ public class AgentCompiler {
                 wf = new MultiAgentCompiler(this).compile(config);
             } else if (hasAgents && hasTools) {
                 // Both tools AND sub-agents -> hybrid mode
-                log.debug("Hybrid mode: agent '{}' has {} tools and {} sub-agents",
-                    config.getName(), config.getTools().size(), config.getAgents().size());
+                log.debug(
+                        "Hybrid mode: agent '{}' has {} tools and {} sub-agents",
+                        config.getName(),
+                        config.getTools().size(),
+                        config.getAgents().size());
                 wf = compileHybrid(config);
             } else if (!hasTools) {
                 // No tools -> simple single LLM call
@@ -105,8 +106,8 @@ public class AgentCompiler {
         // also carry their own agentDef — AgentService only stamps the top-level def.
         if (!isFrameworkPassthrough(config) && !isGraphStructure(config)) {
             Set<String> caps = collectCapabilities(config);
-            Map<String, Object> metadata = wf.getMetadata() != null
-                ? new LinkedHashMap<>(wf.getMetadata()) : new LinkedHashMap<>();
+            Map<String, Object> metadata =
+                    wf.getMetadata() != null ? new LinkedHashMap<>(wf.getMetadata()) : new LinkedHashMap<>();
             metadata.put("agent_capabilities", new ArrayList<>(caps));
             try {
                 metadata.put("agentDef", MAPPER.convertValue(config, Map.class));
@@ -154,9 +155,8 @@ public class AgentCompiler {
             tasks.add(llmTask);
             wf.setTasks(tasks);
             wf.setOutputParameters(Map.of(
-                "result", ref(llmRef + ".output.result"),
-                "finishReason", ref(llmRef + ".output.finishReason")
-            ));
+                    "result", ref(llmRef + ".output.result"),
+                    "finishReason", ref(llmRef + ".output.finishReason")));
             return wf;
         }
 
@@ -171,7 +171,7 @@ public class AgentCompiler {
         // Compile guardrails inside loop
         GuardrailCompiler gc = new GuardrailCompiler();
         List<GuardrailCompiler.GuardrailTaskResult> guardrailResults =
-            gc.compileGuardrailTasks(outputGuardrails, config.getName(), contentRef);
+                gc.compileGuardrailTasks(outputGuardrails, config.getName(), contentRef);
 
         List<String[]> guardrailRefs = new ArrayList<>(); // [refName, isInline]
         List<String> retryRefs = new ArrayList<>();
@@ -180,12 +180,16 @@ public class AgentCompiler {
             GuardrailCompiler.GuardrailTaskResult gr = guardrailResults.get(idx);
             String suffix = guardrailResults.size() > 1 ? "_" + idx : "";
             GuardrailCompiler.GuardrailRoutingResult routing = gc.compileGuardrailRouting(
-                outputGuardrails.get(idx), gr.getRefName(), contentRef,
-                config.getName(), suffix, gr.isInline(), config.getModel()
-            );
+                    outputGuardrails.get(idx),
+                    gr.getRefName(),
+                    contentRef,
+                    config.getName(),
+                    suffix,
+                    gr.isInline(),
+                    config.getModel());
             loopTasks.addAll(gr.getTasks());
             loopTasks.add(routing.getSwitchTask());
-            guardrailRefs.add(new String[]{gr.getRefName(), String.valueOf(gr.isInline())});
+            guardrailRefs.add(new String[] {gr.getRefName(), String.valueOf(gr.isInline())});
             retryRefs.add(routing.getRetryRef());
         }
 
@@ -201,9 +205,8 @@ public class AgentCompiler {
         // Build termination condition
         String guardrailContinue = buildGuardrailContinue(guardrailRefs);
         String termCondition = String.format(
-            "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s)) ) { true; } else { false; }",
-            loopRef, maxTurns, llmRef, llmRef, guardrailContinue
-        );
+                "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s)) ) { true; } else { false; }",
+                loopRef, maxTurns, llmRef, llmRef, guardrailContinue);
 
         Map<String, Object> loopInputs = new LinkedHashMap<>();
         loopInputs.put(loopRef, "${" + loopRef + "}");
@@ -220,9 +223,8 @@ public class AgentCompiler {
         tasks.add(resolveTask);
         wf.setTasks(tasks);
         wf.setOutputParameters(Map.of(
-            "result", ref(resolveRef + ".output.result.result"),
-            "finishReason", ref(resolveRef + ".output.result.finishReason")
-        ));
+                "result", ref(resolveRef + ".output.result.result"),
+                "finishReason", ref(resolveRef + ".output.result.finishReason")));
         applyTimeout(wf, config);
         return wf;
     }
@@ -249,23 +251,22 @@ public class AgentCompiler {
 
         if (hasMcp || hasApi) {
             List<ToolConfig> staticTools = tools.stream()
-                    .filter(t -> !"mcp".equals(t.getToolType()) && !"api".equals(t.getToolType())).toList();
-            List<ToolConfig> mcpTools = tools.stream()
-                    .filter(t -> "mcp".equals(t.getToolType())).toList();
-            List<ToolConfig> apiTools = tools.stream()
-                    .filter(t -> "api".equals(t.getToolType())).toList();
+                    .filter(t -> !"mcp".equals(t.getToolType()) && !"api".equals(t.getToolType()))
+                    .toList();
+            List<ToolConfig> mcpTools =
+                    tools.stream().filter(t -> "mcp".equals(t.getToolType())).toList();
+            List<ToolConfig> apiTools =
+                    tools.stream().filter(t -> "api".equals(t.getToolType())).toList();
 
             List<Map<String, Object>> staticSpecs = tc.compileToolSpecs(staticTools);
 
             if (hasMcp && hasApi) {
-                discoveryResult = tc.buildDiscoveryTasks(
-                        config.getName(), mcpTools, apiTools, staticSpecs, config.getModel());
+                discoveryResult =
+                        tc.buildDiscoveryTasks(config.getName(), mcpTools, apiTools, staticSpecs, config.getModel());
             } else if (hasMcp) {
-                discoveryResult = tc.buildMcpDiscoveryTasks(
-                        config.getName(), mcpTools, staticSpecs, config.getModel());
+                discoveryResult = tc.buildMcpDiscoveryTasks(config.getName(), mcpTools, staticSpecs, config.getModel());
             } else {
-                discoveryResult = tc.buildApiDiscoveryTasks(
-                        config.getName(), apiTools, staticSpecs, config.getModel());
+                discoveryResult = tc.buildApiDiscoveryTasks(config.getName(), apiTools, staticSpecs, config.getModel());
             }
         } else {
             toolSpecs = tc.compileToolSpecs(tools);
@@ -289,21 +290,24 @@ public class AgentCompiler {
             @SuppressWarnings("unchecked")
             List<Object> msgs = (List<Object>) llmTask.getInputParameters().get("messages");
             msgs.add(Map.of(
-                "role", "system",
-                "message", "${workflow.variables._human_feedback}"
-            ));
+                    "role", "system",
+                    "message", "${workflow.variables._human_feedback}"));
         }
 
         // Tool call routing SwitchTask (with tool-level guardrail metadata)
         ToolCompiler.ToolCallRoutingResult toolRoutingResult;
         if (discoveryResult != null) {
             toolRoutingResult = tc.buildToolCallRoutingDynamicWithResult(
-                config.getName(), llmRef, tools, hasApproval, config.getModel(),
-                discoveryResult.getMcpConfigRef(), discoveryResult.getApiConfigRef());
+                    config.getName(),
+                    llmRef,
+                    tools,
+                    hasApproval,
+                    config.getModel(),
+                    discoveryResult.getMcpConfigRef(),
+                    discoveryResult.getApiConfigRef());
         } else {
-            toolRoutingResult = tc.buildToolCallRoutingWithResult(
-                config.getName(), llmRef, tools, hasApproval, config.getModel()
-            );
+            toolRoutingResult =
+                    tc.buildToolCallRoutingWithResult(config.getName(), llmRef, tools, hasApproval, config.getModel());
         }
         WorkflowTask toolRouter = toolRoutingResult.getRouterTask();
 
@@ -333,18 +337,22 @@ public class AgentCompiler {
             String contentRef = ref(llmRef + ".output.result");
             GuardrailCompiler gc = new GuardrailCompiler();
             List<GuardrailCompiler.GuardrailTaskResult> guardrailResults =
-                gc.compileGuardrailTasks(outputGuardrails, config.getName(), contentRef);
+                    gc.compileGuardrailTasks(outputGuardrails, config.getName(), contentRef);
 
             for (int idx = 0; idx < guardrailResults.size(); idx++) {
                 GuardrailCompiler.GuardrailTaskResult gr = guardrailResults.get(idx);
                 String suffix = guardrailResults.size() > 1 ? "_" + idx : "";
                 GuardrailCompiler.GuardrailRoutingResult routing = gc.compileGuardrailRouting(
-                    outputGuardrails.get(idx), gr.getRefName(), contentRef,
-                    config.getName(), suffix, gr.isInline(), config.getModel()
-                );
+                        outputGuardrails.get(idx),
+                        gr.getRefName(),
+                        contentRef,
+                        config.getName(),
+                        suffix,
+                        gr.isInline(),
+                        config.getModel());
                 loopTasks.addAll(gr.getTasks());
                 loopTasks.add(routing.getSwitchTask());
-                guardrailRefs.add(new String[]{gr.getRefName(), String.valueOf(gr.isInline())});
+                guardrailRefs.add(new String[] {gr.getRefName(), String.valueOf(gr.isInline())});
                 retryRefs.add(routing.getRetryRef());
             }
         }
@@ -367,9 +375,8 @@ public class AgentCompiler {
         // Optional stop_when worker
         String stopWhenRef = null;
         if (config.getStopWhen() != null) {
-            WorkflowTask stopWhenTask = TerminationCompiler.compileStopWhen(
-                config.getStopWhen().getTaskName(), config.getName(), llmRef
-            );
+            WorkflowTask stopWhenTask =
+                    TerminationCompiler.compileStopWhen(config.getStopWhen().getTaskName(), config.getName(), llmRef);
             loopTasks.add(stopWhenTask);
             stopWhenRef = config.getName() + "_stop_when";
         }
@@ -377,9 +384,8 @@ public class AgentCompiler {
         // Optional termination condition
         String terminationRef = null;
         if (config.getTermination() != null) {
-            WorkflowTask termTask = TerminationCompiler.compileTermination(
-                config.getTermination(), config.getName(), llmRef
-            );
+            WorkflowTask termTask =
+                    TerminationCompiler.compileTermination(config.getTermination(), config.getName(), llmRef);
             loopTasks.add(termTask);
             terminationRef = config.getName() + "_termination";
         }
@@ -388,10 +394,8 @@ public class AgentCompiler {
         String loopRef = config.getName() + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
-        String hasToolCalls = String.format(
-            "($.%s['toolCalls'] != null && $.%s['toolCalls'].length > 0)",
-            llmRef, llmRef
-        );
+        String hasToolCalls =
+                String.format("($.%s['toolCalls'] != null && $.%s['toolCalls'].length > 0)", llmRef, llmRef);
 
         String loopReason;
         if (!guardrailRefs.isEmpty()) {
@@ -403,9 +407,8 @@ public class AgentCompiler {
 
         StringBuilder termCondition = new StringBuilder();
         termCondition.append(String.format(
-            "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || %s)",
-            loopRef, maxTurns, llmRef, llmRef, loopReason
-        ));
+                "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || %s)",
+                loopRef, maxTurns, llmRef, llmRef, loopReason));
         if (stopWhenRef != null) {
             termCondition.append(String.format(" && $.%s.should_continue == true", stopWhenRef));
         }
@@ -457,23 +460,19 @@ public class AgentCompiler {
             checkTask.setType("INLINE");
             checkTask.setTaskReferenceName(checkRef);
             checkTask.setInputParameters(Map.of(
-                "evaluatorType", "graaljs",
-                "expression", JavaScriptBuilder.requiredToolsCheckScript(config.getRequiredTools()),
-                "completedTaskNames", ref(loopRef + ".output")
-            ));
+                    "evaluatorType", "graaljs",
+                    "expression", JavaScriptBuilder.requiredToolsCheckScript(config.getRequiredTools()),
+                    "completedTaskNames", ref(loopRef + ".output")));
 
             String outerLoopRef = config.getName() + "_required_tools_loop";
             String outerCondition = String.format(
-                "if ( $.%s.output.satisfied == false && $.%s['iteration'] < 3 ) { true; } else { false; }",
-                checkRef, outerLoopRef
-            );
+                    "if ( $.%s.output.satisfied == false && $.%s['iteration'] < 3 ) { true; } else { false; }",
+                    checkRef, outerLoopRef);
             Map<String, Object> outerInputs = new LinkedHashMap<>();
             outerInputs.put(checkRef, "${" + checkRef + "}");
             outerInputs.put(outerLoopRef, "${" + outerLoopRef + "}");
 
-            WorkflowTask outerLoop = buildDoWhile(
-                outerLoopRef, outerCondition, List.of(loop, checkTask), outerInputs
-            );
+            WorkflowTask outerLoop = buildDoWhile(outerLoopRef, outerCondition, List.of(loop, checkTask), outerInputs);
             allTasks.add(outerLoop);
         } else {
             allTasks.add(loop);
@@ -519,15 +518,18 @@ public class AgentCompiler {
         // Build transfer tools for each sub-agent
         List<ToolConfig> allTools = new ArrayList<>(config.getTools());
         for (AgentConfig sub : config.getAgents()) {
-            String subDesc = sub.getDescription() != null && !sub.getDescription().isEmpty()
-                ? sub.getDescription()
-                : (sub.getInstructions() instanceof String ? (String) sub.getInstructions() : "Agent: " + sub.getName());
+            String subDesc =
+                    sub.getDescription() != null && !sub.getDescription().isEmpty()
+                            ? sub.getDescription()
+                            : (sub.getInstructions() instanceof String
+                                    ? (String) sub.getInstructions()
+                                    : "Agent: " + sub.getName());
             ToolConfig transferTool = ToolConfig.builder()
-                .name(config.getName() + "_transfer_to_" + sub.getName())
-                .description("Transfer the conversation to " + sub.getName() + ". " + subDesc)
-                .inputSchema(Map.of("type", "object", "properties", Map.of(), "required", List.of()))
-                .toolType("worker")
-                .build();
+                    .name(config.getName() + "_transfer_to_" + sub.getName())
+                    .description("Transfer the conversation to " + sub.getName() + ". " + subDesc)
+                    .inputSchema(Map.of("type", "object", "properties", Map.of(), "required", List.of()))
+                    .toolType("worker")
+                    .build();
             allTools.add(transferTool);
         }
 
@@ -546,22 +548,21 @@ public class AgentCompiler {
 
         if (hasMcp || hasApi) {
             List<ToolConfig> staticTools = allTools.stream()
-                    .filter(t -> !"mcp".equals(t.getToolType()) && !"api".equals(t.getToolType())).toList();
-            List<ToolConfig> mcpTools = allTools.stream()
-                    .filter(t -> "mcp".equals(t.getToolType())).toList();
-            List<ToolConfig> apiTools = allTools.stream()
-                    .filter(t -> "api".equals(t.getToolType())).toList();
+                    .filter(t -> !"mcp".equals(t.getToolType()) && !"api".equals(t.getToolType()))
+                    .toList();
+            List<ToolConfig> mcpTools =
+                    allTools.stream().filter(t -> "mcp".equals(t.getToolType())).toList();
+            List<ToolConfig> apiTools =
+                    allTools.stream().filter(t -> "api".equals(t.getToolType())).toList();
             List<Map<String, Object>> staticSpecs = tc.compileToolSpecs(staticTools);
 
             if (hasMcp && hasApi) {
-                discoveryResult = tc.buildDiscoveryTasks(
-                        config.getName(), mcpTools, apiTools, staticSpecs, config.getModel());
+                discoveryResult =
+                        tc.buildDiscoveryTasks(config.getName(), mcpTools, apiTools, staticSpecs, config.getModel());
             } else if (hasMcp) {
-                discoveryResult = tc.buildMcpDiscoveryTasks(
-                        config.getName(), mcpTools, staticSpecs, config.getModel());
+                discoveryResult = tc.buildMcpDiscoveryTasks(config.getName(), mcpTools, staticSpecs, config.getModel());
             } else {
-                discoveryResult = tc.buildApiDiscoveryTasks(
-                        config.getName(), apiTools, staticSpecs, config.getModel());
+                discoveryResult = tc.buildApiDiscoveryTasks(config.getName(), apiTools, staticSpecs, config.getModel());
             }
         } else {
             toolSpecs = tc.compileToolSpecs(allTools);
@@ -580,12 +581,16 @@ public class AgentCompiler {
         ToolCompiler.ToolCallRoutingResult toolRoutingResult;
         if (discoveryResult != null) {
             toolRoutingResult = tc.buildToolCallRoutingDynamicWithResult(
-                config.getName(), llmRef, allTools, hasApproval, config.getModel(),
-                discoveryResult.getMcpConfigRef(), discoveryResult.getApiConfigRef());
+                    config.getName(),
+                    llmRef,
+                    allTools,
+                    hasApproval,
+                    config.getModel(),
+                    discoveryResult.getMcpConfigRef(),
+                    discoveryResult.getApiConfigRef());
         } else {
             toolRoutingResult = tc.buildToolCallRoutingWithResult(
-                config.getName(), llmRef, allTools, hasApproval, config.getModel()
-            );
+                    config.getName(), llmRef, allTools, hasApproval, config.getModel());
         }
         WorkflowTask toolRouter = toolRoutingResult.getRouterTask();
 
@@ -612,17 +617,21 @@ public class AgentCompiler {
             String contentRef = ref(llmRef + ".output.result");
             GuardrailCompiler gc = new GuardrailCompiler();
             List<GuardrailCompiler.GuardrailTaskResult> guardrailResults =
-                gc.compileGuardrailTasks(outputGuardrails, config.getName(), contentRef);
+                    gc.compileGuardrailTasks(outputGuardrails, config.getName(), contentRef);
             for (int idx = 0; idx < guardrailResults.size(); idx++) {
                 GuardrailCompiler.GuardrailTaskResult gr = guardrailResults.get(idx);
                 String suffix = guardrailResults.size() > 1 ? "_" + idx : "";
                 GuardrailCompiler.GuardrailRoutingResult routing = gc.compileGuardrailRouting(
-                    outputGuardrails.get(idx), gr.getRefName(), contentRef,
-                    config.getName(), suffix, gr.isInline(), config.getModel()
-                );
+                        outputGuardrails.get(idx),
+                        gr.getRefName(),
+                        contentRef,
+                        config.getName(),
+                        suffix,
+                        gr.isInline(),
+                        config.getModel());
                 loopTasks.addAll(gr.getTasks());
                 loopTasks.add(routing.getSwitchTask());
-                guardrailRefs.add(new String[]{gr.getRefName(), String.valueOf(gr.isInline())});
+                guardrailRefs.add(new String[] {gr.getRefName(), String.valueOf(gr.isInline())});
                 retryRefs.add(routing.getRetryRef());
             }
         }
@@ -645,10 +654,8 @@ public class AgentCompiler {
         String loopRef = config.getName() + "_loop";
         int maxTurns = config.getMaxTurns() > 0 ? config.getMaxTurns() : 25;
 
-        String hasToolCalls = String.format(
-            "($.%s['toolCalls'] != null && $.%s['toolCalls'].length > 0)",
-            llmRef, llmRef
-        );
+        String hasToolCalls =
+                String.format("($.%s['toolCalls'] != null && $.%s['toolCalls'].length > 0)", llmRef, llmRef);
         String notTransfer = String.format("($.%s.is_transfer != true)", checkTransferRef);
 
         String loopReason;
@@ -660,9 +667,8 @@ public class AgentCompiler {
         }
 
         String termCondition = String.format(
-            "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s && %s)) ) { true; } else { false; }",
-            loopRef, maxTurns, llmRef, llmRef, loopReason, notTransfer
-        );
+                "if ( $.%s['iteration'] < %d && ($.%s['finishReason'] == 'LENGTH' || $.%s['finishReason'] == 'MAX_TOKENS' || (%s && %s)) ) { true; } else { false; }",
+                loopRef, maxTurns, llmRef, llmRef, loopReason, notTransfer);
 
         Map<String, Object> loopInputs = new LinkedHashMap<>();
         loopInputs.put(loopRef, "${" + loopRef + "}");
@@ -677,14 +683,13 @@ public class AgentCompiler {
         transferSwitch.setTaskReferenceName(config.getName() + "_transfer_check");
         transferSwitch.setEvaluatorType("value-param");
         transferSwitch.setExpression("switchCaseValue");
-        transferSwitch.setInputParameters(Map.of(
-            "switchCaseValue", ref(checkTransferRef + ".output.transfer_to")
-        ));
+        transferSwitch.setInputParameters(Map.of("switchCaseValue", ref(checkTransferRef + ".output.transfer_to")));
 
         Map<String, List<WorkflowTask>> transferCases = new LinkedHashMap<>();
         for (AgentConfig sub : config.getAgents()) {
             String subTaskRef = config.getName() + "_transfer_" + sub.getName();
-            WorkflowTask subTask = compileSubAgent(sub, subTaskRef, "${workflow.input.prompt}", "${workflow.input.media}");
+            WorkflowTask subTask =
+                    compileSubAgent(sub, subTaskRef, "${workflow.input.prompt}", "${workflow.input.media}");
             transferCases.put(sub.getName(), List.of(subTask));
         }
         transferSwitch.setDecisionCases(transferCases);
@@ -721,10 +726,7 @@ public class AgentCompiler {
         for (AgentConfig sub : config.getAgents()) {
             outputRefs.put(sub.getName(), ref(config.getName() + "_transfer_" + sub.getName() + ".output.result"));
         }
-        wf.setOutputParameters(Map.of(
-            "result", outputRefs,
-            "finishReason", ref(llmRef + ".output.finishReason")
-        ));
+        wf.setOutputParameters(Map.of("result", outputRefs, "finishReason", ref(llmRef + ".output.finishReason")));
         applyTimeout(wf, config);
         return wf;
     }
@@ -748,10 +750,10 @@ public class AgentCompiler {
             // Ensure the sub-agent has a worker tool if not already set
             if (sub.getTools() == null || sub.getTools().isEmpty()) {
                 ToolConfig worker = ToolConfig.builder()
-                    .name(sub.getName())
-                    .description("Claude Agent SDK passthrough worker")
-                    .toolType("worker")
-                    .build();
+                        .name(sub.getName())
+                        .description("Claude Agent SDK passthrough worker")
+                        .toolType("worker")
+                        .build();
                 sub.setTools(List.of(worker));
             }
         }
@@ -809,12 +811,13 @@ public class AgentCompiler {
         task.setType("INLINE");
         task.setTaskReferenceName(coerceRefName);
         task.setInputParameters(Map.of(
-            "evaluatorType", "graaljs",
-            "expression", "(function(){ var v = $.raw; " +
-                "return (v == null || v === undefined) ? '' : " +
-                "(typeof v === 'object' ? JSON.stringify(v) : String(v)); })()",
-            "raw", rawRef
-        ));
+                "evaluatorType",
+                "graaljs",
+                "expression",
+                "(function(){ var v = $.raw; " + "return (v == null || v === undefined) ? '' : "
+                        + "(typeof v === 'object' ? JSON.stringify(v) : String(v)); })()",
+                "raw",
+                rawRef));
         return task;
     }
 
@@ -839,7 +842,8 @@ public class AgentCompiler {
         return wf;
     }
 
-    WorkflowTask buildLlmTask(AgentConfig config, ParsedModel parsed, String llmRef, List<Map<String, Object>> toolSpecs) {
+    WorkflowTask buildLlmTask(
+            AgentConfig config, ParsedModel parsed, String llmRef, List<Map<String, Object>> toolSpecs) {
         WorkflowTask llm = new WorkflowTask();
         llm.setName("LLM_CHAT_COMPLETE");
         llm.setTaskReferenceName(llmRef);
@@ -854,10 +858,10 @@ public class AgentCompiler {
 
         // Handle instructions
         Object instructions = config.getInstructions();
-        boolean useTemplate = instructions instanceof Map &&
-            ((Map<?, ?>) instructions).containsKey("name") &&
-            ((Map<?, ?>) instructions).containsKey("type") &&
-            "prompt_template".equals(((Map<?, ?>) instructions).get("type"));
+        boolean useTemplate = instructions instanceof Map
+                && ((Map<?, ?>) instructions).containsKey("name")
+                && ((Map<?, ?>) instructions).containsKey("type")
+                && "prompt_template".equals(((Map<?, ?>) instructions).get("type"));
 
         if (useTemplate) {
             @SuppressWarnings("unchecked")
@@ -871,7 +875,8 @@ public class AgentCompiler {
             }
         } else {
             // Inline string instructions
-            String instrText = resolveInstructions(config, config.getName() + "_instructions").getText();
+            String instrText = resolveInstructions(config, config.getName() + "_instructions")
+                    .getText();
             if (toolSpecs != null && instrText.isEmpty()) {
                 instrText = "You are a helpful assistant.";
             }
@@ -885,12 +890,12 @@ public class AgentCompiler {
                 String schemaStr = simplifySchema(resolved);
                 if (toolSpecs != null) {
                     instrText += "\n\nWhen providing your final answer, respond "
-                        + "with a JSON object matching this schema: " + schemaStr + ". "
-                        + "Output only valid JSON.";
+                            + "with a JSON object matching this schema: " + schemaStr + ". "
+                            + "Output only valid JSON.";
                 } else {
                     instrText += (instrText.isEmpty() ? "" : "\n\n")
-                        + "Respond with a JSON object matching this schema: "
-                        + schemaStr + ". Output only valid JSON, no other text.";
+                            + "Respond with a JSON object matching this schema: "
+                            + schemaStr + ". Output only valid JSON, no other text.";
                     inputs.put("jsonOutput", true);
                 }
             }
@@ -963,7 +968,8 @@ public class AgentCompiler {
     ResolvedInstructions resolveInstructions(AgentConfig config, String refName) {
         Object instructions = config.getInstructions();
         if (!(instructions instanceof Map<?, ?> map) || !map.containsKey("_worker_ref")) {
-            String text = instructions instanceof String ? (String) instructions
+            String text = instructions instanceof String
+                    ? (String) instructions
                     : instructions != null ? instructions.toString() : "";
             return new ResolvedInstructions(List.of(), text);
         }
@@ -1016,10 +1022,7 @@ public class AgentCompiler {
         normalizeInputs.put("worker_output", "${" + workerRef + ".output}");
         normalizeTask.setInputParameters(normalizeInputs);
 
-        return new ResolvedInstructions(
-                List.of(workerTask, normalizeTask),
-                ref(refName + ".output.result")
-        );
+        return new ResolvedInstructions(List.of(workerTask, normalizeTask), ref(refName + ".output.result"));
     }
 
     /**
@@ -1103,9 +1106,8 @@ public class AgentCompiler {
      * @param reducers         field_name -> reducer_type map (e.g. "branch_outputs" -> "add")
      * @return a configured INLINE WorkflowTask
      */
-    static WorkflowTask buildForkMergeTask(String mergeRef, List<String> joinOnRefs,
-                                            List<String> branchStateExprs,
-                                            Map<String, String> reducers) {
+    static WorkflowTask buildForkMergeTask(
+            String mergeRef, List<String> joinOnRefs, List<String> branchStateExprs, Map<String, String> reducers) {
         WorkflowTask mergeTask = new WorkflowTask();
         mergeTask.setType("INLINE");
         mergeTask.setName(mergeRef);
@@ -1169,8 +1171,8 @@ public class AgentCompiler {
         return mergeTask;
     }
 
-    WorkflowTask buildDoWhile(String loopRef, String termCondition, List<WorkflowTask> loopTasks,
-                              Map<String, Object> inputParams) {
+    WorkflowTask buildDoWhile(
+            String loopRef, String termCondition, List<WorkflowTask> loopTasks, Map<String, Object> inputParams) {
         WorkflowTask doWhile = new WorkflowTask();
         doWhile.setType("DO_WHILE");
         doWhile.setTaskReferenceName(loopRef);
@@ -1211,8 +1213,8 @@ public class AgentCompiler {
     List<GuardrailConfig> getOutputGuardrails(AgentConfig config) {
         if (config.getGuardrails() == null) return List.of();
         return config.getGuardrails().stream()
-            .filter(g -> "output".equals(g.getPosition()))
-            .toList();
+                .filter(g -> "output".equals(g.getPosition()))
+                .toList();
     }
 
     String buildGuardrailContinue(List<String[]> guardrailRefs) {
@@ -1239,7 +1241,8 @@ public class AgentCompiler {
         if (config.getCallbacks() == null) return null;
         return config.getCallbacks().stream()
                 .filter(cb -> position.equals(cb.getPosition()))
-                .findFirst().orElse(null);
+                .findFirst()
+                .orElse(null);
     }
 
     /**
@@ -1290,7 +1293,9 @@ public class AgentCompiler {
         if (task == null) return;
         if ("LLM_CHAT_COMPLETE".equals(task.getType())) {
             task.setName("llm_chat_complete");
-        } else if ("SIMPLE".equals(task.getType()) && task.getName() != null && !task.getName().isEmpty()) {
+        } else if ("SIMPLE".equals(task.getType())
+                && task.getName() != null
+                && !task.getName().isEmpty()) {
             // SIMPLE tasks: preserve the task definition name (workers poll on it)
         } else if (task.getName() == null || task.getName().isEmpty()) {
             task.setName(task.getTaskReferenceName());
@@ -1299,24 +1304,19 @@ public class AgentCompiler {
             task.getLoopOver().forEach(AgentCompiler::ensureTaskNames);
         }
         if (task.getDecisionCases() != null) {
-            task.getDecisionCases().values().forEach(
-                tasks -> tasks.forEach(AgentCompiler::ensureTaskNames)
-            );
+            task.getDecisionCases().values().forEach(tasks -> tasks.forEach(AgentCompiler::ensureTaskNames));
         }
         if (task.getDefaultCase() != null) {
             task.getDefaultCase().forEach(AgentCompiler::ensureTaskNames);
         }
         if (task.getForkTasks() != null) {
-            task.getForkTasks().forEach(
-                branch -> branch.forEach(AgentCompiler::ensureTaskNames)
-            );
+            task.getForkTasks().forEach(branch -> branch.forEach(AgentCompiler::ensureTaskNames));
         }
         // Recurse into sub-workflow's inline workflowDef
         if (task.getSubWorkflowParam() != null
                 && task.getSubWorkflowParam().getWorkflowDef() != null
                 && task.getSubWorkflowParam().getWorkflowDef().getTasks() != null) {
-            task.getSubWorkflowParam().getWorkflowDef().getTasks()
-                .forEach(AgentCompiler::ensureTaskNames);
+            task.getSubWorkflowParam().getWorkflowDef().getTasks().forEach(AgentCompiler::ensureTaskNames);
         }
     }
 
@@ -1329,6 +1329,7 @@ public class AgentCompiler {
      * @param lastStateRef expression for the output state (e.g. "coalRef.output.state")
      */
     private record LlmNodeResult(List<WorkflowTask> tasks, String lastTaskRef, String lastStateRef) {}
+
     private record SubgraphNodeResult(List<WorkflowTask> tasks, String lastTaskRef, String lastStateRef) {}
 
     /**
@@ -1340,12 +1341,7 @@ public class AgentCompiler {
      */
     @SuppressWarnings("unchecked")
     private SubgraphNodeResult buildSubgraphNodeTasks(
-            AgentConfig config,
-            Map<String, Object> nodeSpec,
-            Object stateExpr,
-            Set<String> usedRefs,
-            String nodeName
-    ) {
+            AgentConfig config, Map<String, Object> nodeSpec, Object stateExpr, Set<String> usedRefs, String nodeName) {
         String prepName = (String) nodeSpec.get("_subgraph_prep_ref");
         String finishName = (String) nodeSpec.get("_subgraph_finish_ref");
         String prepRef = allocRef(usedRefs, prepName);
@@ -1369,9 +1365,8 @@ public class AgentCompiler {
         switchTask.setTaskReferenceName(switchRef);
         switchTask.setEvaluatorType("value-param");
         switchTask.setExpression("switchCaseValue");
-        switchTask.setInputParameters(new LinkedHashMap<>(Map.of(
-            "switchCaseValue", "${" + prepRef + ".output._skip_subgraph}"
-        )));
+        switchTask.setInputParameters(
+                new LinkedHashMap<>(Map.of("switchCaseValue", "${" + prepRef + ".output._skip_subgraph}")));
 
         // Case "true": passthrough — use pre-computed state/result from prep
         String ptRef = allocRef(usedRefs, "_sg_pt_" + nodeName);
@@ -1393,8 +1388,8 @@ public class AgentCompiler {
         // Default case: SUB_WORKFLOW → finish
         // Look up the pre-normalized subgraph AgentConfig
         Map<String, AgentConfig> subgraphConfigs = config.getMetadata() != null
-            ? (Map<String, AgentConfig>) config.getMetadata().get("_subgraph_configs")
-            : null;
+                ? (Map<String, AgentConfig>) config.getMetadata().get("_subgraph_configs")
+                : null;
         AgentConfig subAgent = subgraphConfigs != null ? subgraphConfigs.get(nodeName) : null;
 
         List<WorkflowTask> defaultTasks = new ArrayList<>();
@@ -1408,8 +1403,7 @@ public class AgentCompiler {
             subTask.setType("SUB_WORKFLOW");
             subTask.setName(subWf.getName());
             subTask.setTaskReferenceName(subRef);
-            SubWorkflowParams subParams =
-                new SubWorkflowParams();
+            SubWorkflowParams subParams = new SubWorkflowParams();
             subParams.setName(subWf.getName());
             subParams.setWorkflowDef(subWf);
             subTask.setSubWorkflowParam(subParams);
@@ -1443,11 +1437,11 @@ public class AgentCompiler {
         coalTask.setTaskReferenceName(coalRef);
         Map<String, Object> coalInputs = new LinkedHashMap<>();
         coalInputs.put("evaluatorType", "graaljs");
-        coalInputs.put("expression",
-            "(function(){" +
-            "if($.skip===true||$.skip==='true'){return{state:$.pt_state,result:$.pt_result};}" +
-            "return{state:$.fin_state,result:$.fin_result};" +
-            "})()");
+        coalInputs.put(
+                "expression",
+                "(function(){" + "if($.skip===true||$.skip==='true'){return{state:$.pt_state,result:$.pt_result};}"
+                        + "return{state:$.fin_state,result:$.fin_result};"
+                        + "})()");
         coalInputs.put("skip", "${" + prepRef + ".output._skip_subgraph}");
         coalInputs.put("pt_state", "${" + prepRef + ".output.state}");
         coalInputs.put("pt_result", "${" + prepRef + ".output.result}");
@@ -1475,8 +1469,7 @@ public class AgentCompiler {
             Set<String> usedRefs,
             String workerRef,
             String nodeName,
-            Map<String, Object> retryPolicy
-    ) {
+            Map<String, Object> retryPolicy) {
         String prepRef = allocRef(usedRefs, (String) nodeSpec.get("_llm_prep_ref"));
         String llmRef = allocRef(usedRefs, workerRef + "_llm");
         String finishRef = allocRef(usedRefs, (String) nodeSpec.get("_llm_finish_ref"));
@@ -1501,9 +1494,8 @@ public class AgentCompiler {
         switchTask.setTaskReferenceName(switchRef);
         switchTask.setEvaluatorType("value-param");
         switchTask.setExpression("switchCaseValue");
-        switchTask.setInputParameters(new LinkedHashMap<>(Map.of(
-            "switchCaseValue", "${" + prepRef + ".output._skip_llm}"
-        )));
+        switchTask.setInputParameters(
+                new LinkedHashMap<>(Map.of("switchCaseValue", "${" + prepRef + ".output._skip_llm}")));
 
         // Case "true": passthrough — use pre-computed state/result from prep
         String ptRef = allocRef(usedRefs, "_llm_pt_" + nodeName);
@@ -1555,11 +1547,11 @@ public class AgentCompiler {
         coalTask.setTaskReferenceName(coalRef);
         Map<String, Object> coalInputs = new LinkedHashMap<>();
         coalInputs.put("evaluatorType", "graaljs");
-        coalInputs.put("expression",
-            "(function(){" +
-            "if($.skip===true||$.skip==='true'){return{state:$.pt_state,result:$.pt_result};}" +
-            "return{state:$.fin_state,result:$.fin_result};" +
-            "})()");
+        coalInputs.put(
+                "expression",
+                "(function(){" + "if($.skip===true||$.skip==='true'){return{state:$.pt_state,result:$.pt_result};}"
+                        + "return{state:$.fin_state,result:$.fin_result};"
+                        + "})()");
         coalInputs.put("skip", "${" + prepRef + ".output._skip_llm}");
         // Both prep and finish are SIMPLE tasks → .output.{field} directly
         coalInputs.put("pt_state", "${" + prepRef + ".output.state}");
@@ -1618,8 +1610,7 @@ public class AgentCompiler {
     /**
      * Walk the task tree, renaming duplicate refs and recording the renames.
      */
-    private static void deduplicateRefs(List<WorkflowTask> tasks, Set<String> seen,
-                                         Map<String, String> renames) {
+    private static void deduplicateRefs(List<WorkflowTask> tasks, Set<String> seen, Map<String, String> renames) {
         if (tasks == null) return;
         for (WorkflowTask task : tasks) {
             if (task == null) continue;
@@ -1656,8 +1647,8 @@ public class AgentCompiler {
                     && task.getSubWorkflowParam().getWorkflowDef().getTasks() != null) {
                 // Sub-workflows have their own ref namespace
                 ensureUniqueRefNames(
-                    task.getSubWorkflowParam().getWorkflowDef().getTasks(),
-                    task.getSubWorkflowParam().getWorkflowDef());
+                        task.getSubWorkflowParam().getWorkflowDef().getTasks(),
+                        task.getSubWorkflowParam().getWorkflowDef());
             }
         }
     }
@@ -1702,8 +1693,7 @@ public class AgentCompiler {
      * of a parameter map.  Recurses into nested maps and lists.
      */
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> replaceRefsInMap(Map<String, Object> params,
-                                                         Map<String, String> renames) {
+    private static Map<String, Object> replaceRefsInMap(Map<String, Object> params, Map<String, String> renames) {
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : params.entrySet()) {
             result.put(entry.getKey(), replaceRefsInValue(entry.getValue(), renames));
@@ -1749,13 +1739,15 @@ public class AgentCompiler {
      */
     private String buildCodeExecInstructions(AgentConfig config) {
         List<String> languages = config.getCodeExecution().getAllowedLanguages();
-        String langs = (languages != null && !languages.isEmpty())
-                ? String.join(", ", languages)
-                : "python, javascript, bash";
-        String msg = "You have code execution capabilities. Use the execute_code tool to write and run code. Supported languages: " + langs + "."
-                + " Each execution runs in an isolated environment — no state, variables, or imports persist between calls."
-                + " Always include all necessary imports at the top of every code block (e.g. import subprocess, import os, import json).";
-        if (config.getCodeExecution().getAllowedCommands() != null && !config.getCodeExecution().getAllowedCommands().isEmpty()) {
+        String langs =
+                (languages != null && !languages.isEmpty()) ? String.join(", ", languages) : "python, javascript, bash";
+        String msg =
+                "You have code execution capabilities. Use the execute_code tool to write and run code. Supported languages: "
+                        + langs + "."
+                        + " Each execution runs in an isolated environment — no state, variables, or imports persist between calls."
+                        + " Always include all necessary imports at the top of every code block (e.g. import subprocess, import os, import json).";
+        if (config.getCodeExecution().getAllowedCommands() != null
+                && !config.getCodeExecution().getAllowedCommands().isEmpty()) {
             String cmds = String.join(", ", config.getCodeExecution().getAllowedCommands());
             msg += " Allowed shell commands: " + cmds + ". Do not use other commands.";
         }
@@ -1767,9 +1759,9 @@ public class AgentCompiler {
      */
     private String buildCliInstructions(AgentConfig config) {
         String msg = "You have CLI command execution capabilities. "
-            + "Use the run_command tool to execute shell commands directly. "
-            + "By default commands run without a shell interpreter (safer). "
-            + "Set shell=True only when you need pipes, redirects, or glob expansion.";
+                + "Use the run_command tool to execute shell commands directly. "
+                + "By default commands run without a shell interpreter (safer). "
+                + "Set shell=True only when you need pipes, redirects, or glob expansion.";
         if (config.getCliConfig().getAllowedCommands() != null
                 && !config.getCliConfig().getAllowedCommands().isEmpty()) {
             String cmds = String.join(", ", config.getCliConfig().getAllowedCommands());
@@ -1831,8 +1823,7 @@ public class AgentCompiler {
                 for (Map.Entry<String, Object> entry : props.entrySet()) {
                     if (!first) sb.append(", ");
                     first = false;
-                    sb.append("'").append(entry.getKey()).append("': ")
-                      .append(simplifyNode(entry.getValue()));
+                    sb.append("'").append(entry.getKey()).append("': ").append(simplifyNode(entry.getValue()));
                 }
                 sb.append("}");
                 return sb.toString();
@@ -1840,11 +1831,11 @@ public class AgentCompiler {
             return "object";
         }
 
-        if ("string".equals(type))  return "str";
+        if ("string".equals(type)) return "str";
         if ("integer".equals(type)) return "int";
-        if ("number".equals(type))  return "float";
+        if ("number".equals(type)) return "float";
         if ("boolean".equals(type)) return "bool";
-        if ("null".equals(type))    return "None";
+        if ("null".equals(type)) return "None";
 
         // anyOf: Pydantic uses this for Optional[T] → [T, null] → render as "T | None"
         if (m.containsKey("anyOf")) {
@@ -1885,9 +1876,8 @@ public class AgentCompiler {
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     static Map<String, Object> inlineRefs(Map<String, Object> schema) {
-        Map<String, Object> defs = schema.containsKey("$defs")
-                ? (Map<String, Object>) schema.get("$defs")
-                : Collections.emptyMap();
+        Map<String, Object> defs =
+                schema.containsKey("$defs") ? (Map<String, Object>) schema.get("$defs") : Collections.emptyMap();
         return (Map<String, Object>) resolveNode(schema, defs);
     }
 
@@ -2003,8 +1993,7 @@ public class AgentCompiler {
     }
 
     private boolean isGraphStructure(AgentConfig config) {
-        return config.getMetadata() != null
-            && config.getMetadata().get("_graph_structure") instanceof Map;
+        return config.getMetadata() != null && config.getMetadata().get("_graph_structure") instanceof Map;
     }
 
     @SuppressWarnings("unchecked")
@@ -2082,8 +2071,9 @@ public class AgentCompiler {
             String src = (String) ce.get("source");
             if (src != null) {
                 if (conditionalMap.containsKey(src)) {
-                    log.warn("Multiple conditional edges from '{}' — merging targets. " +
-                             "Last router function wins.", src);
+                    log.warn(
+                            "Multiple conditional edges from '{}' — merging targets. " + "Last router function wins.",
+                            src);
                     Map<String, Object> existing = conditionalMap.get(src);
                     // Merge targets from both edges
                     @SuppressWarnings("unchecked")
@@ -2148,8 +2138,7 @@ public class AgentCompiler {
         if (startTargets.size() > 1) {
             // Fan-out from START: compile as FORK_JOIN
             String joinPoint = findJoinPoint(startTargets, adjacency);
-            log.debug("Fan-out from START to {} branches, join at '{}'",
-                startTargets.size(), joinPoint);
+            log.debug("Fan-out from START to {} branches, join at '{}'", startTargets.size(), joinPoint);
 
             List<List<WorkflowTask>> forkBranches = new ArrayList<>();
             List<String> joinOnRefs = new ArrayList<>();
@@ -2160,20 +2149,21 @@ public class AgentCompiler {
                 String branchNode = branchTarget;
                 String branchLastStateRef = null;
 
-                while (branchNode != null && !branchNode.equals(joinPoint)
-                        && !"__end__".equals(branchNode) && !visited.contains(branchNode)) {
+                while (branchNode != null
+                        && !branchNode.equals(joinPoint)
+                        && !"__end__".equals(branchNode)
+                        && !visited.contains(branchNode)) {
                     visited.add(branchNode);
                     String wRef = nodeWorkerRef.get(branchNode);
                     if (wRef == null) break;
 
-                    Object stateInput = branchLastStateRef != null
-                        ? "${" + branchLastStateRef + "}" : initialState;
+                    Object stateInput = branchLastStateRef != null ? "${" + branchLastStateRef + "}" : initialState;
                     Map<String, Object> bNodeSpec = nodeSpecs.get(branchNode);
                     boolean bIsLlm = bNodeSpec != null && Boolean.TRUE.equals(bNodeSpec.get("_llm_node"));
 
                     if (bIsLlm) {
-                        LlmNodeResult llmRes = buildLlmNodeTasks(
-                            config, bNodeSpec, stateInput, usedRefs, wRef, branchNode, null);
+                        LlmNodeResult llmRes =
+                                buildLlmNodeTasks(config, bNodeSpec, stateInput, usedRefs, wRef, branchNode, null);
                         branchTasks.addAll(llmRes.tasks());
                         branchLastStateRef = llmRes.lastStateRef();
                     } else {
@@ -2189,9 +2179,10 @@ public class AgentCompiler {
 
                     // Move to next node in this branch (stop at join point)
                     List<String> nexts = adjacency.getOrDefault(branchNode, List.of());
-                    branchNode = (nexts.size() == 1 && !nexts.get(0).equals(joinPoint)
-                                  && !"__end__".equals(nexts.get(0)))
-                        ? nexts.get(0) : null;
+                    branchNode =
+                            (nexts.size() == 1 && !nexts.get(0).equals(joinPoint) && !"__end__".equals(nexts.get(0)))
+                                    ? nexts.get(0)
+                                    : null;
                 }
 
                 if (!branchTasks.isEmpty()) {
@@ -2265,16 +2256,16 @@ public class AgentCompiler {
             if (isHumanNode) {
                 // Human node: HUMAN → validate → normalize → process (state merge)
                 String humanRef = allocRef(usedRefs, "human_" + nodeName);
-                String humanPrompt = nodeSpec.get("_human_prompt") instanceof String
-                    ? (String) nodeSpec.get("_human_prompt") : "";
+                String humanPrompt =
+                        nodeSpec.get("_human_prompt") instanceof String ? (String) nodeSpec.get("_human_prompt") : "";
                 Object currentState = stateExpr != null ? stateExpr : initialState;
 
-                HumanTaskBuilder.Pipeline humanPipeline = HumanTaskBuilder
-                    .create(humanRef, config.getName() + " — " + nodeName)
-                    .contextInput("state", currentState)
-                    .contextInput("_prompt", !humanPrompt.isEmpty() ? humanPrompt : null)
-                    .graphNodeValidation(config.getModel(), humanPrompt, currentState)
-                    .build();
+                HumanTaskBuilder.Pipeline humanPipeline = HumanTaskBuilder.create(
+                                humanRef, config.getName() + " — " + nodeName)
+                        .contextInput("state", currentState)
+                        .contextInput("_prompt", !humanPrompt.isEmpty() ? humanPrompt : null)
+                        .graphNodeValidation(config.getModel(), humanPrompt, currentState)
+                        .build();
                 // Register all pipeline refs as used
                 for (WorkflowTask pt : humanPipeline.getTasks()) {
                     usedRefs.add(pt.getTaskReferenceName());
@@ -2286,13 +2277,11 @@ public class AgentCompiler {
                 lastTaskRef = processRef;
                 lastStateRef = processRef + ".output.result.state";
 
-                log.debug("Graph node '{}' compiled as HUMAN node with validation: {}",
-                    nodeName, humanRef);
+                log.debug("Graph node '{}' compiled as HUMAN node with validation: {}", nodeName, humanRef);
             } else if (isLlmNode) {
                 Object llmStateExpr = stateExpr != null ? stateExpr : initialState;
                 LlmNodeResult llmResult = buildLlmNodeTasks(
-                    config, nodeSpec, llmStateExpr, usedRefs, workerRef, nodeName,
-                    retryPolicies.get(nodeName));
+                        config, nodeSpec, llmStateExpr, usedRefs, workerRef, nodeName, retryPolicies.get(nodeName));
                 tasks.addAll(llmResult.tasks());
                 lastStateRef = llmResult.lastStateRef();
 
@@ -2300,8 +2289,7 @@ public class AgentCompiler {
             } else if (isSubgraphNode) {
                 // Subgraph node: prep → SUB_WORKFLOW → finish
                 Object sgStateExpr = stateExpr != null ? stateExpr : initialState;
-                SubgraphNodeResult sgResult = buildSubgraphNodeTasks(
-                    config, nodeSpec, sgStateExpr, usedRefs, nodeName);
+                SubgraphNodeResult sgResult = buildSubgraphNodeTasks(config, nodeSpec, sgStateExpr, usedRefs, nodeName);
                 tasks.addAll(sgResult.tasks());
                 lastTaskRef = sgResult.lastTaskRef();
                 lastStateRef = sgResult.lastStateRef();
@@ -2340,9 +2328,7 @@ public class AgentCompiler {
                     routerTask.setType("SIMPLE");
                     routerTask.setName(routerRef);
                     routerTask.setTaskReferenceName(allocRouterRef);
-                    routerTask.setInputParameters(new LinkedHashMap<>(Map.of(
-                        "state", "${" + lastStateRef + "}"
-                    )));
+                    routerTask.setInputParameters(new LinkedHashMap<>(Map.of("state", "${" + lastStateRef + "}")));
                     tasks.add(routerTask);
 
                     // 2. INLINE enrich task: convert dynamic_tasks into Conductor FORK_JOIN_DYNAMIC format
@@ -2362,7 +2348,12 @@ public class AgentCompiler {
                         String targetWorker = nodeWorkerRef.get(targetNode);
                         if (targetWorker != null) {
                             if (!first) workerMapJs.append(",");
-                            workerMapJs.append("'").append(targetNode).append("':'").append(targetWorker).append("'");
+                            workerMapJs
+                                    .append("'")
+                                    .append(targetNode)
+                                    .append("':'")
+                                    .append(targetWorker)
+                                    .append("'");
                             first = false;
                         }
                     }
@@ -2371,23 +2362,23 @@ public class AgentCompiler {
                     Map<String, Object> enrichInputs = new LinkedHashMap<>();
                     enrichInputs.put("evaluatorType", "graaljs");
                     enrichInputs.put("dynamic_tasks", "${" + allocRouterRef + ".output.dynamic_tasks}");
-                    enrichInputs.put("expression",
-                        "(function(){" +
-                        "var dt=$.dynamic_tasks;" +
-                        "var wm=" + workerMapJs + ";" +
-                        "var tasks=[];" +
-                        "for(var i=0;i<dt.length;i++){" +
-                        "var t=dt[i];" +
-                        "var wref=wm[t.node]||t.node;" +
-                        "tasks.push({" +
-                        "name:wref," +
-                        "taskReferenceName:wref+'__dyn_'+i," +
-                        "type:'SIMPLE'," +
-                        "inputParameters:{state:t.input}" +
-                        "});" +
-                        "}" +
-                        "return{dynamicTasks:tasks,dynamicTasksInputs:{}};" +
-                        "})()");
+                    enrichInputs.put(
+                            "expression",
+                            "(function(){" + "var dt=$.dynamic_tasks;"
+                                    + "var wm="
+                                    + workerMapJs + ";" + "var tasks=[];"
+                                    + "for(var i=0;i<dt.length;i++){"
+                                    + "var t=dt[i];"
+                                    + "var wref=wm[t.node]||t.node;"
+                                    + "tasks.push({"
+                                    + "name:wref,"
+                                    + "taskReferenceName:wref+'__dyn_'+i,"
+                                    + "type:'SIMPLE',"
+                                    + "inputParameters:{state:t.input}"
+                                    + "});"
+                                    + "}"
+                                    + "return{dynamicTasks:tasks,dynamicTasksInputs:{}};"
+                                    + "})()");
                     enrichTask.setInputParameters(enrichInputs);
                     tasks.add(enrichTask);
 
@@ -2488,8 +2479,11 @@ public class AgentCompiler {
                         }
                     }
 
-                    log.debug("FORK_JOIN_DYNAMIC compiled: fork={}, join={}, merge={}",
-                        dynForkRef, dynJoinRef, dynMergeRef);
+                    log.debug(
+                            "FORK_JOIN_DYNAMIC compiled: fork={}, join={}, merge={}",
+                            dynForkRef,
+                            dynJoinRef,
+                            dynMergeRef);
 
                 } else if (routerRef != null && targets != null && !targets.isEmpty()) {
                     // Classify targets: back-edges (cycle) vs forward-edges (exit)
@@ -2511,8 +2505,10 @@ public class AgentCompiler {
 
                     if (!continueDecisions.isEmpty() && backEdgeTarget != null) {
                         // === CYCLE DETECTED: compile as DO_WHILE loop ===
-                        log.debug("Cycle detected at '{}': back-edge to '{}', compiling as DO_WHILE",
-                            nodeName, backEdgeTarget);
+                        log.debug(
+                                "Cycle detected at '{}': back-edge to '{}', compiling as DO_WHILE",
+                                nodeName,
+                                backEdgeTarget);
 
                         // 1. Build router task (will be last task in loop body)
                         String allocRouterRef = allocRef(usedRefs, routerRef);
@@ -2520,14 +2516,11 @@ public class AgentCompiler {
                         routerTask.setType("SIMPLE");
                         routerTask.setName(routerRef);
                         routerTask.setTaskReferenceName(allocRouterRef);
-                        routerTask.setInputParameters(new LinkedHashMap<>(Map.of(
-                            "state", "${" + lastStateRef + "}"
-                        )));
+                        routerTask.setInputParameters(new LinkedHashMap<>(Map.of("state", "${" + lastStateRef + "}")));
 
                         // 2. Extract loop body: tasks from back-edge target's start to current end
                         int loopStartIdx = nodeTaskStartIndex.get(backEdgeTarget);
-                        List<WorkflowTask> loopBodyTasks = new ArrayList<>(
-                            tasks.subList(loopStartIdx, tasks.size()));
+                        List<WorkflowTask> loopBodyTasks = new ArrayList<>(tasks.subList(loopStartIdx, tasks.size()));
                         loopBodyTasks.add(routerTask);
 
                         // Remove extracted tasks from main list
@@ -2552,20 +2545,19 @@ public class AgentCompiler {
                             bridgeInputs.put("pre_loop_state", initialState);
                         }
 
-                        bridgeInputs.put("expression",
-                            "(function(){" +
-                            "var rs=$.router_state;" +
-                            "var ps=$.pre_loop_state;" +
-                            "if(rs&&typeof rs==='object'&&Object.keys(rs).length>0)return{state:rs};" +
-                            "return{state:ps};" +
-                            "})()");
+                        bridgeInputs.put(
+                                "expression",
+                                "(function(){" + "var rs=$.router_state;"
+                                        + "var ps=$.pre_loop_state;"
+                                        + "if(rs&&typeof rs==='object'&&Object.keys(rs).length>0)return{state:rs};"
+                                        + "return{state:ps};"
+                                        + "})()");
                         bridgeTask.setInputParameters(bridgeInputs);
 
                         // 4. Update first loop task's state input to use bridge output
                         WorkflowTask firstLoopTask = loopBodyTasks.get(0);
                         if (firstLoopTask.getInputParameters() != null) {
-                            firstLoopTask.getInputParameters().put("state",
-                                "${" + bridgeRef + ".output.result.state}");
+                            firstLoopTask.getInputParameters().put("state", "${" + bridgeRef + ".output.result.state}");
                         }
 
                         // 5. Prepend state-bridge to loop body
@@ -2574,12 +2566,19 @@ public class AgentCompiler {
                         // 6. Build loop condition: continue while router decision matches a back-edge
                         String doWhileRef = allocRef(usedRefs, "_loop_" + nodeName);
                         StringBuilder loopCond = new StringBuilder();
-                        loopCond.append("if ( $.").append(doWhileRef).append("['iteration'] < ").append(recursionLimit).append(" && (");
+                        loopCond.append("if ( $.")
+                                .append(doWhileRef)
+                                .append("['iteration'] < ")
+                                .append(recursionLimit)
+                                .append(" && (");
                         boolean firstCond = true;
                         for (String decision : continueDecisions.keySet()) {
                             if (!firstCond) loopCond.append(" || ");
-                            loopCond.append("$.").append(allocRouterRef)
-                                .append("['decision'] == '").append(decision).append("'");
+                            loopCond.append("$.")
+                                    .append(allocRouterRef)
+                                    .append("['decision'] == '")
+                                    .append(decision)
+                                    .append("'");
                             firstCond = false;
                         }
                         loopCond.append(") ) { true; } else { false; }");
@@ -2587,8 +2586,8 @@ public class AgentCompiler {
                         // 7. Create DO_WHILE task
                         Map<String, Object> loopInputs = new LinkedHashMap<>();
                         loopInputs.put(doWhileRef, "${" + doWhileRef + "}");
-                        WorkflowTask doWhileTask = buildDoWhile(doWhileRef, loopCond.toString(),
-                            loopBodyTasks, loopInputs);
+                        WorkflowTask doWhileTask =
+                                buildDoWhile(doWhileRef, loopCond.toString(), loopBodyTasks, loopInputs);
                         tasks.add(doWhileTask);
 
                         // 8. After the loop: state comes from router's last iteration output
@@ -2603,8 +2602,11 @@ public class AgentCompiler {
                             }
                         }
 
-                        log.debug("DO_WHILE loop compiled: ref={}, {} continue decisions, {} exit paths",
-                            doWhileRef, continueDecisions.size(), exitDecisions.size());
+                        log.debug(
+                                "DO_WHILE loop compiled: ref={}, {} continue decisions, {} exit paths",
+                                doWhileRef,
+                                continueDecisions.size(),
+                                exitDecisions.size());
 
                     } else {
                         // === No cycle: SWITCH approach ===
@@ -2615,9 +2617,7 @@ public class AgentCompiler {
                         routerTask.setType("SIMPLE");
                         routerTask.setName(routerRef);
                         routerTask.setTaskReferenceName(allocRouterRef);
-                        routerTask.setInputParameters(new LinkedHashMap<>(Map.of(
-                            "state", "${" + lastStateRef + "}"
-                        )));
+                        routerTask.setInputParameters(new LinkedHashMap<>(Map.of("state", "${" + lastStateRef + "}")));
                         tasks.add(routerTask);
 
                         // SWITCH task: value-param evaluator
@@ -2628,9 +2628,8 @@ public class AgentCompiler {
                         switchTask.setTaskReferenceName(switchRef);
                         switchTask.setEvaluatorType("value-param");
                         switchTask.setExpression("switchCaseValue");
-                        switchTask.setInputParameters(new LinkedHashMap<>(Map.of(
-                            "switchCaseValue", "${" + allocRouterRef + ".output.decision}"
-                        )));
+                        switchTask.setInputParameters(new LinkedHashMap<>(
+                                Map.of("switchCaseValue", "${" + allocRouterRef + ".output.decision}")));
 
                         Map<String, List<WorkflowTask>> decisionCases = new LinkedHashMap<>();
                         List<String> branchLastRefs = new ArrayList<>();
@@ -2642,8 +2641,10 @@ public class AgentCompiler {
                             if (targetWorkerRef == null) continue;
 
                             Map<String, Object> targetSpec = nodeSpecs.get(targetNode);
-                            boolean targetIsLlm = targetSpec != null && Boolean.TRUE.equals(targetSpec.get("_llm_node"));
-                            boolean targetIsHuman = targetSpec != null && Boolean.TRUE.equals(targetSpec.get("_human_node"));
+                            boolean targetIsLlm =
+                                    targetSpec != null && Boolean.TRUE.equals(targetSpec.get("_llm_node"));
+                            boolean targetIsHuman =
+                                    targetSpec != null && Boolean.TRUE.equals(targetSpec.get("_human_node"));
 
                             List<WorkflowTask> branchTasks = new ArrayList<>();
                             String branchLastRef;
@@ -2651,15 +2652,16 @@ public class AgentCompiler {
                             if (targetIsHuman) {
                                 String tHumanRef = allocRef(usedRefs, "human_" + targetNode);
                                 String tHumanPrompt = targetSpec.get("_human_prompt") instanceof String
-                                    ? (String) targetSpec.get("_human_prompt") : "";
+                                        ? (String) targetSpec.get("_human_prompt")
+                                        : "";
                                 String branchStateExpr = "${" + allocRouterRef + ".output.state}";
 
-                                HumanTaskBuilder.Pipeline branchHumanPipeline = HumanTaskBuilder
-                                    .create(tHumanRef, config.getName() + " — " + targetNode)
-                                    .contextInput("state", branchStateExpr)
-                                    .contextInput("_prompt", !tHumanPrompt.isEmpty() ? tHumanPrompt : null)
-                                    .graphNodeValidation(config.getModel(), tHumanPrompt, branchStateExpr)
-                                    .build();
+                                HumanTaskBuilder.Pipeline branchHumanPipeline = HumanTaskBuilder.create(
+                                                tHumanRef, config.getName() + " — " + targetNode)
+                                        .contextInput("state", branchStateExpr)
+                                        .contextInput("_prompt", !tHumanPrompt.isEmpty() ? tHumanPrompt : null)
+                                        .graphNodeValidation(config.getModel(), tHumanPrompt, branchStateExpr)
+                                        .build();
                                 for (WorkflowTask pt : branchHumanPipeline.getTasks()) {
                                     usedRefs.add(pt.getTaskReferenceName());
                                 }
@@ -2668,9 +2670,13 @@ public class AgentCompiler {
                                 branchLastRef = tHumanRef + "_process";
                             } else if (targetIsLlm) {
                                 LlmNodeResult llmRes = buildLlmNodeTasks(
-                                    config, targetSpec,
-                                    "${" + allocRouterRef + ".output.state}",
-                                    usedRefs, targetWorkerRef, targetNode, null);
+                                        config,
+                                        targetSpec,
+                                        "${" + allocRouterRef + ".output.state}",
+                                        usedRefs,
+                                        targetWorkerRef,
+                                        targetNode,
+                                        null);
                                 branchTasks.addAll(llmRes.tasks());
                                 branchLastRef = llmRes.lastTaskRef();
                             } else {
@@ -2679,9 +2685,8 @@ public class AgentCompiler {
                                 branchTask.setType("SIMPLE");
                                 branchTask.setName(targetWorkerRef);
                                 branchTask.setTaskReferenceName(tWorkerRef);
-                                branchTask.setInputParameters(new LinkedHashMap<>(Map.of(
-                                    "state", "${" + allocRouterRef + ".output.state}"
-                                )));
+                                branchTask.setInputParameters(
+                                        new LinkedHashMap<>(Map.of("state", "${" + allocRouterRef + ".output.state}")));
                                 branchTasks.add(branchTask);
                                 branchLastRef = tWorkerRef;
                             }
@@ -2722,15 +2727,29 @@ public class AgentCompiler {
                                 if (bi2 == 0) {
                                     js.append("if(d==='").append(entry.getKey()).append("')");
                                 } else {
-                                    js.append("else if(d==='").append(entry.getKey()).append("')");
+                                    js.append("else if(d==='")
+                                            .append(entry.getKey())
+                                            .append("')");
                                 }
-                                js.append("{return{result:$.r").append(bi2).append(",state:$.s").append(bi2).append("};}");
+                                js.append("{return{result:$.r")
+                                        .append(bi2)
+                                        .append(",state:$.s")
+                                        .append(bi2)
+                                        .append("};}");
                                 bi2++;
                             }
                             // Fallback: try each branch for a non-null state
                             js.append("var r=null,s=null;");
                             for (int bi = 0; bi < branchLastRefs.size(); bi++) {
-                                js.append("if($.s").append(bi).append("!=null&&$.s").append(bi).append("!==undefined){r=$.r").append(bi).append(";s=$.s").append(bi).append(";}");
+                                js.append("if($.s")
+                                        .append(bi)
+                                        .append("!=null&&$.s")
+                                        .append(bi)
+                                        .append("!==undefined){r=$.r")
+                                        .append(bi)
+                                        .append(";s=$.s")
+                                        .append(bi)
+                                        .append(";}");
                             }
                             js.append("return{result:r!==null?r:'',state:s!==null?s:{}};})()");
                             coalesceInputs.put("expression", js.toString());
@@ -2752,8 +2771,11 @@ public class AgentCompiler {
                 if (nextTargets.size() > 1) {
                     // Mid-graph fan-out: compile as FORK_JOIN
                     String midJoinPoint = findJoinPoint(nextTargets, adjacency);
-                    log.debug("Mid-graph fan-out from '{}' to {} branches, join at '{}'",
-                        nodeName, nextTargets.size(), midJoinPoint);
+                    log.debug(
+                            "Mid-graph fan-out from '{}' to {} branches, join at '{}'",
+                            nodeName,
+                            nextTargets.size(),
+                            midJoinPoint);
 
                     List<List<WorkflowTask>> midForkBranches = new ArrayList<>();
                     List<String> midJoinOnRefs = new ArrayList<>();
@@ -2764,23 +2786,23 @@ public class AgentCompiler {
                         String branchNode = branchTarget;
                         String branchLastStateRef = null;
 
-                        while (branchNode != null && !branchNode.equals(midJoinPoint)
-                                && !"__end__".equals(branchNode) && !visited.contains(branchNode)) {
+                        while (branchNode != null
+                                && !branchNode.equals(midJoinPoint)
+                                && !"__end__".equals(branchNode)
+                                && !visited.contains(branchNode)) {
                             visited.add(branchNode);
                             String wRef = nodeWorkerRef.get(branchNode);
                             if (wRef == null) break;
 
                             Object bStateInput = branchLastStateRef != null
-                                ? "${" + branchLastStateRef + "}"
-                                : "${" + lastStateRef + "}";
+                                    ? "${" + branchLastStateRef + "}"
+                                    : "${" + lastStateRef + "}";
                             Map<String, Object> bNodeSpec = nodeSpecs.get(branchNode);
-                            boolean bIsLlm = bNodeSpec != null
-                                && Boolean.TRUE.equals(bNodeSpec.get("_llm_node"));
+                            boolean bIsLlm = bNodeSpec != null && Boolean.TRUE.equals(bNodeSpec.get("_llm_node"));
 
                             if (bIsLlm) {
                                 LlmNodeResult llmRes = buildLlmNodeTasks(
-                                    config, bNodeSpec, bStateInput, usedRefs,
-                                    wRef, branchNode, null);
+                                        config, bNodeSpec, bStateInput, usedRefs, wRef, branchNode, null);
                                 branchTasks.addAll(llmRes.tasks());
                                 branchLastStateRef = llmRes.lastStateRef();
                             } else {
@@ -2789,8 +2811,7 @@ public class AgentCompiler {
                                 nodeTask.setType("SIMPLE");
                                 nodeTask.setName(wRef);
                                 nodeTask.setTaskReferenceName(nodeRef);
-                                nodeTask.setInputParameters(new LinkedHashMap<>(
-                                    Map.of("state", bStateInput)));
+                                nodeTask.setInputParameters(new LinkedHashMap<>(Map.of("state", bStateInput)));
                                 branchTasks.add(nodeTask);
                                 branchLastStateRef = nodeRef + ".output.state";
                             }
@@ -2798,15 +2819,16 @@ public class AgentCompiler {
                             // Move to next node in this branch (stop at join point)
                             List<String> nexts = adjacency.getOrDefault(branchNode, List.of());
                             branchNode = (nexts.size() == 1
-                                && !nexts.get(0).equals(midJoinPoint)
-                                && !"__end__".equals(nexts.get(0)))
-                                ? nexts.get(0) : null;
+                                            && !nexts.get(0).equals(midJoinPoint)
+                                            && !"__end__".equals(nexts.get(0)))
+                                    ? nexts.get(0)
+                                    : null;
                         }
 
                         if (!branchTasks.isEmpty()) {
                             midForkBranches.add(branchTasks);
-                            midJoinOnRefs.add(branchTasks.get(branchTasks.size() - 1)
-                                .getTaskReferenceName());
+                            midJoinOnRefs.add(
+                                    branchTasks.get(branchTasks.size() - 1).getTaskReferenceName());
                             midBranchStateExprs.add(branchLastStateRef);
                         }
                     }
@@ -2855,10 +2877,11 @@ public class AgentCompiler {
         // For INLINE tasks (coalesce/fork_merge), result is nested under output.result.
         // For SIMPLE tasks, result is under output.result.
         String outputRef;
-        if (lastTaskRef != null && (lastTaskRef.startsWith("_coalesce_")
-                || lastTaskRef.startsWith("_fork_merge")
-                || lastTaskRef.startsWith("_sg_out_")
-                || lastTaskRef.startsWith("_llm_out_"))) {
+        if (lastTaskRef != null
+                && (lastTaskRef.startsWith("_coalesce_")
+                        || lastTaskRef.startsWith("_fork_merge")
+                        || lastTaskRef.startsWith("_sg_out_")
+                        || lastTaskRef.startsWith("_llm_out_"))) {
             outputRef = "${" + lastTaskRef + ".output.result.result}";
         } else {
             outputRef = lastTaskRef != null ? "${" + lastTaskRef + ".output.result}" : "";
@@ -2880,8 +2903,8 @@ public class AgentCompiler {
         }
 
         // Preserve metadata
-        Map<String, Object> metadata = config.getMetadata() != null
-            ? new LinkedHashMap<>(config.getMetadata()) : new LinkedHashMap<>();
+        Map<String, Object> metadata =
+                config.getMetadata() != null ? new LinkedHashMap<>(config.getMetadata()) : new LinkedHashMap<>();
         metadata.put("_graph_workflow", true);
         if (config.getModel() != null) {
             metadata.put("model", config.getModel());
@@ -2893,7 +2916,7 @@ public class AgentCompiler {
 
     private boolean isFrameworkPassthrough(AgentConfig config) {
         return config.getMetadata() != null
-            && Boolean.TRUE.equals(config.getMetadata().get("_framework_passthrough"));
+                && Boolean.TRUE.equals(config.getMetadata().get("_framework_passthrough"));
     }
 
     WorkflowDef compileFrameworkPassthrough(AgentConfig config) {
@@ -2901,7 +2924,7 @@ public class AgentCompiler {
 
         if (config.getTools() == null || config.getTools().isEmpty()) {
             throw new IllegalArgumentException(
-                "Passthrough agent '" + config.getName() + "' must have exactly one worker tool defined.");
+                    "Passthrough agent '" + config.getName() + "' must have exactly one worker tool defined.");
         }
         String workerName = config.getTools().get(0).getName();
 
@@ -2910,11 +2933,10 @@ public class AgentCompiler {
         fwTask.setName(workerName);
         fwTask.setTaskReferenceName("_fw_task");
         fwTask.setInputParameters(new LinkedHashMap<>(Map.of(
-            "prompt",     "${workflow.input.prompt}",
-            "session_id", "${workflow.input.session_id}",
-            "media",      "${workflow.input.media}",
-            "cwd",        "${workflow.input.cwd}"
-        )));
+                "prompt", "${workflow.input.prompt}",
+                "session_id", "${workflow.input.session_id}",
+                "media", "${workflow.input.media}",
+                "cwd", "${workflow.input.cwd}")));
 
         WorkflowDef wf = new WorkflowDef();
         wf.setName(config.getName());
@@ -2923,8 +2945,8 @@ public class AgentCompiler {
         wf.setTasks(List.of(fwTask));
         wf.setOutputParameters(Map.of("result", "${_fw_task.output.result}"));
 
-        Map<String, Object> metadata = config.getMetadata() != null
-            ? new LinkedHashMap<>(config.getMetadata()) : new LinkedHashMap<>();
+        Map<String, Object> metadata =
+                config.getMetadata() != null ? new LinkedHashMap<>(config.getMetadata()) : new LinkedHashMap<>();
         wf.setMetadata(metadata);
 
         return wf;

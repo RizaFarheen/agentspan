@@ -42,10 +42,10 @@ public class LangChainNormalizer implements AgentConfigNormalizer {
         config.setMetadata(metadata);
 
         ToolConfig worker = ToolConfig.builder()
-            .name(workerName)
-            .description("LangChain passthrough worker")
-            .toolType("worker")
-            .build();
+                .name(workerName)
+                .description("LangChain passthrough worker")
+                .toolType("worker")
+                .build();
         config.setTools(List.of(worker));
 
         return config;

@@ -18,9 +18,9 @@ import lombok.NoArgsConstructor;
 public class InjectTaskRequest {
     private String taskDefName;
     private String referenceTaskName;
-    private String type;                     // "SIMPLE" or "SUB_WORKFLOW"
+    private String type; // "SIMPLE" or "SUB_WORKFLOW"
     private Map<String, Object> inputData;
-    private String status;                   // expected: "IN_PROGRESS" (informational only)
+    private String status; // expected: "IN_PROGRESS" (informational only)
     private SubWorkflowParam subWorkflowParam;
 
     @Data
@@ -28,6 +28,6 @@ public class InjectTaskRequest {
     public static class SubWorkflowParam {
         private String name;
         private Integer version;
-        private String workflowId;           // pre-created tracking workflow ID
+        private String workflowId; // pre-created tracking workflow ID
     }
 }

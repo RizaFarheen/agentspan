@@ -106,8 +106,7 @@ public class AgentSSEEvent {
     }
 
     public static AgentSSEEvent contextCondensed(
-            String workflowId, String trigger,
-            int messagesBefore, int messagesAfter, int exchangesCondensed) {
+            String workflowId, String trigger, int messagesBefore, int messagesAfter, int exchangesCondensed) {
         AgentSSEEvent e = new AgentSSEEvent("context_condensed", workflowId);
         e.content = trigger;
         e.messagesBefore = messagesBefore;
@@ -142,34 +141,123 @@ public class AgentSSEEvent {
 
     // ── Getters / Setters ────────────────────────────────────────────
 
-    public long getId() { return id; }
-    public void setId(long id) { this.id = id; }
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
-    public String getWorkflowId() { return workflowId; }
-    public void setWorkflowId(String workflowId) { this.workflowId = workflowId; }
-    public String getContent() { return content; }
-    public void setContent(String content) { this.content = content; }
-    public String getToolName() { return toolName; }
-    public void setToolName(String toolName) { this.toolName = toolName; }
-    public Object getArgs() { return args; }
-    public void setArgs(Object args) { this.args = args; }
-    public Object getResult() { return result; }
-    public void setResult(Object result) { this.result = result; }
-    public String getTarget() { return target; }
-    public void setTarget(String target) { this.target = target; }
-    public Object getOutput() { return output; }
-    public void setOutput(Object output) { this.output = output; }
-    public String getGuardrailName() { return guardrailName; }
-    public void setGuardrailName(String guardrailName) { this.guardrailName = guardrailName; }
-    public Map<String, Object> getPendingTool() { return pendingTool; }
-    public void setPendingTool(Map<String, Object> pendingTool) { this.pendingTool = pendingTool; }
-    public long getTimestamp() { return timestamp; }
-    public void setTimestamp(long timestamp) { this.timestamp = timestamp; }
-    public Integer getMessagesBefore() { return messagesBefore; }
-    public void setMessagesBefore(Integer messagesBefore) { this.messagesBefore = messagesBefore; }
-    public Integer getMessagesAfter() { return messagesAfter; }
-    public void setMessagesAfter(Integer messagesAfter) { this.messagesAfter = messagesAfter; }
-    public Integer getExchangesCondensed() { return exchangesCondensed; }
-    public void setExchangesCondensed(Integer exchangesCondensed) { this.exchangesCondensed = exchangesCondensed; }
+    public long getId() {
+        return id;
+    }
+
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getWorkflowId() {
+        return workflowId;
+    }
+
+    public void setWorkflowId(String workflowId) {
+        this.workflowId = workflowId;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+
+    public String getToolName() {
+        return toolName;
+    }
+
+    public void setToolName(String toolName) {
+        this.toolName = toolName;
+    }
+
+    public Object getArgs() {
+        return args;
+    }
+
+    public void setArgs(Object args) {
+        this.args = args;
+    }
+
+    public Object getResult() {
+        return result;
+    }
+
+    public void setResult(Object result) {
+        this.result = result;
+    }
+
+    public String getTarget() {
+        return target;
+    }
+
+    public void setTarget(String target) {
+        this.target = target;
+    }
+
+    public Object getOutput() {
+        return output;
+    }
+
+    public void setOutput(Object output) {
+        this.output = output;
+    }
+
+    public String getGuardrailName() {
+        return guardrailName;
+    }
+
+    public void setGuardrailName(String guardrailName) {
+        this.guardrailName = guardrailName;
+    }
+
+    public Map<String, Object> getPendingTool() {
+        return pendingTool;
+    }
+
+    public void setPendingTool(Map<String, Object> pendingTool) {
+        this.pendingTool = pendingTool;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
+    }
+
+    public Integer getMessagesBefore() {
+        return messagesBefore;
+    }
+
+    public void setMessagesBefore(Integer messagesBefore) {
+        this.messagesBefore = messagesBefore;
+    }
+
+    public Integer getMessagesAfter() {
+        return messagesAfter;
+    }
+
+    public void setMessagesAfter(Integer messagesAfter) {
+        this.messagesAfter = messagesAfter;
+    }
+
+    public Integer getExchangesCondensed() {
+        return exchangesCondensed;
+    }
+
+    public void setExchangesCondensed(Integer exchangesCondensed) {
+        this.exchangesCondensed = exchangesCondensed;
+    }
 }
