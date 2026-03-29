@@ -28,10 +28,10 @@ type discoveredAgent struct {
 
 // deployResult represents the outcome of deploying a single agent.
 type deployResult struct {
-	AgentName    string  `json:"agent_name"`
-	WorkflowName *string `json:"workflow_name"`
-	Success      bool    `json:"success"`
-	Error        *string `json:"error"`
+	AgentName      string  `json:"agent_name"`
+	RegisteredName *string `json:"workflow_name"`
+	Success        bool    `json:"success"`
+	Error          *string `json:"error"`
 }
 
 var deployCmd = &cobra.Command{
@@ -595,13 +595,9 @@ func formatDeployOutput(results []deployResult) string {
 	for _, r := range results {
 		if r.Success {
 			successes++
-			wfName := ""
-			if r.WorkflowName != nil {
-				wfName = *r.WorkflowName
-			}
 			green.Fprintf(&buf, "  ✓ %s", r.AgentName)
-			if wfName != "" {
-				fmt.Fprintf(&buf, " -> %s", wfName)
+			if r.RegisteredName != nil && *r.RegisteredName != "" && *r.RegisteredName != r.AgentName {
+				fmt.Fprintf(&buf, " (registered as %s)", *r.RegisteredName)
 			}
 			fmt.Fprintln(&buf)
 		} else {

@@ -48,7 +48,7 @@ Advanced form (custom store name, explicit binding needed):
 			name = args[0]
 			value = args[1]
 		}
-		if err := runCredentialsSet(name, value, storeName); err != nil {
+		if err := runCredentialsSet(name, value); err != nil {
 			return err
 		}
 		color.Green("Credential %q stored.", name)
@@ -56,16 +56,10 @@ Advanced form (custom store name, explicit binding needed):
 	},
 }
 
-func runCredentialsSet(nameOrValue, value, storeName string) error {
+func runCredentialsSet(name, value string) error {
 	cfg := config.Load()
 	c := client.New(cfg)
-	credName := nameOrValue
-	credValue := value
-	if storeName != "" {
-		credName = storeName
-		credValue = nameOrValue
-	}
-	return c.SetCredential(credName, credValue)
+	return c.SetCredential(name, value)
 }
 
 // ─── credentials list ─────────────────────────────────────────────────────────

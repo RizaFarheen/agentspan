@@ -25,6 +25,20 @@ jobs:
       - name: Run server tests
         run: ./gradlew test
 
+  # ── Go CLI Tests ─────────────────────────────────────────────────
+  cli-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+      - name: Run CLI tests
+        run: go test ./... -count=1 -race
+
   # ── Python SDK Unit Tests ──────────────────────────────────────────
   python-unit-tests:
     runs-on: ubuntu-latest

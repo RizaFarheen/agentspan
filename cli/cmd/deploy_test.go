@@ -287,8 +287,8 @@ func TestParseDeployResult(t *testing.T) {
 	if !results[0].Success || results[0].AgentName != "agent1" {
 		t.Errorf("result[0] = %+v, want success=true agent_name=agent1", results[0])
 	}
-	if results[0].WorkflowName == nil || *results[0].WorkflowName != wfName {
-		t.Errorf("result[0].WorkflowName = %v, want %q", results[0].WorkflowName, wfName)
+	if results[0].RegisteredName == nil || *results[0].RegisteredName != wfName {
+		t.Errorf("result[0].RegisteredName = %v, want %q", results[0].RegisteredName, wfName)
 	}
 	if results[1].Success || results[1].Error == nil || *results[1].Error != "connection refused" {
 		t.Errorf("result[1] = %+v, want success=false error='connection refused'", results[1])
@@ -344,8 +344,8 @@ func TestFilterDiscoveredAgents_NotFoundError(t *testing.T) {
 func TestFormatDeployOutput_AllSuccess(t *testing.T) {
 	wf := "wf1"
 	results := []deployResult{
-		{AgentName: "a1", WorkflowName: &wf, Success: true},
-		{AgentName: "a2", WorkflowName: &wf, Success: true},
+		{AgentName: "a1", RegisteredName: &wf, Success: true},
+		{AgentName: "a2", RegisteredName: &wf, Success: true},
 	}
 
 	out := formatDeployOutput(results)
@@ -360,7 +360,7 @@ func TestFormatDeployOutput_AllSuccess(t *testing.T) {
 func TestFormatDeployOutput_Partial(t *testing.T) {
 	wf := "wf1"
 	results := []deployResult{
-		{AgentName: "a1", WorkflowName: &wf, Success: true},
+		{AgentName: "a1", RegisteredName: &wf, Success: true},
 		{AgentName: "a2", Success: false, Error: strPtr("timeout")},
 	}
 

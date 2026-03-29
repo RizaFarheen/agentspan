@@ -62,6 +62,9 @@ func Load() *Config {
 	} else if secret := os.Getenv("CONDUCTOR_AUTH_SECRET"); secret != "" {
 		cfg.AuthSecret = secret
 	}
+	if apiKey := os.Getenv("AGENTSPAN_API_KEY"); apiKey != "" {
+		cfg.APIKey = apiKey
+	}
 
 	// File overrides (env vars take precedence)
 	data, err := os.ReadFile(configPath())

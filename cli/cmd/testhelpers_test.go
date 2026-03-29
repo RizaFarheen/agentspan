@@ -31,3 +31,11 @@ func saveTestConfig(t *testing.T, serverURL string) *config.Config {
 	}
 	return cfg
 }
+
+// newTestConfig returns a config pointing at the given server URL without writing to disk.
+func newTestConfig(t *testing.T, serverURL string) *config.Config {
+	t.Helper()
+	cfg := config.DefaultConfig()
+	cfg.ServerURL = serverURL
+	return cfg
+}
