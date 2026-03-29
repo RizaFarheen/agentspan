@@ -1,37 +1,22 @@
+#!/usr/bin/env python3
 # Copyright (c) 2025 Agentspan
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-"""GitHub Coding Agent (Chained) — conditional sequential pipeline.
+"""GitHub Coding Agent — issue to PR pipeline.
 
-Demonstrates:
-    - Sequential pipeline with gate (conditional execution)
-    - SWARM orchestration nested inside a pipeline stage
-    - Clean separation of concerns: fetch -> code -> push
-    - ``cli_commands`` for stages that only run CLI tools (stages 1 & 3)
-    - ``local_code_execution`` for stages that write/run code (stage 2)
-    - Distributed-safe handover: git is the shared state, not the local filesystem
+Deploys and serves a three-stage pipeline:
+  1. Fetch open issue, create branch (CLI tools: gh, git)
+  2. Code fix + QA review (SWARM: coder <-> qa_tester)
+  3. Create pull request (CLI tool: gh)
 
-Architecture:
-    pipeline = git_fetch_issues >> coding_qa >> git_push_pr
-
-    git_fetch_issues --gate--> coding_qa (coder <-> qa_tester) --> git_push_pr
-
-    Gate: if no open issues, pipeline stops after stage 1.
-    Each stage receives the previous stage's output as its prompt.
-
-Handover contract (what each stage outputs for the next):
-    Stage 1 → Stage 2:  REPO / BRANCH / ISSUE / SUMMARY lines
-    Stage 2 → Stage 3:  REPO / BRANCH / SUMMARY lines (branch already pushed)
-    Stage 3:            PR URL
-
-    Each stage does a fresh clone from the remote branch, so stages can
-    run on different machines with no shared filesystem.
+Run:
+    python github_coding_agent.py          # Deploy + serve
+    agentspan run github_pipeline "..."    # Trigger (from another terminal)
 
 Requirements:
-    - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - gh CLI authenticated (gh auth status)
-    - GITHUB_TOKEN or GH_TOKEN set for API access
+    - Agentspan server running
+    - GITHUB_TOKEN stored: agentspan credentials set --name GITHUB_TOKEN
+    - gh CLI installed
 """
 
 from agentspan.agents import Agent, AgentRuntime, Strategy
@@ -41,9 +26,7 @@ from agentspan.agents.handoff import OnTextMention
 REPO = "agentspan/codingexamples"
 MODEL = "anthropic/claude-sonnet-4-6"
 
-# -- Stage 1: Fetch issues -------------------------------------------------
-# Stage 1 creates a branch on the remote and outputs only REPO/BRANCH/ISSUE/SUMMARY.
-# No local path is forwarded — git is the shared state between stages.
+# ── Stage 1: Fetch issues ─────────────────────────────────────────
 
 git_fetch_issues = Agent(
     name="git_fetch_issues",
@@ -51,18 +34,12 @@ git_fetch_issues = Agent(
     instructions=f"""\
 You are a GitHub issue fetcher.
 
-1. List the 5 most recent open issues on {REPO} (include number, title, body).
+1. List the 5 most recent open issues on {REPO}.
 2. If there are NO open issues, output exactly: NO_OPEN_ISSUES
 3. Otherwise pick the most suitable issue, then:
-   - Create a temp dir: `mktemp -d /tmp/fetch-XXXXXXXX`
-   - Clone {REPO} into that dir and create branch fix/issue-<NUMBER>
-   - Push the branch to origin immediately: `git push -u origin fix/issue-<NUMBER>`
-   - Delete the temp dir (it is no longer needed).
-   - Output ONLY these lines, nothing else:
-       REPO: {REPO}
-       BRANCH: fix/issue-<NUMBER>
-       ISSUE: #<NUMBER> <title>
-       SUMMARY: <one-sentence description of what needs to be done>
+   - Create a temp dir, clone {REPO}, create branch fix/issue-<NUMBER>
+   - Push the branch to origin
+   - Output ONLY: REPO / BRANCH / ISSUE / SUMMARY lines
 """,
     cli_commands=True,
     cli_allowed_commands=["gh", "git", "mktemp", "rm"],
@@ -71,9 +48,7 @@ You are a GitHub issue fetcher.
     gate=TextGate("NO_OPEN_ISSUES"),
 )
 
-# -- Stage 2: Coding + QA (SWARM) ------------------------------------------
-# Each agent does a fresh clone from the remote branch — no shared filesystem.
-# Coder pushes changes before handing off to QA; QA pulls to review.
+# ── Stage 2: Coding + QA (SWARM) ──────────────────────────────────
 
 coder = Agent(
     name="coder",
@@ -81,21 +56,8 @@ coder = Agent(
     max_tokens=60000,
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
-You are a senior developer. Your task description contains REPO, BRANCH, ISSUE, and SUMMARY.
-
-1. Create a fresh temp dir: `mktemp -d /tmp/coder-XXXXXXXX`
-2. Clone the repo and check out the branch:
-     git clone https://github.com/<REPO> <dir>
-     cd <dir> && git checkout <BRANCH>
-3. Implement the fix described in ISSUE/SUMMARY.
-   For a new feature, create a new folder with a name that reflects the requirements.
-4. Commit your changes with a descriptive message.
-5. Push: `git push origin <BRANCH>`
-6. Delete the temp dir.
-7. Say HANDOFF_TO_QA followed by:
-     REPO: <repo>
-     BRANCH: <branch>
-     CHANGES: <brief description of what you implemented>
+You are a senior developer. Clone the repo, check out the branch,
+implement the fix, commit, push. Then say HANDOFF_TO_QA with REPO/BRANCH/CHANGES.
 """,
     local_code_execution=True,
 )
@@ -105,19 +67,9 @@ qa_tester = Agent(
     model=MODEL,
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
-You are a QA engineer. Your task description contains REPO, BRANCH, and CHANGES.
-
-1. Create a fresh temp dir: `mktemp -d /tmp/qa-XXXXXXXX`
-2. Clone the repo and check out the branch:
-     git clone https://github.com/<REPO> <dir>
-     cd <dir> && git checkout <BRANCH>
-3. Review the changed files and run any existing tests (`python -m pytest` if applicable).
-4. Delete the temp dir.
-5. If you find bugs, say HANDOFF_TO_CODER followed by a description of what to fix.
-6. If everything looks good, say QA_APPROVED followed by:
-     REPO: <repo>
-     BRANCH: <branch>
-     SUMMARY: <what was tested and confirmed working>
+You are a QA engineer. Clone the repo, review changes, run tests.
+If bugs found: say HANDOFF_TO_CODER with what to fix.
+If good: say QA_APPROVED with REPO/BRANCH/SUMMARY.
 """,
     local_code_execution=True,
     max_tokens=60000,
@@ -127,14 +79,10 @@ You are a QA engineer. Your task description contains REPO, BRANCH, and CHANGES.
 coding_qa = Agent(
     name="coding_qa",
     model=MODEL,
-    instructions="Your task description contains REPO, BRANCH, ISSUE, and SUMMARY. "
-                 "Delegate to coder to implement the fix, passing REPO, BRANCH, and the task details. "
-                 "Once coder completes, delegate to qa_tester. "
-                 "If QA does not pass, send it back to coder to fix. "
-                 "When QA approves, output ONLY these lines as your final message:\n"
-                 "  REPO: <repo>\n"
-                 "  BRANCH: <branch>\n"
-                 "  SUMMARY: <what was implemented and verified>",
+    instructions=(
+        "Delegate to coder, then qa_tester. Loop until QA approves. "
+        "Output REPO/BRANCH/SUMMARY when done."
+    ),
     agents=[coder, qa_tester],
     strategy=Strategy.SWARM,
     handoffs=[
@@ -146,36 +94,39 @@ coding_qa = Agent(
     timeout_seconds=6000,
 )
 
-# -- Stage 3: Create PR ----------------------------------------------------
-# Task description contains REPO, BRANCH, and SUMMARY from stage 2.
-# The branch is already fully pushed — no local clone needed.
+# ── Stage 3: Create PR ────────────────────────────────────────────
 
 git_push_pr = Agent(
     name="git_push_pr",
     model=MODEL,
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
-    instructions=f"""\
-You are a GitHub PR creator. Your task description contains REPO, BRANCH, and SUMMARY.
-The branch is already pushed to origin — your only job is to open a pull request.
-
-1. Create the PR:
-     gh pr create --repo <REPO> --base main --head <BRANCH> \\
-       --title "<concise title>" --body "<summary of changes>"
-2. Output the PR URL.
+    instructions="""\
+You are a PR creator. The branch is already pushed.
+Run: gh pr create --repo <REPO> --base main --head <BRANCH> --title "..." --body "..."
+Output the PR URL.
 """,
     cli_commands=True,
-    max_tokens=60000,
-    max_turns=10,
     cli_allowed_commands=["gh"],
 )
 
-# -- Pipeline ---------------------------------------------------------------
+# ── Pipeline ──────────────────────────────────────────────────────
 
 pipeline = git_fetch_issues >> coding_qa >> git_push_pr
 
 if __name__ == "__main__":
-    with AgentRuntime() as runtime:
-        runtime.deploy(pipeline)
-        runtime.serve(pipeline)
-        # result = runtime.run(pipeline, "Pick an open issue and create a PR.", timeout=240000)
+    with AgentRuntime() as rt:
+        # Deploy: push definition to server (idempotent — safe to call every startup).
+        # Can also be done via CLI: agentspan deploy examples.production.github_coding_agent
+        rt.deploy(pipeline)
+
+        # Option A: Serve workers (production — blocks forever, run from outside)
+        rt.serve(pipeline)
+
+        # Option B: Run directly (quick test — uncomment below, comment out serve above)
+        # rt.run() handles deploy + workers internally, no serve needed.
+        # result = rt.run(pipeline, "Pick an open issue and create a PR.", timeout=240000)
+        # result.print_result()
+        #
+        # Or trigger a deployed agent by name from any process:
+        # result = rt.run("github_pipeline", "Pick an open issue and create a PR.")
         # result.print_result()
