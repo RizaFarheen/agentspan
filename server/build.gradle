@@ -5,6 +5,19 @@ plugins {
     id 'com.gradleup.shadow' version '8.3.6'
 }
 
+// ── Version catalog ──────────────────────────────────────────────
+ext {
+    conductorVersion   = '3.22.2'
+    lombokVersion      = '1.18.42'
+    log4jVersion       = '2.24.3'  // managed by Spring BOM, explicit for clarity
+    sqliteJdbcVersion  = '3.47.0.0'
+    springSecVersion   = '6.3.4'
+    jsonSchemaVersion  = '1.0.73'
+    junitVersion       = '5.10.2'
+    assertjVersion     = '3.25.1'
+    mockitoVersion     = '5.10.0'
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -23,24 +36,24 @@ springBoot {
 dependencies {
 
     // Conductor core
-    implementation 'org.conductoross:conductor-core:3.22.2'
-    implementation 'org.conductoross:conductor-rest:3.22.2'
-    implementation 'org.conductoross:conductor-common:3.22.2'
-    implementation 'org.conductoross:conductor-ai:3.22.2'
+    implementation "org.conductoross:conductor-core:${conductorVersion}"
+    implementation "org.conductoross:conductor-rest:${conductorVersion}"
+    implementation "org.conductoross:conductor-common:${conductorVersion}"
+    implementation "org.conductoross:conductor-ai:${conductorVersion}"
 
     // PostgreSQL persistence + queue + indexing + locking
-    implementation 'org.conductoross:conductor-postgres-persistence:3.22.2'
-    implementation 'org.conductoross:conductor-postgres-external-storage:3.22.2'
+    implementation "org.conductoross:conductor-postgres-persistence:${conductorVersion}"
+    implementation "org.conductoross:conductor-postgres-external-storage:${conductorVersion}"
 
     // SQLite persistence (activate with conductor.db.type=sqlite)
-    implementation 'org.conductoross:conductor-sqlite-persistence:3.22.2'
+    implementation "org.conductoross:conductor-sqlite-persistence:${conductorVersion}"
 
     // Common system tasks
-    implementation 'org.conductoross:conductor-http-task:3.22.2'
-    implementation 'org.conductoross:conductor-json-jq-task:3.22.2'
+    implementation "org.conductoross:conductor-http-task:${conductorVersion}"
+    implementation "org.conductoross:conductor-json-jq-task:${conductorVersion}"
 
     // Metrics
-    implementation 'org.conductoross:conductor-metrics:3.22.2'
+    implementation "org.conductoross:conductor-metrics:${conductorVersion}"
 
     // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -53,24 +66,24 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-log4j2'
     implementation 'org.apache.logging.log4j:log4j-web'
 
-    compileOnly 'org.projectlombok:lombok:1.18.42'
-    annotationProcessor 'org.projectlombok:lombok:1.18.42'
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     // JSON Schema
-    implementation 'com.networknt:json-schema-validator:1.0.73'
+    implementation "com.networknt:json-schema-validator:${jsonSchemaVersion}"
 
     // SQLite JDBC driver (for credential DataSource)
-    implementation 'org.xerial:sqlite-jdbc:3.47.0.0'
+    implementation "org.xerial:sqlite-jdbc:${sqliteJdbcVersion}"
     // Spring Security Crypto (BCrypt password hashing, no full Security stack)
-    implementation 'org.springframework.security:spring-security-crypto:6.3.4'
+    implementation "org.springframework.security:spring-security-crypto:${springSecVersion}"
 
     // Test dependencies
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    testImplementation 'org.assertj:assertj-core:3.25.1'
-    testImplementation 'org.mockito:mockito-core:5.10.0'
-    testCompileOnly 'org.projectlombok:lombok:1.18.42'
-    testAnnotationProcessor 'org.projectlombok:lombok:1.18.42'
+    testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+    testImplementation "org.assertj:assertj-core:${assertjVersion}"
+    testImplementation "org.mockito:mockito-core:${mockitoVersion}"
+    testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
 
     // Logging
     implementation('org.apache.logging.log4j:log4j-core')
