@@ -112,7 +112,7 @@ jobs:
 
       - name: Run Python e2e tests (parallel)
         working-directory: sdk/python
-        run: uv run pytest ../../tests/e2e/test_python_e2e.py -n auto -v -s
+        run: uv run pytest ../../tests/e2e/test_python_e2e.py -n auto -v
 
   # ── TypeScript E2E Tests ───────────────────────────────────────────
   typescript-e2e:
