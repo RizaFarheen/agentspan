@@ -94,6 +94,7 @@ no_strict_optional = true
 
 [dependency-groups]
 dev = [
+    "claude-code-sdk>=0.0.20",
     "langchain>=0.3.28",
     "langchain-core>=0.3.83",
     "langchain-openai>=0.3.35",
