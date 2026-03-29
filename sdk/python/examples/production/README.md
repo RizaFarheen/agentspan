@@ -1,70 +1,81 @@
-# Production Deployment Examples
+# Production Deployment
 
-Agentspan agents have three lifecycle phases:
+## How it works
 
+An agentspan application is a single Python file that defines agents and serves workers.
+
+```python
+# my_app.py
+from agentspan.agents import Agent, AgentRuntime
+
+agent = Agent(name="my_agent", model="openai/gpt-4o", instructions="...", tools=[...])
+
+if __name__ == "__main__":
+    with AgentRuntime() as rt:
+        rt.deploy(agent)    # Push definition to server (idempotent)
+        rt.serve(agent)     # Start workers, poll for tasks (blocks)
 ```
-define → deploy → serve → run
-```
 
-| Phase | What it does | Who runs it |
+That's it. One file. Two lines in `main`.
+
+## The three concerns
+
+| Concern | How | Who |
 |---|---|---|
-| **Define** | Create agent definitions in Python | Developer |
-| **Deploy** | Push definitions to the server | CI/CD pipeline |
-| **Serve** | Start workers that execute tools | Runtime service |
-| **Run** | Trigger an agent by name | Client / API |
+| **Deploy** | `agentspan deploy my_app` (CI/CD) or `rt.deploy()` at startup | CI/CD pipeline or app startup |
+| **Serve** | `python my_app.py` or `agentspan serve my_app` | Docker / K8s / systemd |
+| **Run** | `agentspan run my_agent "prompt"` or API call | External trigger (webhook, cron, UI) |
 
-## Quick Start (all-in-one)
+Deploy is idempotent — calling it on every startup is safe and ensures the server always has the latest definition.
 
-Most examples in `../` use `runtime.run(agent, prompt)` which deploys, serves, and runs in one call. That's great for prototyping. For production, separate these concerns.
-
-## Examples
-
-### `github_coding_agent/` — GitHub Issue → PR Pipeline
-
-A three-stage pipeline: fetch issue → code + QA (SWARM) → create PR.
-Uses CLI tools, code execution, credentials, gates, and handoffs.
+## Running locally
 
 ```bash
-cd github_coding_agent
+# Terminal 1: Start the app (deploys + serves)
+python my_app.py
 
-# Step 1: Deploy (or: agentspan deploy agents)
-python deploy.py
-
-# Step 2: Serve workers (separate terminal)
-python serve.py
-
-# Step 3: Trigger
-python run.py
-# or: agentspan run github_pipeline "Pick an open issue and create a PR."
+# Terminal 2: Trigger the agent
+agentspan run my_agent "Do the thing"
 ```
 
-### `ml_pipeline/` — ML Engineering Pipeline
+## CI/CD deployment
 
-A five-stage pipeline: data analysis → parallel model exploration → evaluation → iterative refinement → report.
-
-```bash
-cd ml_pipeline
-
-# Step 1: Deploy
-python deploy.py
-
-# Step 2: Serve workers (separate terminal)
-python serve.py
-
-# Step 3: Trigger
-python run.py
-# or: agentspan run ml_pipeline "Build a model for California housing prices."
+```yaml
+# GitHub Actions / Jenkins / etc.
+steps:
+  - run: agentspan deploy my_app
 ```
 
-## CLI Deployment (Recommended for CI/CD)
+The `deploy` command imports the module, discovers all Agent objects, and pushes their definitions to the server. No workers are started.
+
+## Production runtime
+
+```dockerfile
+# Dockerfile
+CMD ["python", "my_app.py"]
+```
+
+Or with the CLI:
+
+```dockerfile
+CMD ["agentspan", "serve", "my_app"]
+```
+
+## Triggering agents
+
+Agents are triggered by name, not by object reference. This decouples the trigger from the definition.
 
 ```bash
-# Deploy all agents from a Python module
-agentspan deploy examples.production.github_coding_agent.agents
+# CLI
+agentspan run my_agent "What is the weather?"
 
-# Start workers
-agentspan serve examples.production.github_coding_agent.agents
+# Python (from any process)
+from agentspan.agents import AgentRuntime
+with AgentRuntime() as rt:
+    result = rt.run("my_agent", "What is the weather?")
 
-# Trigger by name
-agentspan run github_pipeline "Pick an open issue and create a PR."
+# REST API
+curl -X POST http://localhost:8080/api/agent/start \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my_agent", "prompt": "What is the weather?"}'
 ```
