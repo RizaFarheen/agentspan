@@ -1751,7 +1751,7 @@ Per base spec §2.3:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:8080/api` | Server API URL |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Server API URL |
 | `AGENTSPAN_API_KEY` | — | Bearer token / API key |
 | `AGENTSPAN_AUTH_KEY` | — | Legacy auth key |
 | `AGENTSPAN_AUTH_SECRET` | — | Legacy auth secret |

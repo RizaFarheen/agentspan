@@ -587,7 +587,7 @@ These mirror the Python top-level API. Because TypeScript is async-native, there
 import { configure, run, start, stream, deploy, plan, serve, shutdown } from "agentspan";
 
 // Pre-configure the singleton runtime
-configure({ serverUrl: "http://localhost:8080/api", apiKey: "sk-..." });
+configure({ serverUrl: "http://localhost:6767/api", apiKey: "sk-..." });
 
 // Synchronous-style (just await the promise)
 const result = await run(myAgent, "Write an article");
@@ -1408,7 +1408,7 @@ export default defineConfig({
 import { configure } from "agentspan";
 
 configure({
-  serverUrl: process.env.AGENTSPAN_SERVER_URL ?? "http://localhost:8080/api",
+  serverUrl: process.env.AGENTSPAN_SERVER_URL ?? "http://localhost:6767/api",
   apiKey: process.env.AGENTSPAN_API_KEY,
 });
 ```

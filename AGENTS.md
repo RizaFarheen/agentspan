@@ -359,7 +359,7 @@ Environment variables:
 
 | Variable | Description | Default |
 |---|---|---|
-| `AGENTSPAN_SERVER_URL` | AgentSpan server API URL | `http://localhost:8080/api` |
+| `AGENTSPAN_SERVER_URL` | AgentSpan server API URL | `http://localhost:6767/api` |
 | `AGENTSPAN_AUTH_KEY` | Auth key (Orkes Cloud) | None |
 | `AGENTSPAN_AUTH_SECRET` | Auth secret (Orkes Cloud) | None |
 | `AGENTSPAN_AGENT_TIMEOUT` | Default workflow timeout (seconds) | 300 |

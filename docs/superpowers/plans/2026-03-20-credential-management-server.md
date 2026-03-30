@@ -4140,29 +4140,29 @@ cd server
 In another terminal, verify the server is up and auth/credentials endpoints respond:
 ```bash
 # Login with default user
-curl -s -X POST http://localhost:8080/api/auth/login \
+curl -s -X POST http://localhost:6767/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"agentspan","password":"agentspan"}'
 # Expected: {"token":"...", "user":{...}}
 
 # Use token to list credentials
-TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:6767/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"agentspan","password":"agentspan"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
 
-curl -s http://localhost:8080/api/credentials \
+curl -s http://localhost:6767/api/credentials \
   -H "Authorization: Bearer $TOKEN"
 # Expected: []
 
 # Set a credential
-curl -s -X POST http://localhost:8080/api/credentials \
+curl -s -X POST http://localhost:6767/api/credentials \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"GITHUB_TOKEN","value":"ghp_testvalue123456789"}'
 # Expected: 201
 
 # List again — should show partial value
-curl -s http://localhost:8080/api/credentials \
+curl -s http://localhost:6767/api/credentials \
   -H "Authorization: Bearer $TOKEN"
 # Expected: [{"name":"GITHUB_TOKEN","partial":"ghp_...6789","updatedAt":"..."}]
 ```

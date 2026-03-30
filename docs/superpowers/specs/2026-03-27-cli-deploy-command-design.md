@@ -125,7 +125,7 @@ Discovered 3 agents in myapp:
   summarizer   native
   classifier   langchain
 
-Deploy 3 agents to http://localhost:8080? [y/N]
+Deploy 3 agents to http://localhost:6767? [y/N]
 ```
 
 Default is No. Only `y` or `Y` proceeds.

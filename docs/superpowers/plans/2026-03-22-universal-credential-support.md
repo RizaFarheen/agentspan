@@ -536,10 +536,10 @@ git commit -m "feat: resolve credential headers for MCP tasks on scheduling"
 - [ ] **Step 1: Restart server with all changes, run all tests**
 
 ```bash
-cd server && lsof -ti :8080 | xargs kill -9 2>/dev/null; sleep 2
+cd server && lsof -ti :6767 | xargs kill -9 2>/dev/null; sleep 2
 ./gradlew clean bootRun > /tmp/agentspan_server.log 2>&1 &
 # Wait for ready
-for i in $(seq 1 30); do curl -sf http://localhost:8080/api/credentials > /dev/null 2>&1 && break; sleep 1; done
+for i in $(seq 1 30); do curl -sf http://localhost:6767/api/credentials > /dev/null 2>&1 && break; sleep 1; done
 
 cd ../sdk/python && uv pip install -e .
 uv run python -m pytest tests/e2e/ tests/unit/credentials/ -v
@@ -625,7 +625,7 @@ import os
 import httpx
 import pytest
 
-SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:8080")
+SERVER = os.environ.get("AGENTSPAN_SERVER_URL", "http://localhost:6767")
 API = f"{SERVER}/api"
 CRED_NAME = "_E2E_FW_CRED"
 CRED_VALUE = "framework-secret-12345"
@@ -988,9 +988,9 @@ git commit -m "docs: credential support for all tool types"
 - [ ] **Step 1: Restart server with all changes**
 
 ```bash
-cd server && lsof -ti :8080 | xargs kill -9 2>/dev/null; sleep 2
+cd server && lsof -ti :6767 | xargs kill -9 2>/dev/null; sleep 2
 ./gradlew clean bootRun > /tmp/agentspan_server.log 2>&1 &
-for i in $(seq 1 30); do curl -sf http://localhost:8080/api/credentials > /dev/null 2>&1 && break; sleep 1; done
+for i in $(seq 1 30); do curl -sf http://localhost:6767/api/credentials > /dev/null 2>&1 && break; sleep 1; done
 ```
 
 - [ ] **Step 2: Run ALL Python tests**

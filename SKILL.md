@@ -48,7 +48,7 @@ rt = AgentRuntime()
 
 # Explicit:
 from agentspan.agents import AgentConfig
-config = AgentConfig(server_url="http://localhost:8080/api", api_key="...")
+config = AgentConfig(server_url="http://localhost:6767/api", api_key="...")
 rt = AgentRuntime(config=config)
 ```
 

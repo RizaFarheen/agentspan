@@ -246,7 +246,7 @@ Create tools from an MCP (Model Context Protocol) server. Tools are discovered a
 
 ```python
 github = mcp_tool(
-    server_url="http://localhost:8080/mcp",
+    server_url="http://localhost:6767/mcp",
     name="github",
     description="GitHub operations",
 )
@@ -1037,7 +1037,7 @@ The SDK reads configuration from environment variables:
 
 | Variable | Description | Default |
 |---|---|---|
-| `AGENTSPAN_SERVER_URL` | Agentspan server API URL | `http://localhost:8080/api` |
+| `AGENTSPAN_SERVER_URL` | Agentspan server API URL | `http://localhost:6767/api` |
 | `AGENTSPAN_AUTH_KEY` | Auth key (Orkes Cloud) | None |
 | `AGENTSPAN_AUTH_SECRET` | Auth secret (Orkes Cloud) | None |
 | `AGENTSPAN_AGENT_TIMEOUT` | Default workflow timeout (seconds) | 300 |
@@ -1055,7 +1055,7 @@ config = AgentConfig.from_env()
 
 # Or construct directly (kwargs override defaults)
 config = AgentConfig(
-    server_url="http://localhost:8080/api",
+    server_url="http://localhost:6767/api",
     default_timeout_seconds=600,
     worker_thread_count=5,
 )
@@ -1092,7 +1092,7 @@ python3 -m pytest tests/unit/ -v
 python3 -m pytest tests/e2e/ -v
 ```
 
-E2E tests run against a live Agentspan server at `AGENTSPAN_SERVER_URL` (default `http://localhost:8080`).
+E2E tests run against a live Agentspan server at `AGENTSPAN_SERVER_URL` (default `http://localhost:6767`).
 
 All unit and e2e tests must pass.
 
@@ -1128,7 +1128,7 @@ def my_external_tool(task):
 
 ### Example Validation
 
-All runnable examples must execute successfully against a live Conductor server (`http://localhost:8080/api`, no auth).
+All runnable examples must execute successfully against a live Conductor server (`http://localhost:6767/api`, no auth).
 
 **Autonomous examples** (run directly):
 
@@ -1187,7 +1187,7 @@ All runnable examples must execute successfully against a live Conductor server 
 ### Run All Autonomous Examples
 
 ```bash
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 for ex in 01_basic_agent 02a_simple_tools 02b_multi_step_tools 03_structured_output \
           05_handoffs 06_sequential_pipeline 07_parallel_agents 08_router_agent \
           10_guardrails 11_streaming 12_long_running 13_hierarchical_agents 14_existing_workers \
@@ -1231,7 +1231,7 @@ End-to-end streaming tests validate the complete SSE event stream for all agent 
 
 **Prerequisites:**
 - Running Conductor server with streaming support
-- `export AGENTSPAN_SERVER_URL=http://localhost:8080/api`
+- `export AGENTSPAN_SERVER_URL=http://localhost:6767/api`
 - LLM provider configured (OpenAI by default)
 - Optionally: `export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini` (default)
 

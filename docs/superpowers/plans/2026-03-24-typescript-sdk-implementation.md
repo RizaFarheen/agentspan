@@ -678,7 +678,7 @@ Requires running agentspan server. Test: basic run() completes, stream() yields 
 - [ ] **Step 2: Run integration tests (if server available)**
 
 ```bash
-AGENTSPAN_SERVER_URL=http://localhost:8080/api npx vitest run tests/integration/
+AGENTSPAN_SERVER_URL=http://localhost:6767/api npx vitest run tests/integration/
 ```
 
 - [ ] **Step 3: Commit**

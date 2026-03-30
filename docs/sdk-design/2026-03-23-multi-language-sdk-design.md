@@ -91,7 +91,7 @@ Two supported modes:
 
 ### 2.2 REST API Endpoints
 
-Base URL: `{server_url}/agent` (server_url defaults to `http://localhost:8080/api`)
+Base URL: `{server_url}/agent` (server_url defaults to `http://localhost:6767/api`)
 
 #### POST /agent/start — Start Agent Execution
 
@@ -281,7 +281,7 @@ SDKs must support configuration via environment variables:
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:8080/api` | Server API URL |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Server API URL |
 | `AGENTSPAN_API_KEY` | — | Bearer token / API key |
 | `AGENTSPAN_AUTH_KEY` | — | Legacy auth key |
 | `AGENTSPAN_AUTH_SECRET` | — | Legacy auth secret |
