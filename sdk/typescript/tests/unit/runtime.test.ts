@@ -8,14 +8,14 @@ describe('AgentRuntime', () => {
   const savedEnv: Record<string, string | undefined> = {};
   const envKeys = ['AGENTSPAN_SERVER_URL', 'AGENTSPAN_API_KEY', 'AGENTSPAN_AUTH_KEY', 'AGENTSPAN_AUTH_SECRET'];
 
-  function mockAgentServer(workflowId = 'wf-cred-test', fetchCalls?: string[]) {
+  function mockAgentServer(executionId = 'wf-cred-test', fetchCalls?: string[]) {
     global.fetch = vi.fn().mockImplementation(async (url: string) => {
       fetchCalls?.push(url);
       if (url.includes('/agent/start')) {
         return {
           ok: true,
           status: 200,
-          text: async () => JSON.stringify({ workflowId }),
+          text: async () => JSON.stringify({ executionId }),
         };
       }
       if (url.includes('/agent/stream/')) {
@@ -32,7 +32,7 @@ describe('AgentRuntime', () => {
           }),
         };
       }
-      if (url.includes(`/agent/${workflowId}/status`)) {
+      if (url.includes(`/agent/${executionId}/status`)) {
         return {
           ok: true,
           status: 200,
@@ -117,12 +117,12 @@ describe('AgentRuntime', () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
-        text: async () => '{"workflowId":"wf-1"}',
+        text: async () => '{"executionId":"wf-1"}',
       });
 
       const runtime = new AgentRuntime();
       const result = await runtime._httpRequest('GET', '/test');
-      expect(result).toEqual({ workflowId: 'wf-1' });
+      expect(result).toEqual({ executionId: 'wf-1' });
     });
 
     it('returns empty object for empty response', async () => {
@@ -221,7 +221,7 @@ describe('AgentRuntime', () => {
   });
 
   describe('SSE URL construction', () => {
-    it('constructs SSE URL as /agent/stream/{workflowId}', async () => {
+    it('constructs SSE URL as /agent/stream/{executionId}', async () => {
       const fetchCalls: string[] = [];
 
       global.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
@@ -231,7 +231,7 @@ describe('AgentRuntime', () => {
           return {
             ok: true,
             status: 200,
-            text: async () => JSON.stringify({ workflowId: 'wf-sse-test' }),
+            text: async () => JSON.stringify({ executionId: 'wf-sse-test' }),
           };
         }
         if (url.includes('/agent/stream/') || url.includes('/sse')) {
