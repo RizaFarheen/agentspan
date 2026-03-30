@@ -357,7 +357,7 @@ When an agent is deployed, a handle is returned for ongoing management:
 ```
 DeploymentHandle:
   name: string                   # agent name
-  workflow_name: string          # compiled workflow name
+  registered_name: string        # compiled workflow name
   triggers: Trigger[]            # active triggers
   status: "running" | "paused" | "stopped"
 

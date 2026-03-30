@@ -649,7 +649,7 @@ Use Kotlin's `runCatching` for operations that may fail without throwing:
 
 ```kotlin
 val result = runCatching { runtime.deploy(myAgent) }
-result.onSuccess { println("Deployed: ${it.workflowName}") }
+result.onSuccess { println("Deployed: ${it.registeredName}") }
       .onFailure { println("Deploy failed: ${it.message}") }
 ```
 
@@ -1132,7 +1132,7 @@ fun main() = runBlocking {
     AgentRuntime().use { runtime ->
         // Deploy (compile + register)
         val deployments = runtime.deploy(fullPipeline)
-        deployments.forEach { println("  Deployed: ${it.workflowName}") }
+        deployments.forEach { println("  Deployed: ${it.registeredName}") }
 
         // Plan (dry-run, no execution)
         runtime.plan(fullPipeline)

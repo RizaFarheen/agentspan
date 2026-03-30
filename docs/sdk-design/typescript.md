@@ -245,7 +245,7 @@ export interface AgentStatus {
 }
 
 export interface DeploymentInfo {
-  workflowName: string;
+  registeredName: string;
   agentName: string;
 }
 
@@ -1769,7 +1769,7 @@ await using runtime = new AgentRuntime();
 // Deploy
 const deployments = await runtime.deploy(fullPipeline);
 for (const dep of deployments) {
-  console.log(`  Deployed: ${dep.workflowName} (${dep.agentName})`);
+  console.log(`  Deployed: ${dep.registeredName} (${dep.agentName})`);
 }
 
 // Plan (dry-run)

@@ -23,11 +23,11 @@ class DeploymentInfo:
     Returned by :meth:`AgentRuntime.deploy` for each deployed agent.
 
     Attributes:
-        workflow_name: The Conductor workflow name registered on the server.
+        registered_name: The name registered on the server.
         agent_name: The agent's name (from :attr:`Agent.name`).
     """
 
-    workflow_name: str
+    registered_name: str
     agent_name: str
 
 

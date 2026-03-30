@@ -123,7 +123,7 @@ def deploy_agent() -> None:
     with AgentRuntime() as runtime:
         results = runtime.deploy(agent)
         for info in results:
-            print(f"Deployed: {info.agent_name} -> {info.workflow_name}")
+            print(f"Deployed: {info.agent_name} -> {info.registered_name}")
 
 
 def serve_workers(worker_info_file: Path) -> None:

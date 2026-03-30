@@ -1893,10 +1893,10 @@ class AgentRuntime:
 
             framework = detect_framework(agent)
 
-            workflow_name = self._deploy_via_server(agent, framework=framework)
-            agent_name = agent.name if hasattr(agent, "name") else workflow_name
-            results.append(DeploymentInfo(workflow_name=workflow_name, agent_name=agent_name))
-            logger.info("Deployed agent '%s' as workflow '%s'", agent_name, workflow_name)
+            registered_name = self._deploy_via_server(agent, framework=framework)
+            agent_name = agent.name if hasattr(agent, "name") else registered_name
+            results.append(DeploymentInfo(registered_name=registered_name, agent_name=agent_name))
+            logger.info("Deployed agent '%s' as '%s'", agent_name, registered_name)
 
         return results
 
@@ -1921,15 +1921,15 @@ class AgentRuntime:
 
             framework = detect_framework(agent)
 
-            workflow_name = await self._deploy_via_server_async(agent, framework=framework)
-            agent_name = agent.name if hasattr(agent, "name") else workflow_name
-            results.append(DeploymentInfo(workflow_name=workflow_name, agent_name=agent_name))
-            logger.info("Deployed agent '%s' as workflow '%s'", agent_name, workflow_name)
+            registered_name = await self._deploy_via_server_async(agent, framework=framework)
+            agent_name = agent.name if hasattr(agent, "name") else registered_name
+            results.append(DeploymentInfo(registered_name=registered_name, agent_name=agent_name))
+            logger.info("Deployed agent '%s' as '%s'", agent_name, registered_name)
 
         return results
 
     def _deploy_via_server(self, agent: Any, *, framework: Optional[str] = None) -> str:
-        """Deploy agent via /api/agent/deploy.  Returns workflow name."""
+        """Deploy agent via /api/agent/deploy.  Returns registered name."""
         import requests as req_lib
 
         if framework:

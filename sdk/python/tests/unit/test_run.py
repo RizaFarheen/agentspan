@@ -223,7 +223,7 @@ class TestDeployFunction:
         from agentspan.agents.run import deploy
 
         mock_runtime = MagicMock()
-        mock_runtime.deploy.return_value = [DeploymentInfo(workflow_name="wf", agent_name="a")]
+        mock_runtime.deploy.return_value = [DeploymentInfo(registered_name="wf", agent_name="a")]
         agent = Agent(name="a", model="openai/gpt-4o")
         result = deploy(agent, runtime=mock_runtime)
         mock_runtime.deploy.assert_called_once_with(agent, packages=None)

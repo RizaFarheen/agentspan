@@ -291,7 +291,7 @@ public record GuardrailResult(
 
 // --- Deployment Info ---
 public record DeploymentInfo(
-    [property: JsonPropertyName("workflowName")] string WorkflowName,
+    [property: JsonPropertyName("registeredName")] string RegisteredName,
     [property: JsonPropertyName("agentName")]    string AgentName
 );
 

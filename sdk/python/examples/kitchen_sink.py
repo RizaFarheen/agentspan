@@ -782,7 +782,7 @@ if __name__ == "__main__":
         print("=== Deploy ===")
         deployments = runtime.deploy(full_pipeline)
         for dep in deployments:
-            print(f"  Deployed: {dep.workflow_name} ({dep.agent_name})")
+            print(f"  Deployed: {dep.registered_name} ({dep.agent_name})")
 
         # ── Feature #51: plan (dry-run, no prompt) ───────────────
         print("\n=== Plan (dry-run) ===")

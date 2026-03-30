@@ -1319,7 +1319,7 @@ try (AgentRuntime runtime = new AgentRuntime()) {
 
     // Deploy
     DeploymentInfo deployment = runtime.deploy(fullPipeline);
-    System.out.println("Deployed: " + deployment.workflowName());
+    System.out.println("Deployed: " + deployment.registeredName());
 
     // Plan (dry-run)
     ExecutionPlan plan = runtime.plan(fullPipeline);

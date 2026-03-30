@@ -123,7 +123,7 @@ For framework agents (LangGraph, LangChain, OpenAI, Google ADK, Vercel AI SDK):
 ```json
 {
   "executionId": "uuid-string",
-  "workflowName": "agent_name"
+  "registeredName": "agent_name"
 }
 ```
 
@@ -147,7 +147,7 @@ Registers the workflow and task definitions for later execution. CI/CD operation
 **Response:**
 ```json
 {
-  "workflowName": "agent_name",
+  "registeredName": "agent_name",
   "workflowDef": { ... }
 }
 ```
@@ -800,7 +800,7 @@ Also exposes HITL methods: `respond()`, `approve()`, `reject()`, `send()`
 #### DeploymentInfo
 
 ```
-workflow_name: string, agent_name: string
+registered_name: string, agent_name: string
 ```
 
 ### 4.5 Execution API
@@ -2440,7 +2440,7 @@ Each SDK must provide a deploy entry point that:
 
 1. **Re-discovers agents** (same as discovery) and filters by `--agents` if specified
 2. **Calls `deploy()` per agent** with individual error handling — partial failures must not abort the batch
-3. **Outputs JSON to stdout**: `[{"agent_name": "...", "workflow_name": "...", "success": true/false, "error": null/"..."}]`
+3. **Outputs JSON to stdout**: `[{"agent_name": "...", "registered_name": "...", "success": true/false, "error": null/"..."}]`
 4. **Native agents** (including `claude-code` models) are serialized via `AgentConfigSerializer` and sent as `{"agentConfig": {...}}`
 5. **Framework agents** are serialized via `serialize_agent()` / `_serializeFramework()` and sent as `{"framework": "...", "rawConfig": {...}}`
 

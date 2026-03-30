@@ -257,7 +257,7 @@ module Agentspan
     end
   end
 
-  DeploymentInfo = Data.define(:workflow_name, :agent_name)
+  DeploymentInfo = Data.define(:registered_name, :agent_name)
 
   ExecutionResult = Data.define(:output, :error, :exit_code, :timed_out) do
     def success? = exit_code == 0 && !timed_out
@@ -2100,7 +2100,7 @@ begin
   # Deploy
   puts "=== Deploy ==="
   deployments = runtime.deploy(full_pipeline)
-  deployments.each { |dep| puts "  Deployed: #{dep.workflow_name} (#{dep.agent_name})" }
+  deployments.each { |dep| puts "  Deployed: #{dep.registered_name} (#{dep.agent_name})" }
 
   # Plan (dry-run)
   puts "\n=== Plan (dry-run) ==="

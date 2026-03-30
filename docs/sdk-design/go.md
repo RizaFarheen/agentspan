@@ -301,7 +301,7 @@ type CredentialFile struct {
 // ── DeploymentInfo ──────────────────────────────────────────────────
 
 type DeploymentInfo struct {
-    WorkflowName string `json:"workflowName"`
+    RegisteredName string `json:"registeredName"`
     AgentName    string `json:"agentName"`
 }
 ```
