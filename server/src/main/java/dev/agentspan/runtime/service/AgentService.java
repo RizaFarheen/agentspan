@@ -21,6 +21,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
 import com.netflix.conductor.common.metadata.tasks.TaskResult;
+import com.netflix.conductor.common.metadata.tasks.TaskExecLog;
+import com.netflix.conductor.common.metadata.workflow.RerunWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.StartWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
@@ -1120,5 +1122,60 @@ public class AgentService {
                         task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
             }
         }
+    }
+
+    // ── Execution lifecycle (UI delegation) ─────────────────────────
+
+    public Workflow getFullExecution(String executionId) {
+        return executionService.getExecutionStatus(executionId, true);
+    }
+
+    public void restartExecution(String executionId, boolean useLatestDefinitions) {
+        workflowService.restartWorkflow(executionId, useLatestDefinitions);
+    }
+
+    public void retryExecution(String executionId, boolean resumeSubworkflowTasks) {
+        workflowService.retryWorkflow(executionId, resumeSubworkflowTasks);
+    }
+
+    public String rerunExecution(String executionId, RerunWorkflowRequest request) {
+        return workflowService.rerunWorkflow(executionId, request);
+    }
+
+    public List<Task> getExecutionTasks(String executionId, String status, int count, int start) {
+        Workflow wf = executionService.getExecutionStatus(executionId, true);
+        List<Task> tasks = wf.getTasks();
+        if (status != null && !status.isEmpty()) {
+            tasks = tasks.stream()
+                    .filter(t -> status.equals(t.getStatus().name()))
+                    .collect(Collectors.toList());
+        }
+        int end = Math.min(start + count, tasks.size());
+        if (start >= tasks.size()) return List.of();
+        return tasks.subList(start, end);
+    }
+
+    public SearchResult<WorkflowSummary> searchExecutionsRaw(int start, int size, String sort,
+                                                              String freeText, String query) {
+        return workflowService.searchWorkflows(start, size, sort, freeText, query);
+    }
+
+    public WorkflowDef getAgentDefinition(String name, Integer version) {
+        if (version != null) {
+            return metadataDAO.getWorkflowDef(name, version)
+                    .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
+                            "Definition not found: " + name));
+        }
+        return metadataDAO.getLatestWorkflowDef(name)
+                .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
+                        "Definition not found: " + name));
+    }
+
+    public void updateTaskResult(TaskResult taskResult) {
+        executionService.updateTask(taskResult);
+    }
+
+    public List<TaskExecLog> getTaskLogs(String taskId) {
+        return executionService.getTaskLogs(taskId);
     }
 }
