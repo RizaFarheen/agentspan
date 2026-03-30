@@ -9,7 +9,7 @@ export const fetchExecution = async ({
   authHeaders: headers,
   executionId,
 }: HasAuthHeaders & { executionId: string }) => {
-  const url = `/api/agent/executions/${executionId}/full`;
+  const url = `agent/executions/${executionId}/full`;
   // Introspection removed — was: `/workflow/introspection/records?workflowId=${executionId}`
 
   try {

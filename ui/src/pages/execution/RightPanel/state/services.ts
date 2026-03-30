@@ -23,7 +23,7 @@ export const updateTaskState = async (
     payload: { status, body = {} },
   } = event as UpdateSelectedTaskStatus;
   const { referenceTaskName } = selectedTask!;
-  const url = `/api/agent/tasks/${executionId}/${referenceTaskName}/${status}?workerid=agent-ui`;
+  const url = `agent/tasks/${executionId}/${referenceTaskName}/${status}?workerid=agent-ui`;
   try {
     const result = await fetchWithContext(
       url,
@@ -56,7 +56,7 @@ export const fetchTaskLogs = async ({
       errorDetails: { message: "No Selected Task" },
     });
   }
-  const path = `/api/agent/tasks/${selectedTask?.taskId}/log`;
+  const path = `agent/tasks/${selectedTask?.taskId}/log`;
   try {
     const result = await fetchWithContext(
       path,
@@ -85,7 +85,7 @@ export const reRunWoflowFromTask = async ({
       errorDetails: { message: "No Selected Task" },
     });
   }
-  const url = `/api/agent/executions/${executionId}/rerun`;
+  const url = `agent/executions/${executionId}/rerun`;
   try {
     const result = await fetchWithContext(
       url,

@@ -178,7 +178,7 @@ export function useWorkflowSearch<T = any>(
 ): UseQueryResult<T, FetchError> {
   return useSearch<T>(
     searchObj,
-    "/api/agent/executions/search?",
+    "agent/executions/search?",
     queryOption,
     queryOptionOverride,
   );
