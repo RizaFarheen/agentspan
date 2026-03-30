@@ -1585,7 +1585,7 @@ class TestStartViaServer:
         """_start_via_server returns (workflowId, requiredWorkers) tuple."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        with patch("requests.post", _mock_requests_post({"workflowId": "wf-server-1"})):
+        with patch("requests.post", _mock_requests_post({"executionId": "wf-server-1"})):
             wf_id, required_workers = runtime._start_via_server(agent, "hello")
 
         assert wf_id == "wf-server-1"
@@ -1595,7 +1595,7 @@ class TestStartViaServer:
         """_start_via_server extracts requiredWorkers from server response."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        resp = {"workflowId": "wf-server-2", "requiredWorkers": ["agent_termination", "my_tool"]}
+        resp = {"executionId": "wf-server-2", "requiredWorkers": ["agent_termination", "my_tool"]}
         with patch("requests.post", _mock_requests_post(resp)):
             wf_id, required_workers = runtime._start_via_server(agent, "hello")
 
@@ -1606,7 +1606,7 @@ class TestStartViaServer:
         """_start_via_server includes the prompt in the payload."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "test prompt")
 
@@ -1618,7 +1618,7 @@ class TestStartViaServer:
         """_start_via_server includes media in the payload."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "describe", media=["https://img.png"])
 
@@ -1630,7 +1630,7 @@ class TestStartViaServer:
         """Idempotency key is included in the payload when provided."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "hi", idempotency_key="idem-123")
 
@@ -1642,7 +1642,7 @@ class TestStartViaServer:
         """Idempotency key is not in the payload when not provided."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "hi")
 
@@ -1666,7 +1666,7 @@ class TestStartFrameworkViaServer:
 
     def test_start_framework_via_server_passes_credentials(self, runtime):
         """Framework start payload includes request-level credentials."""
-        mock_post = _mock_requests_post({"workflowId": "wf-fw-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-fw-1"})
         with patch("requests.post", mock_post):
             runtime._start_framework_via_server(
                 framework="openai",
@@ -2299,7 +2299,7 @@ class TestTimeoutParameter:
         """run(timeout=5) sends timeoutSeconds: 5 in the start payload."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "hello", timeout=5)
 
@@ -2310,7 +2310,7 @@ class TestTimeoutParameter:
         """run() with no timeout does not include timeoutSeconds in payload."""
         agent = Agent(name="test", model="openai/gpt-4o")
 
-        mock_post = _mock_requests_post({"workflowId": "wf-1"})
+        mock_post = _mock_requests_post({"executionId": "wf-1"})
         with patch("requests.post", mock_post):
             runtime._start_via_server(agent, "hello")
 

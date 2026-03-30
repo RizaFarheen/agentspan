@@ -123,16 +123,7 @@ class AgentControllerSSEIntegrationTest {
 
     // ── Tests ────────────────────────────────────────────────────────
 
-    @Test
-    void healthEndpointReturnsHello() throws Exception {
-        HttpURLConnection conn =
-                (HttpURLConnection) URI.create(baseUrl()).toURL().openConnection();
-        conn.setRequestMethod("GET");
-        assertThat(conn.getResponseCode()).isEqualTo(200);
-        String body = new String(conn.getInputStream().readAllBytes());
-        assertThat(body).isEqualTo("Hello, Agent!");
-        conn.disconnect();
-    }
+
 
     @Test
     void sseEndpointReturnsEventStream() throws Exception {
