@@ -70,12 +70,19 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent,
-            "I'm looking for the Widget Pro. Is it in stock? Also, what are the downtown store hours?",
-        )
-        print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.15_global_instruction
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "I'm looking for the Widget Pro. Is it in stock? Also, what are the downtown store hours?",
+        # )
+        # print(f"Status: {result.status}")
+        # print(f"Output: {result.output}")
+
 
 
 if __name__ == "__main__":

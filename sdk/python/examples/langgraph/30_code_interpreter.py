@@ -128,8 +128,14 @@ if __name__ == "__main__":
     ]
 
     with AgentRuntime() as runtime:
-        for query in queries:
-            print(f"\nQuery: {query}")
-            result = runtime.run(graph, query)
-            result.print_result()
-            print("-" * 60)
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.30_code_interpreter
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # for query in queries:
+        # print(f"\nQuery: {query}")
+        # result = runtime.run(graph, query)
+        # result.print_result()
+        # print("-" * 60)

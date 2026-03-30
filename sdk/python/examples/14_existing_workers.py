@@ -69,6 +69,15 @@ agent = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Customer C001 is asking about their recent orders. Look them up and summarize.")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.14_existing_workers
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(agent, "Customer C001 is asking about their recent orders. Look them up and summarize.")
+        # result.print_result()
+

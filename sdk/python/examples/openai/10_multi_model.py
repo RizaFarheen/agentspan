@@ -103,9 +103,17 @@ code_specialist = Agent(
 # Wire up handoffs
 triage.handoffs = [doc_specialist, code_specialist]
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        triage,
-        "I need a Python code example for authenticating with the API.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.openai.10_multi_model
+        runtime.deploy(triage)
+        runtime.serve(triage)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # triage,
+        # "I need a Python code example for authenticating with the API.",
+        # )
+        # result.print_result()

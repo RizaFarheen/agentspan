@@ -1,14 +1,15 @@
 package dev.agentspan.runtime.credentials;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.conductoross.conductor.AgentRuntime;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import dev.agentspan.runtime.AgentRuntime;
 
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
@@ -21,18 +22,19 @@ class CredentialDataSourceConfigTest {
     @Test
     void schemaIsCreated_usersTableExists() {
         Integer count = credentialJdbc.queryForObject(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='users'",
-            java.util.Map.of(), Integer.class);
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='users'",
+                java.util.Map.of(),
+                Integer.class);
         assertThat(count).isEqualTo(1);
     }
 
     @Test
     void schemaIsCreated_allFourTablesExist() {
-        for (String table : java.util.List.of(
-                "users", "api_keys", "credentials_store", "credentials_binding")) {
+        for (String table : java.util.List.of("users", "api_keys", "credentials_store", "credentials_binding")) {
             Integer count = credentialJdbc.queryForObject(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:t",
-                java.util.Map.of("t", table), Integer.class);
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=:t",
+                    java.util.Map.of("t", table),
+                    Integer.class);
             assertThat(count).as("table %s should exist", table).isEqualTo(1);
         }
     }

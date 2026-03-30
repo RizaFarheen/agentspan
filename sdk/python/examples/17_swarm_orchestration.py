@@ -71,10 +71,19 @@ support = Agent(
     max_turns=3,
 )
 
-with AgentRuntime() as runtime:
-    print("--- Refund scenario ---")
-    result = runtime.run(
-        support,
-        "I bought a product last week and it arrived damaged. I want my money back.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.17_swarm_orchestration
+        runtime.deploy(support)
+        runtime.serve(support)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Refund scenario ---")
+        # result = runtime.run(
+        #     support,
+        #     "I bought a product last week and it arrived damaged. I want my money back.",
+        # )
+        # result.print_result()
+

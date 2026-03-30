@@ -52,9 +52,18 @@ brainstorm = Agent(
     max_turns=6,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        brainstorm,
-        "How should we approach building an AI-powered customer service platform?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.16_random_strategy
+        runtime.deploy(brainstorm)
+        runtime.serve(brainstorm)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     brainstorm,
+        #     "How should we approach building an AI-powered customer service platform?",
+        # )
+        # result.print_result()
+

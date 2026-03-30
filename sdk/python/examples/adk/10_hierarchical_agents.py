@@ -166,10 +166,18 @@ coordinator = Agent(
     sub_agents=[reliability_lead, security_lead],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        coordinator,
-        "Give me a full platform health assessment. Focus on the payments service "
-        "which seems to be having issues.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.10_hierarchical_agents
+        runtime.deploy(coordinator)
+        runtime.serve(coordinator)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # coordinator,
+        # "Give me a full platform health assessment. Focus on the payments service "
+        # "which seems to be having issues.",
+        # )
+        # result.print_result()

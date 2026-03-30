@@ -5,6 +5,10 @@
 
 package dev.agentspan.runtime.ai;
 
+import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HTTP;
+import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SIMPLE;
+import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SUB_WORKFLOW;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -19,7 +23,10 @@ import org.conductoross.conductor.ai.models.LLMResponse;
 import org.conductoross.conductor.ai.models.Media;
 import org.conductoross.conductor.ai.models.ToolCall;
 import org.conductoross.conductor.ai.tasks.mapper.AIModelTaskMapper;
+import org.conductoross.conductor.common.utils.StringTemplate;
 import org.conductoross.conductor.config.AIIntegrationEnabledCondition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Conditional;
@@ -28,21 +35,14 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-
 import com.netflix.conductor.core.exception.TerminateWorkflowException;
 import com.netflix.conductor.core.execution.mapper.TaskMapperContext;
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
 
 import dev.agentspan.runtime.model.AgentSSEEvent;
 import dev.agentspan.runtime.service.AgentStreamRegistry;
 import dev.agentspan.runtime.util.ModelContextWindows;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HTTP;
-import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SIMPLE;
-import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_SUB_WORKFLOW;
 
 /**
  * Custom override of Conductor's ChatCompleteTaskMapper that properly
@@ -70,14 +70,19 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     @SuppressWarnings("HidingField")
     private static final Logger log = LoggerFactory.getLogger(AgentChatCompleteTaskMapper.class);
 
-    private static final Set<String> TOOL_TASK_TYPES =
-            Set.of(TASK_TYPE_HTTP, TASK_TYPE_SIMPLE, "MCP", "CALL_MCP_TOOL");
+    private static final Set<String> TOOL_TASK_TYPES = Set.of(TASK_TYPE_HTTP, TASK_TYPE_SIMPLE, "MCP", "CALL_MCP_TOOL");
 
     private static final int SUMMARY_TEXT_LIMIT = 200;
     private static final int TOOL_OUTPUT_SUMMARY_LIMIT = 150;
     private static final double CHARS_PER_TOKEN = 3.5;
 
-    enum ExchangeType { TOOL_EXCHANGE, ASSISTANT_TEXT, USER_MESSAGE, OTHER }
+    enum ExchangeType {
+        TOOL_EXCHANGE,
+        ASSISTANT_TEXT,
+        USER_MESSAGE,
+        OTHER
+    }
+
     record Exchange(List<ChatMessage> messages, ExchangeType type) {}
 
     @Value("${agentspan.context-condensation.recent-exchanges:5}")
@@ -100,8 +105,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
     }
 
     @Override
-    protected TaskModel getMappedTask(TaskMapperContext taskMapperContext)
-            throws TerminateWorkflowException {
+    protected TaskModel getMappedTask(TaskMapperContext taskMapperContext) throws TerminateWorkflowException {
         // Call AIModelTaskMapper.getMappedTask() to create the base TaskModel
         // (skips ChatCompleteTaskMapper's broken getHistory)
         TaskModel taskModel = super.getMappedTask(taskMapperContext);
@@ -111,10 +115,10 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         // which creates a fresh AIModel with the user's credential. No inputData injection needed.
 
         try {
-            ChatCompletion chatCompletion =
-                    objectMapper.convertValue(taskModel.getInputData(), ChatCompletion.class);
+            ChatCompletion chatCompletion = objectMapper.convertValue(taskModel.getInputData(), ChatCompletion.class);
             List<ChatMessage> history = chatCompletion.getMessages();
-            if (chatCompletion.getUserInput() != null && chatCompletion.getMessages().isEmpty()) {
+            if (chatCompletion.getUserInput() != null
+                    && chatCompletion.getMessages().isEmpty()) {
                 history.add(new ChatMessage(ChatMessage.Role.user, chatCompletion.getUserInput()));
             }
             getHistory(workflowModel, taskModel, chatCompletion);
@@ -127,8 +131,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                 log.error("input: {}", taskModel.getInputData());
                 log.error(e.getMessage(), e);
                 throw new TerminateWorkflowException(
-                        String.format(
-                                "Error preparing chat completion task input: %s", e.getMessage()));
+                        String.format("Error preparing chat completion task input: %s", e.getMessage()));
             }
         }
         return taskModel;
@@ -146,8 +149,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         for (ChatMessage message : messages) {
             String msgText = message.getMessage();
             if (msgText != null) {
-                msgText = org.conductoross.conductor.common.utils.StringTemplate.fString(
-                        msgText, paramReplacement);
+                msgText = StringTemplate.fString(msgText, paramReplacement);
                 message.setMessage(msgText);
             }
         }
@@ -168,19 +170,16 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
      *       sending raw metadata</li>
      * </ul>
      */
-    private void getHistory(
-            WorkflowModel workflow, TaskModel chatCompleteTask, ChatCompletion chatCompletion) {
+    private void getHistory(WorkflowModel workflow, TaskModel chatCompleteTask, ChatCompletion chatCompletion) {
 
         Map<String, List<TaskModel>> refNameToTask = new HashMap<>();
         for (TaskModel task : workflow.getTasks()) {
             refNameToTask
-                    .computeIfAbsent(
-                            task.getWorkflowTask().getTaskReferenceName(), k -> new ArrayList<>())
+                    .computeIfAbsent(task.getWorkflowTask().getTaskReferenceName(), k -> new ArrayList<>())
                     .add(task);
         }
 
-        String historyContextTaskRefName =
-                chatCompleteTask.getWorkflowTask().getTaskReferenceName();
+        String historyContextTaskRefName = chatCompleteTask.getWorkflowTask().getTaskReferenceName();
         if (chatCompleteTask.getParentTaskReferenceName() != null) {
             historyContextTaskRefName = chatCompleteTask.getParentTaskReferenceName();
         }
@@ -199,15 +198,12 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                     && task.getParentTaskReferenceName().equals(historyContextTaskRefName)) {
                 skipTask = false;
             } else if (task.isLoopOverTask()
-                    && task.getWorkflowTask()
-                            .getTaskReferenceName()
-                            .equals(historyContextTaskRefName)) {
+                    && task.getWorkflowTask().getTaskReferenceName().equals(historyContextTaskRefName)) {
                 skipTask = false;
             } else if (chatCompletion.getParticipants() != null) {
-                ChatMessage.Role participantRole =
-                        chatCompletion
-                                .getParticipants()
-                                .get(task.getWorkflowTask().getTaskReferenceName());
+                ChatMessage.Role participantRole = chatCompletion
+                        .getParticipants()
+                        .get(task.getWorkflowTask().getTaskReferenceName());
                 if (participantRole != null) {
                     role = participantRole;
                     skipTask = false;
@@ -218,10 +214,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                 continue;
             }
 
-            log.trace(
-                    "\nTask {} - {} will be used for history",
-                    task.getReferenceTaskName(),
-                    task.getTaskType());
+            log.trace("\nTask {} - {} will be used for history", task.getReferenceTaskName(), task.getTaskType());
 
             LLMResponse response = null;
             try {
@@ -232,24 +225,25 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
 
             if (TOOL_TASK_TYPES.contains(task.getWorkflowTask().getType())) {
                 // SIMPLE/HTTP/MCP tool — keep original behavior
-                ToolCall toolCall =
-                        ToolCall.builder()
-                                .inputParameters(task.getInputData())
-                                .name(task.getTaskDefName())
-                                .taskReferenceName(task.getReferenceTaskName())
-                                .type(task.getTaskType())
-                                .output(task.getOutputData())
-                                .build();
+                ToolCall toolCall = ToolCall.builder()
+                        .inputParameters(task.getInputData())
+                        .name(task.getTaskDefName())
+                        .taskReferenceName(task.getReferenceTaskName())
+                        .type(task.getTaskType())
+                        .output(task.getOutputData())
+                        .build();
                 history.add(new ChatMessage(ChatMessage.Role.tool, toolCall));
 
             } else if (TASK_TYPE_SUB_WORKFLOW.equals(task.getWorkflowTask().getType())) {
                 // SUB_WORKFLOW — skip direct entries. These are handled via
                 // the LLM toolCalls path below, which has the original tool call
                 // context and avoids sending raw sub-workflow metadata.
-                log.trace("Skipping direct SUB_WORKFLOW entry for {} — handled via toolCalls path",
+                log.trace(
+                        "Skipping direct SUB_WORKFLOW entry for {} — handled via toolCalls path",
                         task.getReferenceTaskName());
 
-            } else if (response.getToolCalls() != null && !response.getToolCalls().isEmpty()) {
+            } else if (response.getToolCalls() != null
+                    && !response.getToolCalls().isEmpty()) {
                 // LLM task with toolCalls — look up executed tasks and build
                 // ONE assistant message with ALL tool calls, then individual
                 // tool response messages. This matches the OpenAI API format
@@ -259,8 +253,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
 
                 for (ToolCall toolCall : response.getToolCalls()) {
                     String toolRefName = toolCall.getTaskReferenceName();
-                    List<TaskModel> toolModels =
-                            refNameToTask.getOrDefault(toolRefName, new ArrayList<>());
+                    List<TaskModel> toolModels = refNameToTask.getOrDefault(toolRefName, new ArrayList<>());
                     for (TaskModel toolModel : toolModels) {
                         if (!toolModel.getStatus().isTerminal()) continue;
 
@@ -289,14 +282,13 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                                 toolInput = extractSubWorkflowInput(toolInput);
                             }
 
-                            ToolCall toolCallResult =
-                                    ToolCall.builder()
-                                            .inputParameters(toolInput)
-                                            .name(toolModel.getTaskDefName())
-                                            .taskReferenceName(uniqueRefName)
-                                            .type(toolModel.getTaskType())
-                                            .output(toolOutput)
-                                            .build();
+                            ToolCall toolCallResult = ToolCall.builder()
+                                    .inputParameters(toolInput)
+                                    .name(toolModel.getTaskDefName())
+                                    .taskReferenceName(uniqueRefName)
+                                    .type(toolModel.getTaskType())
+                                    .output(toolOutput)
+                                    .build();
                             toolResponses.add(new ChatMessage(ChatMessage.Role.tool, toolCallResult));
                         } else {
                             // Failed tool — send error feedback to LLM
@@ -304,18 +296,14 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                             if (reason == null || reason.isEmpty()) {
                                 reason = "Tool execution failed (status: " + toolModel.getStatus() + ")";
                             }
-                            Map<String, Object> errorOutput = Map.of(
-                                    "status", "FAILED",
-                                    "error", reason
-                            );
-                            ToolCall toolCallResult =
-                                    ToolCall.builder()
-                                            .inputParameters(toolModel.getInputData())
-                                            .name(toolModel.getTaskDefName())
-                                            .taskReferenceName(uniqueRefName)
-                                            .type(toolModel.getTaskType())
-                                            .output(errorOutput)
-                                            .build();
+                            Map<String, Object> errorOutput = Map.of("status", "FAILED", "error", reason);
+                            ToolCall toolCallResult = ToolCall.builder()
+                                    .inputParameters(toolModel.getInputData())
+                                    .name(toolModel.getTaskDefName())
+                                    .taskReferenceName(uniqueRefName)
+                                    .type(toolModel.getTaskType())
+                                    .output(errorOutput)
+                                    .build();
                             toolResponses.add(new ChatMessage(ChatMessage.Role.tool, toolCallResult));
                         }
                     }
@@ -341,7 +329,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                     }
                     var msg = new ChatMessage(role, String.valueOf(resultObj));
                     if (response.getMedia() != null) {
-                        msg.setMedia(response.getMedia().stream().map(Media::getLocation).toList());
+                        msg.setMedia(response.getMedia().stream()
+                                .map(Media::getLocation)
+                                .toList());
                     }
                     history.add(msg);
                 }
@@ -372,8 +362,8 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             }
         }
 
-        boolean proactive = !reactive && contextWindow > 0
-                && shouldCondenseProactively(chatCompletion, contextWindow, maxTokens);
+        boolean proactive =
+                !reactive && contextWindow > 0 && shouldCondenseProactively(chatCompletion, contextWindow, maxTokens);
 
         if (!reactive && !proactive) {
             return;
@@ -413,22 +403,28 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
 
         String trigger = reactive ? "token limit hit" : "proactive (exceeds context window)";
         int messagesAfter = messages.size();
-        log.info("Condensed conversation from {} to {} messages (triggered by {})",
-                messagesBefore, messagesAfter, trigger);
+        log.info(
+                "Condensed conversation from {} to {} messages (triggered by {})",
+                messagesBefore,
+                messagesAfter,
+                trigger);
 
         // Store condensation metadata on the task for audit trail and UI visibility
-        task.getInputData().put("_condensation", Map.of(
-                "trigger", trigger,
-                "messagesBefore", messagesBefore,
-                "messagesAfter", messagesAfter,
-                "exchangesCondensed", exchangesCondensed
-        ));
+        task.getInputData()
+                .put(
+                        "_condensation",
+                        Map.of(
+                                "trigger", trigger,
+                                "messagesBefore", messagesBefore,
+                                "messagesAfter", messagesAfter,
+                                "exchangesCondensed", exchangesCondensed));
 
         // Emit SSE event so connected clients know condensation occurred
         if (streamRegistry != null) {
-            streamRegistry.send(workflow.getWorkflowId(),
-                    AgentSSEEvent.contextCondensed(workflow.getWorkflowId(), trigger,
-                            messagesBefore, messagesAfter, exchangesCondensed));
+            streamRegistry.send(
+                    workflow.getWorkflowId(),
+                    AgentSSEEvent.contextCondensed(
+                            workflow.getWorkflowId(), trigger, messagesBefore, messagesAfter, exchangesCondensed));
         }
 
         // Warn if still over budget after condensation — nothing more we can do at this point
@@ -436,9 +432,13 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             int inputBudget = contextWindow - Math.max(maxTokens, 0);
             int afterTokens = estimateTokenCount(chatCompletion);
             if (afterTokens > inputBudget) {
-                log.warn("Context still exceeds budget after condensation: ~{} tokens estimated vs {} input budget "
-                        + "(contextWindow={}, maxTokens={}). Model may truncate or reject the request.",
-                        afterTokens, inputBudget, contextWindow, maxTokens);
+                log.warn(
+                        "Context still exceeds budget after condensation: ~{} tokens estimated vs {} input budget "
+                                + "(contextWindow={}, maxTokens={}). Model may truncate or reject the request.",
+                        afterTokens,
+                        inputBudget,
+                        contextWindow,
+                        maxTokens);
             }
         }
     }
@@ -452,8 +452,12 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         int estimatedTokens = estimateTokenCount(chatCompletion);
         int inputBudget = contextWindow - Math.max(maxTokens, 0);
         if (estimatedTokens > inputBudget) {
-            log.info("Proactive condensation: estimated {} tokens exceeds {} input budget (contextWindow={}, maxTokens={})",
-                    estimatedTokens, inputBudget, contextWindow, maxTokens);
+            log.info(
+                    "Proactive condensation: estimated {} tokens exceeds {} input budget (contextWindow={}, maxTokens={})",
+                    estimatedTokens,
+                    inputBudget,
+                    contextWindow,
+                    maxTokens);
             return true;
         }
         return false;
@@ -487,7 +491,9 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         // Tool definitions — JSON-serialize for accurate size (toString() gives Java repr, not JSON)
         if (chatCompletion.getTools() != null) {
             try {
-                totalChars += objectMapper.writeValueAsString(chatCompletion.getTools()).length();
+                totalChars += objectMapper
+                        .writeValueAsString(chatCompletion.getTools())
+                        .length();
             } catch (Exception e) {
                 totalChars += chatCompletion.getTools().toString().length();
             }
@@ -610,22 +616,30 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                     textCount++;
                     String text = ex.messages().get(0).getMessage();
                     if (text != null && !text.isEmpty()) {
-                        sb.append("- Response: ").append(truncate(text, SUMMARY_TEXT_LIMIT)).append("\n");
+                        sb.append("- Response: ")
+                                .append(truncate(text, SUMMARY_TEXT_LIMIT))
+                                .append("\n");
                     }
                 }
                 case USER_MESSAGE -> {
                     String text = ex.messages().get(0).getMessage();
                     if (text != null && !text.isEmpty()) {
-                        sb.append("- User: ").append(truncate(text, SUMMARY_TEXT_LIMIT)).append("\n");
+                        sb.append("- User: ")
+                                .append(truncate(text, SUMMARY_TEXT_LIMIT))
+                                .append("\n");
                     }
                 }
-                default -> { /* skip */ }
+                default -> {
+                    /* skip */
+                }
             }
         }
 
         sb.append("\n[End of condensed context — ")
-          .append(toolCount).append(" tool exchange(s), ")
-          .append(textCount).append(" assistant response(s) condensed]");
+                .append(toolCount)
+                .append(" tool exchange(s), ")
+                .append(textCount)
+                .append(" assistant response(s) condensed]");
 
         return sb.toString();
     }
@@ -643,11 +657,14 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             // Summarize each tool response
             for (int i = 1; i < ex.messages().size(); i++) {
                 ChatMessage toolResponse = ex.messages().get(i);
-                if (toolResponse.getToolCalls() != null && !toolResponse.getToolCalls().isEmpty()) {
+                if (toolResponse.getToolCalls() != null
+                        && !toolResponse.getToolCalls().isEmpty()) {
                     ToolCall tc = toolResponse.getToolCalls().get(0);
                     String output = tc.getOutput() != null ? tc.getOutput().toString() : "";
-                    sb.append("\n  ").append(tc.getName()).append(": ")
-                      .append(truncate(output, TOOL_OUTPUT_SUMMARY_LIMIT));
+                    sb.append("\n  ")
+                            .append(tc.getName())
+                            .append(": ")
+                            .append(truncate(output, TOOL_OUTPUT_SUMMARY_LIMIT));
                 }
             }
         } else if (first.getRole() == ChatMessage.Role.tool) {
@@ -655,8 +672,10 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             if (first.getToolCalls() != null && !first.getToolCalls().isEmpty()) {
                 ToolCall tc = first.getToolCalls().get(0);
                 String output = tc.getOutput() != null ? tc.getOutput().toString() : "";
-                sb.append("- Tool ").append(tc.getName()).append(": ")
-                  .append(truncate(output, TOOL_OUTPUT_SUMMARY_LIMIT));
+                sb.append("- Tool ")
+                        .append(tc.getName())
+                        .append(": ")
+                        .append(truncate(output, TOOL_OUTPUT_SUMMARY_LIMIT));
             }
         }
         sb.append("\n");

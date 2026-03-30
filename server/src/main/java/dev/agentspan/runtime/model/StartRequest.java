@@ -5,14 +5,15 @@
 
 package dev.agentspan.runtime.model;
 
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.List;
-import java.util.Map;
 
 /**
  * Request DTO for POST /api/agent/start.
@@ -29,6 +30,7 @@ public class StartRequest {
     private String sessionId;
     private List<String> media;
     private String idempotencyKey;
+    private List<String> credentials;
 
     /** Framework identifier for foreign agents (e.g. "openai", "google_adk"). Null for native agents. */
     private String framework;

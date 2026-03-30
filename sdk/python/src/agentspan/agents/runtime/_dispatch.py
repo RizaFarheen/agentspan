@@ -13,6 +13,8 @@ import json
 import logging
 import os
 import threading
+from dataclasses import asdict, is_dataclass
+from types import SimpleNamespace
 
 logger = logging.getLogger("agentspan.agents.dispatch")
 
@@ -35,6 +37,55 @@ def _validate_serializable(tool_name, result):
             f"Tool '{tool_name}' returned a non-serializable type '{result_type}'. "
             f"Return dict, str, int, float, list, or bool. Error: {exc}"
         ) from None
+
+
+def _is_framework_callable(tool_func) -> bool:
+    return bool(getattr(tool_func, "_agentspan_framework_callable", False))
+
+
+def _to_namespace(value):
+    if isinstance(value, dict):
+        return SimpleNamespace(**{k: _to_namespace(v) for k, v in value.items()})
+    if isinstance(value, list):
+        return [_to_namespace(v) for v in value]
+    return value
+
+
+def _normalize_framework_kwargs(kwargs):
+    normalized = dict(kwargs)
+    for key in ("ctx", "context", "agent"):
+        if key in normalized and isinstance(normalized[key], dict):
+            normalized[key] = _to_namespace(normalized[key])
+    return normalized
+
+
+def _normalize_framework_result(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _normalize_framework_result(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_normalize_framework_result(v) for v in value]
+    if is_dataclass(value):
+        return _normalize_framework_result(asdict(value))
+    if hasattr(value, "model_dump"):
+        try:
+            return _normalize_framework_result(value.model_dump())
+        except Exception:
+            pass
+    if hasattr(value, "dict"):
+        try:
+            return _normalize_framework_result(value.dict())
+        except Exception:
+            pass
+    if hasattr(value, "__dict__"):
+        try:
+            return _normalize_framework_result(
+                {k: v for k, v in vars(value).items() if not k.startswith("_")}
+            )
+        except Exception:
+            pass
+    return value
 
 
 def _coerce_value(value, annotation):
@@ -295,7 +346,13 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
                             "blocked": True,
                         }
 
-        result = tool_func(**kwargs)
+        call_kwargs = kwargs
+        if _is_framework_callable(tool_func):
+            call_kwargs = _normalize_framework_kwargs(kwargs)
+
+        result = tool_func(**call_kwargs)
+        if _is_framework_callable(tool_func):
+            result = _normalize_framework_result(result)
 
         # Validate result is JSON-serializable before proceeding
         _validate_serializable(tool_name, result)
@@ -369,10 +426,9 @@ def make_tool_worker(tool_func, tool_name, guardrails=None, tool_def=None):
                 try:
                     resolved_credentials = fetcher.fetch(token, credential_names)
                 except Exception as cred_err:
-                    # Credential errors are configuration issues, not tool failures.
-                    # Don't count toward circuit breaker — just fail the task.
+                    # Credential errors are configuration issues — non-retryable.
                     logger.error("Credential resolution failed for tool '%s': %s", tool_name, cred_err)
-                    task_result.status = TaskResultStatus.FAILED
+                    task_result.status = TaskResultStatus.FAILED_WITH_TERMINAL_ERROR
                     task_result.reason_for_incompletion = str(cred_err)
                     return task_result
 

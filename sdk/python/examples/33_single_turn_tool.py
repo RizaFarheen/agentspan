@@ -35,6 +35,15 @@ agent = Agent(
     max_turns=2,  # 1 turn to call the tool, 1 turn to answer
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "What's the weather in San Francisco?")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.33_single_turn_tool
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(agent, "What's the weather in San Francisco?")
+        # result.print_result()
+

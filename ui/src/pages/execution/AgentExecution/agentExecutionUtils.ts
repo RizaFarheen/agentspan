@@ -248,14 +248,18 @@ function getIterationNum(name: string): number | null {
 }
 
 /** Extract agent name from sub-workflow task reference name.
- * HANDOFF pattern: "workflow_handoff_0_planner_t1__1" → "planner_t1"
- * SWARM pattern:   "workflow_agent_1_engineering_lead__2" → "engineering_lead"
- * Simple pattern:  "researcher__1" → "researcher"
+ * HANDOFF pattern:  "workflow_handoff_0_planner_t1__1" → "planner_t1"
+ * SWARM pattern:    "workflow_agent_1_engineering_lead__2" → "engineering_lead"
+ * PARALLEL pattern: "coordinator_parallel_0_researcher" → "researcher"
+ * Simple pattern:   "researcher__1" → "researcher"
  */
 function extractAgentName(name: string): string | null {
   let m = name.match(/_handoff_\d+_(.+?)__\d+$/);
   if (m) return m[1];
   m = name.match(/_agent_\d+_(.+?)__\d+$/);
+  if (m) return m[1];
+  // Parallel fork: "coordinator_parallel_0_researcher" → "researcher"
+  m = name.match(/_parallel_\d+_(.+?)(?:__\d+)?$/);
   if (m) return m[1];
   // Simple: strip __N iteration suffix → "researcher__1" → "researcher"
   m = name.match(/^(.+?)__\d+$/);
@@ -486,6 +490,21 @@ export function transformWorkflowExecutionToAgentRun(
     console.debug("[AgentExecution] tasks", tasks.map(t => ({
       ref: t.referenceTaskName, type: t.taskType, status: t.status,
     })));
+  }
+
+  // Build set of guardrail function names from agentDef for robust detection
+  const agentDefMeta = (execution as any).workflowDefinition?.metadata?.agentDef as Record<string, unknown> | undefined;
+  const guardrailFnNames = new Set<string>();
+  for (const gList of [
+    (agentDefMeta?.input_guardrails as Array<Record<string, unknown>> | undefined) ?? [],
+    (agentDefMeta?.output_guardrails as Array<Record<string, unknown>> | undefined) ?? [],
+    (agentDefMeta?.guardrails as Array<Record<string, unknown>> | undefined) ?? [],
+  ]) {
+    for (const g of gList) {
+      const fn = (g.guardrail_function ?? g) as Record<string, unknown>;
+      const name = (fn._worker_ref ?? fn.name) as string | undefined;
+      if (name) guardrailFnNames.add(name.toLowerCase());
+    }
   }
 
   // Group tasks by DO_WHILE iteration number; collect root-level tasks separately
@@ -793,20 +812,62 @@ export function transformWorkflowExecutionToAgentRun(
           continue;
         }
 
-        // ── Detect guardrail tasks by task type name convention ───────────────
-        const isGuardrail = toolName.toLowerCase().includes("guardrail");
+        // ── Detect guardrail tasks by name convention or agentDef declaration ──
+        const refName = (toolTask.referenceTaskName ?? toolTask.taskRefName ?? "").toLowerCase();
+        const isGuardrail =
+          toolName.toLowerCase().includes("guardrail") ||
+          refName.includes("guardrail") ||
+          guardrailFnNames.has(toolName.toLowerCase());
         if (isGuardrail) {
+          // Extract the actual content the guardrail checked (strip redundant alias fields)
+          const guardrailInput =
+            idData.content ?? idData.agent_output ?? idData.input_text ?? idData.output ?? idData.input;
+          // Look for the INLINE evaluation result in the same iteration
+          const evalRefPrefix = refName.replace(/_worker(_|$)/, "$1");
+          const evalTask = iterTasks.find(
+            t => t.taskType === "INLINE" &&
+                 (t.referenceTaskName ?? "").toLowerCase().startsWith(evalRefPrefix),
+          );
+          const evalResult = evalTask?.outputData?.result as Record<string, unknown> | undefined;
+          // Build a clean output: merge worker output with evaluation result
+          const guardrailOutput = evalResult ?? od;
+
+          // Guardrail "failure" is expressed in the output data, not the task status.
+          // The worker task COMPLETES even when the guardrail triggers — check output fields.
+          const guardrailTriggered =
+            failed ||
+            od.tripwire_triggered === true ||
+            evalResult?.passed === false;
+          const reason =
+            (evalResult?.message as string | undefined) ??
+            (od.output_info as any)?.reason ??
+            (guardrailTriggered ? (toolTask.reasonForIncompletion ?? "content blocked") : "passed");
+
           events.push({
             id: `${toolTask.taskId}-guardrail`,
-            type: failed ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
+            type: guardrailTriggered ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
             timestamp: toolTask.startTime ?? 0,
             toolName,
-            summary: failed
-              ? `${toolName} blocked: ${toolTask.reasonForIncompletion ?? "content blocked"}`
-              : `${toolName} passed`,
-            detail: { input: cleanInput, output: failed ? toolTask.reasonForIncompletion : od },
-            success: !failed,
+            summary: guardrailTriggered
+              ? `${toolName} blocked: ${reason}`
+              : `${toolName} — ${reason}`,
+            detail: { input: guardrailInput, output: guardrailOutput },
+            success: !guardrailTriggered,
             durationMs: toolDuration,
+            taskMeta: {
+              taskId: toolTask.taskId,
+              taskType: toolTask.taskType,
+              referenceTaskName: toolTask.referenceTaskName ?? toolTask.taskRefName,
+              scheduledTime: toolTask.scheduledTime ?? undefined,
+              startTime: toolTask.startTime ?? undefined,
+              endTime: toolTask.endTime ?? undefined,
+              workerId: (toolTask as any).workerId ?? undefined,
+              reasonForIncompletion: toolTask.reasonForIncompletion ?? undefined,
+              retryCount: toolTask.retryCount,
+              pollCount: toolTask.pollCount,
+              seq: toolTask.seq,
+              queueWaitTime: toolTask.queueWaitTime,
+            },
           });
           continue;
         }
@@ -907,6 +968,58 @@ export function transformWorkflowExecutionToAgentRun(
       };
     })
     .filter((t) => t.events.length > 0 || t.subAgents.length > 0);
+
+  // Root-level parallel SUB_WORKFLOWs (FORK/JOIN pattern without DO_WHILE iterations).
+  // These represent parallel agent execution: FORK → [SUB_WORKFLOW...] → JOIN → aggregate.
+  const rootSubWorkflows = rootActiveTasks.filter(isAgentSubWorkflow);
+  if (rootSubWorkflows.length > 0) {
+    const subAgents: AgentRunData[] = rootSubWorkflows.map((task) => {
+      const agentName =
+        extractAgentName(task.referenceTaskName)
+        ?? task.inputData?.subWorkflowName as string
+        ?? task.workflowTask?.name
+        ?? task.referenceTaskName;
+      const subWfId = task.outputData?.subWorkflowId as string | undefined;
+      const dur = task.endTime && task.startTime ? task.endTime - task.startTime : 0;
+      const outputStr =
+        typeof task.outputData?.result === "string"
+          ? task.outputData.result
+          : undefined;
+      const failReason = task.reasonForIncompletion ?? undefined;
+
+      return {
+        id: subWfId ?? task.taskId,
+        subWorkflowId: subWfId,
+        agentName,
+        turns: [],
+        status: mapWorkflowStatus(task.status as any),
+        totalTokens: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        totalDurationMs: dur,
+        output: outputStr,
+        failureReason: failReason,
+      } as AgentRunData;
+    });
+
+    const completed = subAgents.filter((s) => s.status === AgentStatus.COMPLETED).length;
+    const failed = subAgents.filter((s) => s.status === AgentStatus.FAILED).length;
+    const running = subAgents.length - completed - failed;
+    const ts = failed > 0 ? AgentStatus.FAILED : running > 0 ? AgentStatus.RUNNING : AgentStatus.COMPLETED;
+    const subTimestamps = rootSubWorkflows
+      .flatMap((t) => [t.startTime, t.endTime])
+      .filter((v): v is number => v != null && v > 0);
+
+    turns.push({
+      turnNumber: turns.length + 1,
+      events: [],
+      status: ts,
+      durationMs: subTimestamps.length
+        ? Math.max(...subTimestamps) - Math.min(...subTimestamps)
+        : 0,
+      tokens: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      subAgents,
+      strategy: subAgents.length > 1 ? AgentStrategy.PARALLEL : AgentStrategy.SINGLE,
+    });
+  }
 
   // Build events + turn for root-level tasks (outside DO_WHILE).
   // This handles: simple single-LLM agents (greeter, triage_router_wf)
@@ -1121,7 +1234,7 @@ export function transformWorkflowExecutionToAgentRun(
     },
     totalDurationMs,
     finishReason,
-    strategy: sortedIters.length > 0 ? AgentStrategy.HANDOFF : AgentStrategy.SINGLE,
+    strategy: rootSubWorkflows.length > 1 ? AgentStrategy.PARALLEL : sortedIters.length > 0 ? AgentStrategy.HANDOFF : AgentStrategy.SINGLE,
     input: agentInput,
     output: finalOutput,
   };
@@ -1253,18 +1366,42 @@ function taskToEvents(task: ExecutionTask): AgentEvent[] {
           durationMs,
         });
       }
-    } else if (task.taskType.toLowerCase().includes("guardrail")) {
+    } else if (
+      task.taskType.toLowerCase().includes("guardrail") ||
+      (task.referenceTaskName ?? task.taskRefName ?? "").toLowerCase().includes("guardrail")
+    ) {
+      // Extract meaningful content being checked (strip redundant alias fields)
+      const grInput =
+        (inputData as any).content ?? (inputData as any).agent_output ??
+        (inputData as any).input_text ?? (inputData as any).output ?? (inputData as any).input;
+      const grReason = (outputData.output_info as any)?.reason;
+      // Guardrail "failure" is in the output data, not the task status
+      const grTriggered = failed || outputData.tripwire_triggered === true;
       events.push({
         id: `${task.taskId}-guardrail`,
-        type: failed ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
+        type: grTriggered ? EventType.GUARDRAIL_FAIL : EventType.GUARDRAIL_PASS,
         timestamp: task.startTime ?? 0,
         toolName: task.taskType,
-        summary: failed
-          ? `${task.taskType} blocked`
-          : `${task.taskType} passed`,
-        detail: { input: inputData, output: failed ? task.reasonForIncompletion : outputData },
-        success: !failed,
+        summary: grTriggered
+          ? `${task.taskType} blocked: ${grReason ?? "triggered"}`
+          : `${task.taskType} — ${grReason ?? "passed"}`,
+        detail: { input: grInput ?? inputData, output: failed ? task.reasonForIncompletion : outputData },
+        success: !grTriggered,
         durationMs,
+        taskMeta: {
+          taskId: task.taskId,
+          taskType: task.taskType,
+          referenceTaskName: task.referenceTaskName ?? task.taskRefName,
+          scheduledTime: task.scheduledTime ?? undefined,
+          startTime: task.startTime ?? undefined,
+          endTime: task.endTime ?? undefined,
+          workerId: (task as any).workerId ?? undefined,
+          reasonForIncompletion: task.reasonForIncompletion ?? undefined,
+          retryCount: task.retryCount,
+          pollCount: task.pollCount,
+          seq: task.seq,
+          queueWaitTime: task.queueWaitTime,
+        },
       });
     } else {
       events.push({

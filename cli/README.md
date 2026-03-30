@@ -101,7 +101,7 @@ The server JAR is downloaded from GitHub releases and cached in `~/.agentspan/se
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--port, -p` | Server port | `8080` |
+| `--port, -p` | Server port | `6767` |
 | `--model, -m` | Default LLM model | — |
 | `--version` | Specific server version | latest |
 | `--jar` | Path to local JAR file | — |
@@ -192,11 +192,11 @@ agentspan doctor
 
 ```bash
 # Set server URL and auth credentials
-agentspan configure --url http://myserver:8080
+agentspan configure --url http://myserver:6767
 agentspan configure --auth-key KEY --auth-secret SECRET
 
 # Override server URL for a single command
-agentspan --server http://other:8080 agent list
+agentspan --server http://other:6767 agent list
 ```
 
 ### `agentspan update` — Self-Update
@@ -213,7 +213,7 @@ Configuration is stored in `~/.agentspan/config.json`. Environment variables tak
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AGENTSPAN_SERVER_URL` | Server URL | `http://localhost:8080` |
+| `AGENTSPAN_SERVER_URL` | Server URL | `http://localhost:6767` |
 | `AGENTSPAN_AUTH_KEY` | Auth key | — |
 | `AGENTSPAN_AUTH_SECRET` | Auth secret | — |
 

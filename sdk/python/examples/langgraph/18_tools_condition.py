@@ -86,9 +86,15 @@ graph = builder.compile(name="weather_timezone_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "What's the weather like in Tokyo and London? Also what timezone are they in?",
-        )
-        print(f"Status: {result.status}")
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.18_tools_condition
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "What's the weather like in Tokyo and London? Also what timezone are they in?",
+        # )
+        # print(f"Status: {result.status}")
+        # result.print_result()

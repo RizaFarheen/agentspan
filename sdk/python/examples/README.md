@@ -81,7 +81,7 @@ Export environment variables:
 
 ```bash
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 # export AGENTSPAN_AUTH_KEY=<key>     # if authentication is enabled
 # export AGENTSPAN_AUTH_SECRET=<secret>
 ```
@@ -208,6 +208,8 @@ python examples/adk/01_basic_agent.py
 |---|---------|---------------------|
 | 11 | [Streaming](11_streaming.py) | Real-time events via `runtime.stream()` | `AgentEvent`, `EventType` |
 | 12 | [Long-Running](12_long_running.py) | Fire-and-forget with status polling from any process | `runtime.start()`, `handle.get_status()` |
+| 72 | [Client Reconnect](72_client_reconnect.py) | Hard-kill the SDK client, reconnect later, and continue the same workflow | `runtime.start()`, `runtime.get_status()`, `runtime.respond()` |
+| 73 | [Worker Restart Recovery](73_worker_restart_recovery.py) | Start a workflow with workers down, restart the worker service, and watch the same workflow finish | `runtime.deploy()`, `runtime.serve()`, `runtime.start()` |
 
 ## Multimodal
 

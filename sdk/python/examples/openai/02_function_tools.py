@@ -72,10 +72,18 @@ agent = Agent(
     tools=[get_weather, calculate, lookup_population],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "What's the weather in San Francisco? Also, what's the population there "
-        "and what's the square root of that number (just the digits)?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.openai.02_function_tools
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "What's the weather in San Francisco? Also, what's the population there "
+        # "and what's the square root of that number (just the digits)?",
+        # )
+        # result.print_result()

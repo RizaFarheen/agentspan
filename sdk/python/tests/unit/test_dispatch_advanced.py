@@ -247,6 +247,57 @@ class TestMakeToolWorker:
         assert wrapper.__name__ == "get_weather"
 
 
+class TestFrameworkCallableCompatibility:
+    """Framework-extracted callables should match OpenAI SDK expectations."""
+
+    def test_framework_callable_gets_object_like_ctx_and_agent(self):
+        def dynamic_instructions(ctx, agent) -> str:
+            return f"{agent.metadata.role}:{ctx.metadata.user.name}:{ctx.prompt}"
+
+        dynamic_instructions._agentspan_framework_callable = True
+
+        wrapper = make_tool_worker(dynamic_instructions, "dynamic_instructions")
+        task = _make_task(
+            input_data={
+                "ctx": {
+                    "prompt": "hello",
+                    "metadata": {"user": {"name": "viren"}},
+                },
+                "agent": {
+                    "name": "helper",
+                    "metadata": {"role": "assistant"},
+                },
+            }
+        )
+
+        result = wrapper(task)
+
+        assert result.status == "COMPLETED"
+        assert result.output_data == {"result": "assistant:viren:hello"}
+
+    def test_framework_callable_normalizes_model_like_results(self):
+        class GuardrailOutput:
+            def model_dump(self):
+                return {
+                    "tripwire_triggered": True,
+                    "output_info": {"reason": "unsafe output"},
+                }
+
+        def check_output_safety(output):
+            return GuardrailOutput()
+
+        check_output_safety._agentspan_framework_callable = True
+
+        wrapper = make_tool_worker(check_output_safety, "check_output_safety")
+        result = wrapper(_make_task(input_data={"output": "bad"}))
+
+        assert result.status == "COMPLETED"
+        assert result.output_data == {
+            "tripwire_triggered": True,
+            "output_info": {"reason": "unsafe output"},
+        }
+
+
 # ── Guardrail integration with make_tool_worker ────────────────────────
 
 

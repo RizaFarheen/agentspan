@@ -102,9 +102,17 @@ coordinator = Agent(
     sub_agents=[analyst, visualizer],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        coordinator,
-        "Create a report on the sales_q4 dataset with visualization recommendations.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.07_output_key_state
+        runtime.deploy(coordinator)
+        runtime.serve(coordinator)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # coordinator,
+        # "Create a report on the sales_q4 dataset with visualization recommendations.",
+        # )
+        # result.print_result()

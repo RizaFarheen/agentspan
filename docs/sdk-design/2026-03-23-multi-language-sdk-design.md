@@ -91,7 +91,7 @@ Two supported modes:
 
 ### 2.2 REST API Endpoints
 
-Base URL: `{server_url}/agent` (server_url defaults to `http://localhost:8080/api`)
+Base URL: `{server_url}/agent` (server_url defaults to `http://localhost:6767/api`)
 
 #### POST /agent/start — Start Agent Execution
 
@@ -109,10 +109,10 @@ Compiles the agent config, registers workflow + tasks, starts execution.
 }
 ```
 
-For framework agents (LangGraph, LangChain, OpenAI, Google ADK):
+For framework agents (LangGraph, LangChain, OpenAI, Google ADK, Vercel AI SDK):
 ```json
 {
-  "framework": "langgraph|langchain|openai|google_adk",
+  "framework": "langgraph|langchain|openai|google_adk|vercel_ai",
   "rawConfig": { ... },
   "prompt": "User input text",
   "sessionId": "optional-session-id"
@@ -249,7 +249,7 @@ These may appear on the SSE stream but are not part of the SDK's EventType enum.
 
 #### POST /agent/{workflowId}/events — Framework Worker Event Push
 
-For framework passthrough workers (LangGraph, LangChain) to push events back to the server for SSE forwarding.
+For framework agent workers to push intermediate events back to the server for SSE forwarding.
 
 **Request:**
 ```json
@@ -281,7 +281,7 @@ SDKs must support configuration via environment variables:
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:8080/api` | Server API URL |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Server API URL |
 | `AGENTSPAN_API_KEY` | — | Bearer token / API key |
 | `AGENTSPAN_AUTH_KEY` | — | Legacy auth key |
 | `AGENTSPAN_AUTH_SECRET` | — | Legacy auth secret |
@@ -371,7 +371,7 @@ This is the JSON structure that every SDK must produce when serializing an Agent
   "toolType": "worker|http|api|mcp|agent_tool|human|generate_image|generate_audio|generate_video|generate_pdf|rag_search|rag_index",
   "outputSchema": { ... },
   "approvalRequired": true,
-  "timeoutSeconds": 120,
+  "timeoutSeconds": 0,
   "config": {
     "url": "https://api.example.com/data",
     "method": "GET",
@@ -551,6 +551,34 @@ Registers a function as a Conductor SIMPLE task. The SDK must:
 2. Generate JSON Schema for the input parameters
 3. Register a Conductor task definition
 4. Start a worker thread/goroutine/fiber that polls for and executes the task
+
+#### TypeScript SDK: Superset Tool Compatibility
+
+The TypeScript SDK is a **superset** — it accepts both Vercel AI SDK-style tool definitions (Zod schemas) and agentspan-native tool definitions (JSON Schema), auto-detecting which format was passed:
+
+1. **Zod schema detection:** If `inputSchema` is a ZodType instance (has `._def` property), convert to JSON Schema via `zodToJsonSchema()` at serialization time
+2. **JSON Schema passthrough:** If `inputSchema` is a plain object with `type: "object"`, use as-is
+3. **Vercel AI SDK `tool()` objects:** If a tool has `inputSchema` as Zod + `execute` function (matching `ai` package's `tool()` shape), extract and wrap as agentspan tool
+4. **Mixed arrays:** An agent's `tools` array can contain a mix of all formats
+
+This means a user can do:
+```typescript
+import { tool } from '@agentspan/sdk';
+import { tool as aiTool } from 'ai';
+import { z } from 'zod';
+
+// Agentspan native (JSON Schema)
+const t1 = tool(fn, { inputSchema: { type: 'object', properties: { city: { type: 'string' } } } });
+
+// Agentspan with Zod (auto-converted)
+const t2 = tool(fn, { inputSchema: z.object({ city: z.string() }) });
+
+// Vercel AI SDK tool (auto-detected and wrapped)
+const t3 = aiTool({ description: 'Get weather', inputSchema: z.object({ city: z.string() }), execute: fn });
+
+// All three work in the same agent
+const agent = new Agent({ name: 'test', tools: [t1, t2, t3] });
+```
 
 **Python reference:**
 ```python
@@ -930,7 +958,7 @@ The server stores encrypted credentials (AES-256-GCM). SDKs interact via:
 | CLI injection | Credentials injected into CLI tool env |
 | HTTP header injection | Server substitutes `${credential.NAME}` in headers |
 | MCP credential injection | Passed to MCP server connection |
-| Framework passthrough | Passed to framework's native credential mechanism |
+| Framework agent workers | Passed to extracted tool workers from framework agents |
 
 #### CredentialFile
 
@@ -1052,20 +1080,294 @@ The decorator accepts all the same parameters as the `Agent` constructor. Each S
 | Poll interval | 100ms | How often to check for tasks |
 | Thread count | 1 | Concurrent executions per worker |
 | Daemon mode | true | Kill on SDK shutdown |
-| Timeout | 120s | Default task timeout |
+| Timeout | 0 (no timeout) | Task definition `timeoutSeconds` — **MUST be 0**. Agent-level `timeout_seconds` controls execution duration, not the task definition. Hardcoded task timeouts cause premature termination of long-running agents. |
+| Response timeout | 3600 (1 hour) | Task definition `responseTimeoutSeconds` — Conductor requires minimum 1s, so we use 3600 (1 hour) as a practical "no timeout". Agent-level timeout takes precedence. |
 | Retry count | 2 | Default retry count |
 | Retry delay | 2s | Delay between retries |
 | Retry policy | LINEAR_BACKOFF | Backoff strategy |
 
-### 5.3 Framework Passthrough Workers
+### 5.3 Framework Agent Compilation (REQUIRED)
 
-For LangGraph/LangChain agents, the SDK registers a single "passthrough" worker that:
-1. Receives the full agent execution request
-2. Runs the framework's native execution
-3. Streams events back to the server via `POST /agent/{id}/events`
-4. Returns the final result
+**There is NO passthrough pattern.** Every framework agent MUST be compiled into a proper agentspan workflow — the same AgentConfig JSON → Conductor WorkflowDef compilation that native agents use. This is a hard requirement.
 
-Timeout for passthrough workers: 600s (10 minutes).
+**Rationale:** The entire value of agentspan is durable, observable, distributed execution. A passthrough black-box task defeats this — you lose crash recovery at the tool level, visibility into intermediate steps, HITL at individual tool calls, and distributed worker execution. If a user wanted to run their framework agent as a black box, they wouldn't need agentspan.
+
+#### What SDKs MUST do for framework agents
+
+When `runtime.run(frameworkAgent, prompt)` is called with a framework agent (Vercel AI SDK, LangGraph, LangChain, OpenAI Agents, Google ADK), the SDK must:
+
+1. **Detect** the framework via duck-typing
+2. **Introspect** the framework agent to extract:
+   - Model (LLM provider + model name)
+   - Tools (function definitions with schemas)
+   - Instructions/system prompt
+   - Sub-agents (if multi-agent)
+   - Configuration (temperature, max tokens, etc.)
+3. **Map** the extracted components to agentspan primitives:
+   - Framework agent → `AgentConfig` with model, instructions, tools
+   - Framework tools → `ToolConfig` entries (toolType: 'worker' with local functions, or 'http'/'mcp' for server-side tools)
+   - Framework sub-agents → nested `AgentConfig` entries
+   - Framework orchestration → agentspan strategy (handoff, sequential, parallel, etc.)
+4. **Serialize** to the standard AgentConfig JSON (identical wire format to native agents)
+5. **Register** tool workers for extracted tool functions
+6. **Execute** via the normal `POST /agent/start` → Conductor workflow → worker execution path
+
+The resulting Conductor workflow must have **individual tasks per tool, per LLM call, per sub-agent** — NOT a single black-box task. The server's `AgentCompiler` handles the workflow compilation, but the SDK must produce an `AgentConfig` that represents the full agent structure.
+
+#### Extraction paths per framework
+
+| Framework | Model extraction | Tool extraction | Sub-agent extraction |
+|-----------|-----------------|-----------------|---------------------|
+| Vercel AI SDK | From `model` parameter | From `tools` object (Zod schemas + execute functions) | From nested `generateText` calls |
+| LangGraph.js | From `ChatOpenAI`/model node | From `ToolNode.tools_by_name` | From StateGraph nodes |
+| LangChain.js | From `ChatOpenAI` binding | From `tools` parameter or `AgentExecutor.tools` | From chain steps |
+| OpenAI Agents SDK | From `agent.model` | From `agent.tools` (with schemas) | From `agent.handoffs` |
+| Google ADK | From `agent.model` | From `agent.tools` (FunctionTool) | From `agent.subAgents` |
+
+#### Drop-In Import Wrappers (Vercel AI SDK, LangGraph, LangChain)
+
+Some frameworks hide model and tool references inside closures (e.g., `generateText` captures `model` in its options object, `createReactAgent` captures `llm` in a closure). JavaScript closures are opaque — unlike Python, there's no way to inspect captured variables.
+
+The solution: **drop-in import wrappers** that intercept framework function calls at creation/invocation time, capture the model/tools/instructions BEFORE they disappear into closures, and store them as extractable properties.
+
+**User's change: ONE import line per framework. Everything else unchanged.**
+
+##### Vercel AI SDK
+
+```typescript
+// BEFORE (user's existing code):
+import { generateText } from 'ai';
+
+// AFTER (one import change):
+import { generateText } from '@agentspan/sdk/vercel-ai';
+
+// Everything else UNCHANGED:
+const result = await generateText({
+  model: openai('gpt-4o-mini'),
+  tools: { weather: weatherTool },
+  system: 'You are helpful.',
+  prompt: 'What is the weather?',
+});
+// Now compiles to: LLM_CHAT_COMPLETE + SIMPLE per tool on Conductor
+```
+
+`@agentspan/sdk/vercel-ai` re-exports everything from `ai` but wraps `generateText` and `streamText`. The wrapper:
+1. Intercepts the options object `{ model, tools, system, maxSteps, prompt }`
+2. Extracts model (provider + model name from the AI SDK model object)
+3. Extracts tools (Zod schemas + execute functions → `ToolConfig[]` with workers)
+4. Extracts system prompt → `instructions`
+5. Compiles to `AgentConfig` → sends to server → Conductor workflow
+6. Returns the same result type the user expects
+
+##### LangGraph
+
+```typescript
+// BEFORE:
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+
+// AFTER:
+import { createReactAgent } from '@agentspan/sdk/langgraph';
+
+// Everything else UNCHANGED:
+const graph = createReactAgent({ llm: new ChatOpenAI({ model: 'gpt-4o-mini' }), tools: [search] });
+const result = await graph.invoke({ messages: [new HumanMessage('Search for...')] });
+```
+
+The wrapper captures `llm` and `tools` at creation time (before they enter closures) and stores them as extractable properties on the returned graph object. When `runtime.run(graph, prompt)` is called, or when `graph.invoke()` is called, the extraction finds them.
+
+For custom `StateGraph`, the wrapper intercepts `addNode()` to capture node functions and `compile()` to store the final graph structure.
+
+##### LangChain
+
+```typescript
+// BEFORE:
+import { AgentExecutor } from 'langchain/agents';
+
+// AFTER:
+import { AgentExecutor } from '@agentspan/sdk/langchain';
+
+// Everything else UNCHANGED
+```
+
+The wrapper captures `agent` (with its LLM) and `tools` at `AgentExecutor` construction time.
+
+##### OpenAI Agents & Google ADK: Zero Changes Required
+
+These frameworks expose model, tools, and instructions as **public properties** on their Agent classes. No wrapper needed — the generic serializer extracts everything directly:
+
+```typescript
+// OpenAI — zero changes
+import { Agent } from '@openai/agents';
+const agent = new Agent({ name: 'test', model: 'gpt-4o', tools: [...] });
+const result = await runtime.run(agent, 'Hello');  // model/tools extracted from public properties
+
+// Google ADK — zero changes
+import { LlmAgent } from '@google/adk';
+const agent = new LlmAgent({ name: 'test', model: 'gemini-2.5-flash', tools: [...] });
+const result = await runtime.run(agent, 'Hello');  // model/tools extracted from public properties
+```
+
+##### SDK Subpath Exports for Wrappers
+
+```json
+{
+  "exports": {
+    ".": "./dist/index.js",
+    "./ai": "./dist/wrappers/ai.js",
+    "./langgraph": "./dist/wrappers/langgraph.js",
+    "./langchain": "./dist/wrappers/langchain.js",
+    "./testing": "./dist/testing/index.js"
+  }
+}
+```
+
+##### What Each Wrapper Does
+
+| Wrapper | Intercepts | Captures | Stores On |
+|---------|-----------|----------|-----------|
+| `@agentspan/sdk/vercel-ai` | `generateText`, `streamText` | model, tools, system, maxSteps | Options object → AgentConfig at call time |
+| `@agentspan/sdk/langgraph` | `createReactAgent`, `StateGraph` | llm, tools at creation | Graph object properties |
+| `@agentspan/sdk/langchain` | `AgentExecutor`, chain builders | agent.llm, tools at construction | Executor object properties |
+
+#### Detection (duck-typing, no hard imports)
+
+SDKs detect framework agents via property/method signatures without importing framework packages.
+
+| Framework | Integration method | Detection |
+|-----------|-------------------|-----------|
+| Vercel AI SDK | Drop-in wrapper (`@agentspan/sdk/vercel-ai`) | N/A — intercepted at call site |
+| LangGraph.js | Drop-in wrapper (`@agentspan/sdk/langgraph`) + duck-typing for wrapped graphs | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
+| LangChain.js | Drop-in wrapper (`@agentspan/sdk/langchain`) + duck-typing for wrapped executors | Has `invoke()` + `_agentspan` metadata (set by wrapper) |
+| OpenAI Agents SDK | Direct extraction (zero changes) | Has `name` + `instructions` + `model` + `tools` + `handoffs` |
+| Google ADK | Direct extraction (zero changes) | Has `model` + `instruction` + ADK-specific properties |
+
+#### Summary: User Changes Required Per Framework
+
+| Framework | User changes | What happens |
+|-----------|-------------|-------------|
+| **Vercel AI SDK** | Change 1 import: `from 'ai'` → `from '@agentspan/sdk/vercel-ai'` | `generateText` intercepted, compiled to workflow |
+| **LangGraph** | Change 1 import: `from '@langchain/langgraph/prebuilt'` → `from '@agentspan/sdk/langgraph'` | `createReactAgent` captures llm/tools at creation |
+| **LangChain** | Change 1 import: `from 'langchain/agents'` → `from '@agentspan/sdk/langchain'` | `AgentExecutor` captures agent/tools at construction |
+| **OpenAI Agents** | **Zero changes** | Extracted from public properties |
+| **Google ADK** | **Zero changes** | Extracted from public properties |
+
+#### Framework-Specific Extraction: LangGraph
+
+**With wrapper (`@agentspan/sdk/langgraph`):**
+
+The wrapper intercepts `createReactAgent` and captures `llm` + `tools` at creation time — before they enter closures. These are stored as `_agentspan` metadata on the returned graph. When `runtime.run(graph, prompt)` is called, the SDK reads the metadata.
+
+**Direct extraction (without wrapper — for graphs from `@langchain/langgraph` directly):**
+
+The SDK attempts to extract from the compiled graph's public structure:
+1. Finds tools from `graph.nodes.tools.bound.tools` (ToolNode)
+2. Attempts to find model from node properties (may fail for closure-captured models)
+3. If model can't be found, throws an error suggesting the wrapper import
+
+**Full extraction (create_react_agent with wrapper):**
+
+`createReactAgent({ llm, tools })` via the wrapper stores model + tools. The SDK:
+1. Reads `_agentspan.model` and `_agentspan.tools` from the graph
+2. Extracts system prompt from wrapper metadata
+3. Produces `AgentConfig` with `model` + `tools[]` → compiles to `LLM_CHAT_COMPLETE` + `SIMPLE` tasks
+
+**Graph-structure extraction (custom StateGraph):**
+
+Custom `StateGraph` with explicit nodes and edges:
+1. Each node function → becomes a `SIMPLE` Conductor task with its own worker
+2. Simple edges → sequential task flow
+3. Conditional edges → `SWITCH` tasks (see routing below)
+4. LLM nodes (nodes that reference an LLM variable) → split into prep (SIMPLE) + `LLM_CHAT_COMPLETE` + finish (SIMPLE)
+5. Subgraph nodes → recursively compiled as `SUB_WORKFLOW`
+
+**Conditional routing in TypeScript:**
+
+Python extracts router logic via bytecode inspection (`co_names`). TypeScript cannot do this — functions are opaque. Two approaches:
+
+1. **Static analysis of return values:** If the conditional edge mapping is provided (e.g., `{ "escalate": "escalate_node", "respond": "respond_node" }`), the routing targets are known. The router function itself becomes a SIMPLE task worker that returns the route key. The server compiles this as a SWITCH: router worker → SWITCH on result → branch tasks.
+
+2. **When routing can't be extracted:** The SDK throws an error with guidance:
+   ```
+   Error: Cannot extract conditional routing from StateGraph node 'classify'.
+   Consider using createReactAgent() or express routing as an agentspan Agent
+   with strategy='router'.
+   ```
+
+**LangGraph memory (MemorySaver/checkpointer):**
+
+LangGraph's `MemorySaver` is framework-specific state persistence. When detected:
+- Map to agentspan `ConversationMemory` if the checkpointer stores message history
+- If the checkpointer does framework-specific state management that doesn't map to agentspan memory, throw an error with guidance to use agentspan's native memory system
+
+**What MUST succeed (no errors allowed):**
+- `createReactAgent({ llm, tools })` — always fully extractable
+- `createReactAgent({ llm, tools, prompt })` — always fully extractable
+- Simple `StateGraph` with function nodes + simple edges — always extractable
+- `StateGraph` with conditional edges and explicit target mapping — extractable (router becomes SIMPLE worker)
+
+**What MAY fail with a clear error:**
+- `StateGraph` with `Send` API (dynamic fan-out) — complex; error with guidance
+- Graphs with custom `channel_write`/`channel_read` — framework-internal; error with guidance
+
+#### Framework-Specific Extraction: LangChain
+
+**AgentExecutor extraction:**
+
+`AgentExecutor` wraps an LLM agent + tools:
+1. Extract model from `executor.agent` (typically `ChatOpenAI` or similar)
+2. Extract tools from `executor.tools` — each has `.name`, `.description`, `.args_schema`
+3. Extract system prompt from the agent's prompt template
+4. Produces `AgentConfig` with `model` + `tools[]` → compiles to `LLM_CHAT_COMPLETE` + `SIMPLE` tasks
+
+**RunnableSequence extraction (chains):**
+
+A `RunnableSequence` is a pipeline of steps. Each step is a `Runnable`:
+1. Each `RunnableLambda` (wraps a function) → becomes a `SIMPLE` Conductor task with a worker. The function is extractable as a property on the Runnable, and each step is its own task — this IS genuine decomposition, not a black box.
+2. Each `ChatOpenAI` call → becomes a `LLM_CHAT_COMPLETE` task
+3. Each `StructuredOutputParser` → becomes a post-processing SIMPLE task
+4. The chain sequence → maps to agentspan `strategy: 'sequential'`
+
+**What MUST succeed:**
+- `AgentExecutor.from_agent_and_tools({ agent, tools })` — always fully extractable
+- `createOpenAIFunctionsAgent` + `AgentExecutor` — always fully extractable
+- Simple `RunnableSequence` of prompt → LLM → parser — always extractable
+
+**What MAY fail with a clear error:**
+- Custom `Runnable` subclasses with no extractable function — error with guidance
+- Chains using `RunnablePassthrough` with complex merging — error with guidance
+
+#### Framework-Specific Extraction: OpenAI Agents SDK
+
+**Fully extractable via public properties — no special handling needed:**
+
+The `Agent` class exposes everything as public properties:
+- `.model` → `AgentConfig.model` (prefix with `openai/` if needed)
+- `.instructions` → `AgentConfig.instructions`
+- `.tools` → `AgentConfig.tools[]` (each tool has `.name`, `.description`, `.params_json_schema`, callable)
+- `.handoffs` → `AgentConfig.agents[]` with `strategy: 'handoff'` (recursive extraction)
+- `.output_type` → `AgentConfig.outputType`
+- `.input_guardrails` / `.output_guardrails` → `AgentConfig.guardrails[]`
+- `.model_settings` → `temperature`, `maxTokens`
+
+The generic serializer walks these properties. The server's `OpenAINormalizer` maps the raw config to `AgentConfig`. **No framework-specific serializer needed.**
+
+#### Framework-Specific Extraction: Google ADK
+
+**Fully extractable via public properties — no special handling needed:**
+
+The `LlmAgent` class exposes everything:
+- `.model` → `AgentConfig.model` (prefix with `google_gemini/` if needed)
+- `.instruction` → `AgentConfig.instructions`
+- `.tools` → `AgentConfig.tools[]` (each `FunctionTool` has `.name`, `.description`, `.parameters`, `.execute`)
+- `.subAgents` → `AgentConfig.agents[]` (recursive extraction)
+- `.generateContentConfig` → temperature, maxTokens
+- `.outputKey` → metadata
+
+The generic serializer walks these properties. The server's `GoogleADKNormalizer` maps the raw config to `AgentConfig`. **No framework-specific serializer needed.**
+
+#### Framework packages as optional dependencies
+
+Framework packages are optional peer/dev dependencies. Only needed when running framework-specific examples. The core SDK works without them.
 
 ### 5.4 Credential Injection in Workers
 
@@ -1240,7 +1542,7 @@ A single mega-workflow that processes an article request through a complete publ
 
 Exercised throughout the workflow:
 
-- **All credential modes:** isolated subprocess, in-process `get_credential()`, CLI injection, HTTP header injection, MCP credential injection, framework passthrough, external worker credentials
+- **All credential modes:** isolated subprocess, in-process `get_credential()`, CLI injection, HTTP header injection, MCP credential injection, framework agent workers, external worker credentials
 - **CliConfig:** CLI tool allowlisting for git/gh commands
 - **CodeExecutionConfig:** Sandbox settings for code execution
 - **Extended thinking:** `thinking_budget_tokens` on analysis agent
@@ -1296,7 +1598,7 @@ Every SDK must include a validation framework that mirrors the Python implementa
 |-----------|-------------|
 | Validation runner | Concurrent executor, runs examples against multiple models |
 | TOML config | Configuration for runs (model, group, timeout, etc.) |
-| Example groups | SMOKE_TEST, PASSING, SLOW, HITL, per-framework |
+| Example groups | SMOKE_TEST, PASSING, SLOW, HITL, per-framework (langgraph, langchain, vercel_ai, openai, google_adk) |
 | LLM judge | Cross-run semantic evaluation with rubrics |
 | HTML report | Interactive dashboard with score heatmap, filters |
 | Resume/retry | Resume failed runs, retry specific examples |
@@ -1311,6 +1613,7 @@ For validation purposes, each SDK must support running examples using the framew
 | Google ADK | `google-adk` (Python), equivalent per language | Same |
 | LangChain | `langchain` per language | Same |
 | LangGraph | `langgraph` per language | Same |
+| Vercel AI SDK | `ai` (TypeScript) | Compare agentspan-compiled vs native execution |
 
 This is **validation-only** — not a runtime dependency. The validation runner:
 1. Runs the example via agentspan compilation (normal path)
@@ -1511,9 +1814,247 @@ Recommended order for implementing a new SDK:
 12. **Code execution** — all executor types
 13. **Extended types** — UserProxyAgent, GPTAssistantAgent
 14. **Callbacks** — lifecycle hooks
-15. **Testing framework** — mock, expect, assertions, record/replay
-16. **Validation framework** — runner, judge, native execution, reports
-17. **Kitchen sink** — full acceptance test
+15. **Framework integration** — detection, extraction, compilation to AgentConfig (TypeScript: Vercel AI SDK; Python: LangGraph, LangChain)
+16. **Testing framework** — mock, expect, assertions, record/replay
+17. **Validation framework** — runner, judge, native execution, reports
+18. **Kitchen sink** — full acceptance test
+19. **Examples** — all Python examples ported (see §12.1)
+
+### 12.1 Example Parity Requirement
+
+Every SDK must port **all** Python examples to the target language. The Python SDK's examples directory is the reference — each example must have an equivalent in the new SDK, translated to idiomatic target-language patterns.
+
+#### Native Agentspan Examples (97 examples)
+
+These cover every feature of the native SDK. Each new SDK must implement all of them:
+
+| # | Example | Features Covered |
+|---|---------|-----------------|
+| 01 | `basic_agent` | Agent definition, model, instructions, run() |
+| 02 | `tools` | @tool decorator, input schemas |
+| 02a | `simple_tools` | Single-step tool usage |
+| 02b | `multi_step_tools` | Multi-step tool chains |
+| 03 | `structured_output` | output_type, Pydantic/Zod schemas |
+| 04 | `http_and_mcp_tools` | httpTool, mcpTool |
+| 04 | `mcp_weather` | MCP tool with real server |
+| 05 | `handoffs` | Strategy.HANDOFF, sub-agents |
+| 06 | `sequential_pipeline` | Strategy.SEQUENTIAL, >> / .pipe() |
+| 07 | `parallel_agents` | Strategy.PARALLEL |
+| 08 | `router_agent` | Strategy.ROUTER |
+| 09 | `human_in_the_loop` | approval_required, handle.approve() |
+| 09b | `hitl_with_feedback` | handle.send(), handle.reject() |
+| 09c | `hitl_streaming` | stream + HITL combined |
+| 09d | `human_tool` | humanTool() |
+| 10 | `guardrails` | Custom @guardrail functions |
+| 11 | `streaming` | runtime.stream(), event iteration |
+| 12 | `long_running` | Timeout, polling |
+| 13 | `hierarchical_agents` | Nested multi-agent teams |
+| 14 | `existing_workers` | External workers (by reference) |
+| 15 | `agent_discussion` | Multi-agent conversation |
+| 16 | `credentials_isolated_tool` | Isolated credential mode |
+| 16 | `random_strategy` | Strategy.RANDOM |
+| 16b | `credentials_non_isolated` | In-process getCredential() |
+| 16c | `credentials_cli_tools` | CLI credential injection |
+| 16d | `credentials_gh_cli` | GitHub CLI with credentials |
+| 16e | `credentials_http_tool` | HTTP header ${CREDENTIAL} substitution |
+| 16f | `credentials_mcp_tool` | MCP tool credentials |
+| 16g | `credentials_framework_agent` | Framework agent credential injection |
+| 16h | `credentials_external_worker` | External worker credentials |
+| 16i | `credentials_langchain` | LangChain agent credential injection |
+| 16j | `credentials_openai_sdk` | OpenAI SDK agent credential injection |
+| 16k | `credentials_google_adk` | Google ADK agent credential injection |
+| 17 | `swarm_orchestration` | Strategy.SWARM |
+| 18 | `manual_selection` | Strategy.MANUAL |
+| 19 | `composable_termination` | TextMention \| (MaxMessage & TokenUsage) |
+| 20 | `constrained_transitions` | allowedTransitions |
+| 21 | `regex_guardrails` | RegexGuardrail |
+| 22 | `llm_guardrails` | LLMGuardrail |
+| 23 | `token_tracking` | TokenUsage in result |
+| 24 | `code_execution` | CodeExecutionConfig |
+| 25 | `semantic_memory` | SemanticMemory + MemoryStore |
+| 26 | `opentelemetry_tracing` | OTel integration |
+| 27 | `user_proxy_agent` | UserProxyAgent |
+| 28 | `gpt_assistant_agent` | GPTAssistantAgent |
+| 29 | `agent_introductions` | introduction field |
+| 30 | `multimodal_agent` | Media tools (image, audio, video, pdf) |
+| 31 | `tool_guardrails` | Guardrails on tool input |
+| 32 | `human_guardrail` | onFail=HUMAN |
+| 33 | `external_workers` | External tools + agents |
+| 33 | `single_turn_tool` | Single-turn tool execution |
+| 34 | `prompt_templates` | PromptTemplate with variables |
+| 35 | `standalone_guardrails` | Guardrails without agent |
+| 36 | `simple_agent_guardrails` | Basic agent-level guardrails |
+| 37 | `fix_guardrail` | onFail=FIX |
+| 38 | `tech_trends` | Real-world research agent |
+| 39 | `local_code_execution` | LocalCodeExecutor |
+| 39a | `docker_code_execution` | DockerCodeExecutor |
+| 39b | `jupyter_code_execution` | JupyterCodeExecutor |
+| 39c | `serverless_code_execution` | ServerlessCodeExecutor |
+| 40 | `media_generation_agent` | Image/audio/video/pdf tools |
+| 41 | `sequential_pipeline_tools` | Sequential with shared tools |
+| 42 | `security_testing` | Security-focused agent |
+| 43 | `data_security_pipeline` | Multi-stage security pipeline |
+| 44 | `safety_guardrails` | Comprehensive safety guardrails |
+| 45 | `agent_tool` | agentTool() sub-agent as tool |
+| 46 | `transfer_control` | Handoff conditions |
+| 47 | `callbacks` | CallbackHandler lifecycle hooks |
+| 48 | `planner` | planner=True mode |
+| 49 | `include_contents` | includeContents="default" |
+| 50 | `thinking_config` | thinkingBudgetTokens |
+| 51 | `shared_state` | ToolContext.state mutations |
+| 52 | `nested_strategies` | Mixed strategies (router→parallel→sequential) |
+| 53 | `agent_lifecycle_callbacks` | All 6 callback positions |
+| 54 | `software_bug_assistant` | Real-world debugging agent |
+| 55 | `ml_engineering` | ML pipeline agent |
+| 56 | `rag_agent` | searchTool + indexTool |
+| 57 | `plan_dry_run` | runtime.plan() |
+| 58 | `scatter_gather` | scatterGather() helper |
+| 59 | `coding_agent` | Code generation + execution |
+| 60 | `github_coding_agent` | GitHub integration |
+| 60a | `github_coding_agent_simple` | Simplified GitHub agent |
+| 61 | `github_coding_agent_chained` | Chained GitHub agents |
+| 62 | `cli_tool_guardrails` | CliConfig + guardrails |
+| 63 | `deploy` | runtime.deploy() |
+| 63b | `serve` | runtime.serve() |
+| 63c | `run_by_name` | Run deployed agent by name |
+| 63d | `serve_from_package` | Serve agents from package |
+| 63e | `run_monitoring` | Execution monitoring |
+| 64 | `swarm_with_tools` | Swarm strategy + tool usage |
+| 65 | `parallel_with_tools` | Parallel strategy + tools |
+| 66 | `handoff_to_parallel` | Handoff → parallel sub-team |
+| 67 | `router_to_sequential` | Router → sequential pipeline |
+| 68 | `context_condensation` | Long conversations, context management |
+| 70 | `ce_support_agent` | Customer engineering agent |
+| 71 | `api_tool` | apiTool() OpenAPI auto-discovery |
+| 90 | `guardrail_e2e_tests` | End-to-end guardrail testing |
+
+#### Framework Examples
+
+Each framework integration must have equivalent examples ported from Python. These demonstrate running native framework agents on agentspan's durable runtime.
+
+**LangGraph Examples (44 examples)**
+
+| # | Example | Features Covered |
+|---|---------|-----------------|
+| 01 | `hello_world` | Basic create_react_agent compiled to agentspan |
+| 02 | `react_with_tools` | ReAct agent with tool calling |
+| 03 | `memory` | Checkpointed memory |
+| 04 | `simple_stategraph` | Custom StateGraph |
+| 05 | `tool_node` | ToolNode extraction |
+| 06 | `conditional_routing` | Conditional edges |
+| 07 | `system_prompt` | System prompt injection |
+| 08 | `structured_output` | Typed output |
+| 09-14 | Domain agents | Math, research, customer support, code, multi-turn, QA |
+| 15-20 | Advanced patterns | Data pipeline, parallel branches, error recovery, tools_condition, document analysis, planner |
+| 21-27 | Complex patterns | Subgraph, HITL, retry, map-reduce, supervisor, handoff, persistent memory |
+| 28-35 | Streaming & memory | Streaming tokens, tool categories, code interpreter, classify+route, reflection, output validator, RAG, conversation manager |
+| 36-40 | Multi-agent | Debate agents, document grader, state machine, tool call chain, agent as tool |
+| 41-44 | React agent variants | Basic, system prompt, multi-model, context condensation |
+
+**LangChain Examples (25 examples)**
+
+| # | Example | Features Covered |
+|---|---------|-----------------|
+| 01 | `hello_world` | Basic AgentExecutor compiled to agentspan |
+| 02 | `react_with_tools` | ReAct agent with tools |
+| 03-07 | Core patterns | Custom tools, structured output, prompt templates, chat history, memory |
+| 08-15 | Domain agents | Multi-tool, math, web search, code review, document summarizer, customer service, research, data analyst |
+| 16-20 | Content & data | Content writer, SQL agent, email drafter, fact checker, translation |
+| 21-25 | Analysis | Sentiment, classification, recommendation, output parsers, advanced orchestration |
+
+**OpenAI Agents SDK Examples (10 examples)**
+
+| # | Example | Features Covered |
+|---|---------|-----------------|
+| 01 | `basic_agent` | Basic Agent compiled to agentspan |
+| 02 | `function_tools` | Function tool definitions |
+| 03 | `structured_output` | Typed output |
+| 04 | `handoffs` | Agent handoffs |
+| 05 | `guardrails` | Input/output guardrails |
+| 06 | `model_settings` | Temperature, max tokens |
+| 07 | `streaming` | Streaming events |
+| 08 | `agent_as_tool` | Sub-agent as tool |
+| 09 | `dynamic_instructions` | Runtime instruction modification |
+| 10 | `multi_model` | Multiple model providers |
+
+**Google ADK Examples (35 examples)**
+
+| # | Example | Features Covered |
+|---|---------|-----------------|
+| 00 | `hello_world` | Minimal ADK agent |
+| 01-05 | Core patterns | Basic agent, function tools, structured output, sub-agents, generation config |
+| 06-10 | Execution | Streaming, output key state, instruction templating, multi-tool, hierarchical |
+| 11-15 | Strategies | Sequential, parallel, loop, callbacks, global instruction |
+| 16-20 | Domain agents | Customer service, financial advisor, order processing, supply chain, blog writer |
+| 21-25 | Advanced | Agent tool, transfer control, callbacks, planner, security |
+| 26-32 | Safety & patterns | Safety guardrails, security agent, movie pipeline, include contents, thinking, shared state, nested strategies |
+| 33-35 | Real-world | Software bug assistant, ML engineering, RAG agent |
+
+**Vercel AI SDK Examples (TypeScript only)**
+
+Since the Vercel AI SDK is TypeScript-specific, these examples only apply to the TypeScript SDK:
+
+| # | Example | Features Covered |
+|---|---------|-----------------|
+| 01 | `basic_agent` | Vercel AI SDK agent compiled to agentspan |
+| 02 | `tools_compat` | Mix AI SDK + native tools |
+| 03 | `streaming` | Stream Vercel AI SDK agent events |
+| 04 | `structured_output` | Zod schema output |
+| 05 | `multi_step` | Multi-step agent loop |
+| 06 | `middleware` | Middleware + agentspan guardrails |
+| 07 | `stop_conditions` | stopWhen + agentspan termination |
+| 08 | `agent_handoff` | Vercel AI → native agent handoff |
+| 09 | `credentials` | Credential injection |
+| 10 | `hitl` | HITL with Vercel AI SDK agent |
+
+#### Example Parity Rules
+
+1. **Every Python example must have an equivalent** in each new SDK, translated to idiomatic target-language patterns
+2. **File naming**: Use the same numbering and naming convention as Python (e.g., `01_basic_agent.py` → `01-basic-agent.ts` or `01_basic_agent.go`)
+3. **Framework examples are language-specific**: TypeScript gets Vercel AI SDK examples in addition to LangGraph/LangChain. Go/Java/Kotlin/C#/Ruby get equivalent framework examples for their language ecosystems when available.
+4. **Each example must be self-contained and runnable** with minimal setup (just env vars)
+5. **Helper files** (settings, run_all) should be ported as appropriate for the language's idioms
+6. **Kitchen sink** remains the single acceptance test exercising all features in one workflow
+
+#### HARD REQUIREMENT: Framework Examples Must Use Real Native SDKs
+
+**Framework examples (LangGraph, LangChain, OpenAI Agents, Google ADK, Vercel AI SDK) MUST import and use the REAL framework packages — never mocks or duck-typed stand-ins.** This is a non-negotiable requirement for all language SDKs.
+
+**Rationale:** The entire value proposition of framework integration is "take your existing framework code, run it on agentspan." If examples use mocks, they prove nothing — they only test the detection duck-typing, not the actual compiled execution. Users need real, runnable examples they can copy and adapt.
+
+**What this means:**
+
+1. **Install real framework packages** as dev/optional dependencies:
+   - TypeScript: `ai`, `@ai-sdk/openai`, `@langchain/core`, `@langchain/langgraph`, `@langchain/openai`
+   - Python: `langchain`, `langgraph`, `openai-agents`, `google-adk` (already done)
+   - Go/Java/Kotlin/C#/Ruby: equivalent packages for their ecosystems when available
+
+2. **Each framework example must:**
+   - Import from the real framework package (e.g., `import { generateText } from 'ai'`, not a mock)
+   - Create a real framework agent/graph/executor using the framework's native API
+   - Pass that real object to `runtime.run()` for agentspan execution
+   - Include TWO execution paths for validation comparison:
+     ```
+     // Path 1: Native framework execution (baseline)
+     const nativeResult = await agent.generate({ prompt });
+
+     // Path 2: Agentspan compiled execution (what we're testing)
+     const agentspanResult = await runtime.run(agent, prompt);
+
+     // Compare results
+     ```
+
+3. **Validation must compare native vs agentspan execution:**
+   - Both should complete successfully
+   - Tool calls should match (same tools invoked)
+   - Output should be semantically similar (LLM judge comparison)
+   - The validation framework's per-framework groups (LANGGRAPH, LANGCHAIN, VERCEL_AI, etc.) should run these comparisons
+
+4. **If a framework package is not available or incompatible** for the target language, **do not ship those framework examples**. Remove them entirely — do not substitute mocks, stubs, or duck-typed stand-ins. Document the gap with a tracking issue that specifies what dependency change is needed (e.g., "Blocked on Zod v4 migration — `@openai/agents` v0.8 and `@google/adk` v0.5 require Zod v4"). The examples are added back only when the real SDK can be imported and executed.
+
+5. **No mocks, ever.** This is absolute. If an example file exists in the `examples/` directory for a framework, it MUST use real imports from that framework's package. If the package can't be installed, the example file must not exist. A missing example is honest; a mock example is misleading and will be copied by users who expect it to work.
+
+6. **Framework packages are dev/optional dependencies** — they must NOT be required for core SDK functionality. Only needed to run framework-specific examples and validation.
 
 ---
 
@@ -1521,7 +2062,7 @@ Recommended order for implementing a new SDK:
 
 A new language SDK is considered complete when:
 
-1. All 88 features in the traceability matrix are implemented
+1. All 89 features in the traceability matrix are implemented
 2. Kitchen sink workflow produces identical AgentConfig JSON
 3. Kitchen sink execution completes successfully with all stages
 4. All test assertions pass
@@ -1531,6 +2072,8 @@ A new language SDK is considered complete when:
 8. Both sync and async APIs work correctly
 9. Documentation covers all public APIs
 10. Package is publishable to the language's package registry
+11. Framework integration works (TypeScript: Vercel AI SDK agents compiled to agentspan workflows; Python: LangGraph/LangChain compiled to agentspan workflows)
+12. **All Python examples ported** — every native example (97) + framework examples (LangGraph 44, LangChain 25, OpenAI 10, ADK 35) have idiomatic equivalents per §12.1
 
 ---
 
@@ -1643,7 +2186,7 @@ When a tool modifies `ToolContext.state`, the SDK captures mutations and appends
 
 ### 14.7 Framework Event Push Wire Format
 
-Framework passthrough workers push events to `POST /agent/{workflowId}/events`:
+Framework agent workers push events to `POST /agent/{workflowId}/events`:
 
 ```json
 [
@@ -1770,3 +2313,157 @@ Workers extract the execution token from task input for credential resolution:
 **Fallback:** `task.workflow_input.__agentspan_ctx__.execution_token`
 
 The `__agentspan_ctx__` field is injected by the server and must be stripped before passing args to the tool function.
+
+---
+
+## 15. Lessons Learned: TypeScript SDK Implementation (2026-03-24)
+
+Findings from a 3-pass audit of the first non-Python SDK implementation. Future SDKs should use this as a checklist.
+
+### 15.1 Worker Registration Parity Is the #1 Risk
+
+The serializer and runtime must stay in sync. Every `taskName` the serializer emits **must** have a corresponding worker registered in the runtime. The TypeScript SDK had 6 worker types that were serialized but never registered:
+
+| Worker | Task Name | Impact |
+|--------|-----------|--------|
+| Termination | `{agent}_termination` | Agent never stops — 300s timeout |
+| Custom guardrail | `{guardrail.name}` | Agent never completes — 300s timeout |
+| stopWhen | `{agent}_stop_when` | Agent never stops |
+| Callbacks | `{agent}_{position}` | Lifecycle hooks silently fail |
+| Gate (callable) | `{agent}_gate` | Pipeline gate never evaluated |
+| Router (function) | `{agent}_router_fn` | Router never selects agent |
+
+**Checklist for new SDKs:** After implementing the serializer, grep for every `taskName` reference and verify each one has a matching worker registration. Cross-reference against `docs/worker-types.md`.
+
+### 15.2 Class Instance Serialization Requires Normalization
+
+When SDK types use class instances (e.g., `RegexGuardrail`, `LLMGuardrail`) that have a `toWireFormat()` or `toGuardrailDef()` method, the serializer **must** call that method before reading properties. The TypeScript serializer initially read raw instance properties directly, missing fields like `guardrailType` that only exist on the normalized output.
+
+**Rule:** If any SDK type has a normalization method (`toGuardrailDef()`, `toJSON()`, etc.), the serializer must detect and call it. Use duck-typing: `if (typeof obj.toGuardrailDef === 'function')`.
+
+### 15.3 Callback Worker Arguments Must Match Handler Signatures
+
+The server sends generic `{messages, llm_result}` for all callback positions. The SDK's callback handler interface may define typed method signatures like `onModelStart(agentName, messages)`. The worker must bridge these — extracting `agentName` from the registration context (captured in closure) and mapping server fields to the correct positional arguments.
+
+**Rule:** The worker knows `agentName` at registration time. Pass it as the first argument. Map `messages` or `llm_result` from server input to the second argument based on position.
+
+### 15.4 Termination Conditions Need Evaluation Logic, Not Just Serialization
+
+Termination conditions must implement a `shouldTerminate(context)` method that the SDK-side worker calls. Serialization (for the wire format) and evaluation (for the worker) are two separate concerns. The TypeScript SDK initially only had `toJSON()` and forgot `shouldTerminate()`.
+
+**Rule:** Every `TerminationCondition` subclass needs both `toJSON()` (wire format) and `shouldTerminate(context)` (worker evaluation). The return must be `{shouldTerminate: bool, reason: string}`, mapped to `{should_continue: !shouldTerminate, reason}` for the server.
+
+### 15.5 Server-Side vs SDK-Side Workers
+
+Not all Python worker types need SDK-side registration. Some are handled by the server for non-Python SDKs:
+
+| Worker | Python SDK | Other SDKs | Reason |
+|--------|-----------|------------|--------|
+| Check Transfer (#8) | SDK-side | Server-side | Server inspects tool_calls internally |
+| Handoff Check (#10) | SDK-side | Server-side | Declarative conditions evaluated by server |
+| Swarm Transfer (#11) | SDK-side | Server-side | Auto-generated by server (§14.15) |
+| Manual Selection (#12) | SDK-side | Server-side | Server handles HITL selection |
+
+**How to verify:** If examples using these features (e.g., handoff, swarm) pass WITHOUT SDK workers, the server handles them. Don't add unnecessary workers — they could conflict with server-side logic.
+
+### 15.6 Framework Detection Must Prioritize Native Agent
+
+When an SDK supports multiple frameworks, the detection order matters:
+
+```
+1. instanceof NativeAgent  → native path (highest priority)
+2. Framework markers       → framework passthrough
+3. Default                 → error
+```
+
+The native `Agent` check must come first. Duck-typing for framework markers (e.g., checking for `.invoke()` method) can produce false positives if a native Agent happens to have similar properties.
+
+### 15.7 Tool-Level Guardrails Are Separate From Agent-Level
+
+Guardrails can appear in two places:
+1. `agent.guardrails` — validated during agent execution
+2. `tool.guardrails` — validated before/after tool execution
+
+The runtime must collect and register workers for **both**. The TypeScript SDK initially only registered agent-level guardrail workers and missed tool-level ones.
+
+### 15.8 Drop-In Import Wrappers Are the Best Onboarding Story
+
+For framework integrations (Vercel AI, LangChain, etc.), the ideal onboarding is a single import change:
+
+```typescript
+// Before: import { generateText } from 'ai';
+// After:
+import { generateText } from '@agentspan/sdk/vercel-ai';
+```
+
+This is better than requiring users to rewrite their agent as `new Agent({...})`. The wrapper internally builds an Agent, runs it, and maps the result back to the framework's format. Reserve the explicit Agent API for when users need agentspan-specific features (guardrails, termination, handoffs, HITL).
+
+### 15.9 CLI Deploy & Agent Discovery
+
+The `agentspan deploy` CLI command discovers and deploys agents from user code. Each SDK must provide CLI entry points that the Go CLI invokes as subprocesses.
+
+#### Architecture
+
+```
+agentspan deploy (Go CLI)
+  ├── Language detection (pyproject.toml → Python, tsconfig.json → TypeScript)
+  ├── Discovery subprocess → JSON on stdout
+  │     Python: python -m agentspan.cli.discover --path <dir> | --package <module>
+  │     TypeScript: npx tsx cli-bin/discover.ts --path <dir>
+  ├── Confirmation prompt (skip with --yes)
+  └── Deploy subprocess → JSON on stdout
+        Python: python -m agentspan.cli.deploy --path <dir> --agents foo,bar
+        TypeScript: npx tsx cli-bin/deploy.ts --path <dir> --agents foo,bar
+```
+
+#### Discovery Requirements
+
+Each SDK must provide a discovery entry point that:
+
+1. **Scans directories recursively** for source files (`.py`, `.ts`, `.js`)
+2. **Skips** `__pycache__`, `.venv`, `venv`, `node_modules`, `.git`, `dist`, `build`, and hidden directories
+3. **Dynamically imports** each file and collects agent instances
+4. **Detects both native and framework agents** using `detect_framework()`:
+   - Native `Agent` instances (including `model="claude-code/..."`)
+   - OpenAI Agents SDK (`agents.Agent`)
+   - LangGraph (`CompiledStateGraph`)
+   - LangChain (`AgentExecutor`)
+   - Google ADK (`LlmAgent`)
+5. **Redirects stdout to stderr** during imports to prevent side-effects from corrupting JSON output
+6. **Catches `BaseException`** (Python) or swallows import errors with stderr logging (TypeScript) so one broken file doesn't abort discovery
+7. **Deduplicates by agent name** — first discovered instance wins
+8. **Outputs JSON to stdout**: `[{"name": "...", "framework": "native"|"openai"|...}]`
+
+#### Deploy Requirements
+
+Each SDK must provide a deploy entry point that:
+
+1. **Re-discovers agents** (same as discovery) and filters by `--agents` if specified
+2. **Calls `deploy()` per agent** with individual error handling — partial failures must not abort the batch
+3. **Outputs JSON to stdout**: `[{"agent_name": "...", "workflow_name": "...", "success": true/false, "error": null/"..."}]`
+4. **Native agents** (including `claude-code` models) are serialized via `AgentConfigSerializer` and sent as `{"agentConfig": {...}}`
+5. **Framework agents** are serialized via `serialize_agent()` / `_serializeFramework()` and sent as `{"framework": "...", "rawConfig": {...}}`
+
+#### Key Design Decisions
+
+- **`detect_framework()` must return `null`/`None` for native `Agent` instances regardless of model string.** The `model` field (e.g., `claude-code/sonnet`) is routing metadata for the server, not a framework identifier. Returning a framework ID for native agents breaks deployment.
+- **Module-level agent definitions are the recommended pattern.** Agents defined inside functions, `if __name__` blocks, or classes are not discoverable. The error message must explain this.
+- **The Go CLI sets `AGENTSPAN_AUTO_START_SERVER=false`** in subprocess env to prevent the SDK from trying to start an embedded server during deploy.
+
+#### Reference Implementations
+
+| Component | Python | TypeScript |
+|-----------|--------|------------|
+| Discovery entry point | `sdk/python/src/agentspan/cli/discover.py` | `sdk/typescript/cli-bin/discover.ts` |
+| Deploy entry point | `sdk/python/src/agentspan/cli/deploy.py` | `sdk/typescript/cli-bin/deploy.ts` |
+| Shared discovery logic | (inline in discover.py) | `sdk/typescript/cli-bin/shared.ts` |
+| Framework detection | `sdk/python/src/agentspan/agents/frameworks/serializer.py:detect_framework()` | `sdk/typescript/src/frameworks/detect.ts:detectFramework()` |
+| CLI command (Go) | `cli/cmd/deploy.go` | (same) |
+
+### 15.10 Audit Methodology
+
+For each new SDK, run this 3-pass audit:
+
+1. **Pass 1 — Feature coverage:** Check every feature area (HITL, SSE, credentials, guardrails, all tool types, memory, termination) against the spec. Identify missing worker registrations.
+2. **Pass 2 — Edge cases:** Verify fixes from Pass 1. Check argument signatures match between server input and handler interfaces. Check for serialization normalization gaps. Check for race conditions in async registration.
+3. **Pass 3 — End-to-end trace:** Pick 2-3 examples that exercise different features. Trace the full flow: Agent → serializer → wire format → runtime → worker registration → server dispatch → worker execution. Verify every step produces correct output.

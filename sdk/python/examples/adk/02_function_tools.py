@@ -89,10 +89,18 @@ agent = Agent(
     tools=[get_weather, convert_temperature, get_time_zone],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "What's the weather in Tokyo right now? Convert the temperature to "
-        "Fahrenheit and tell me what timezone they're in.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.02_function_tools
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "What's the weather in Tokyo right now? Convert the temperature to "
+        # "Fahrenheit and tell me what timezone they're in.",
+        # )
+        # result.print_result()

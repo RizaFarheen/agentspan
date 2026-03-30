@@ -62,11 +62,17 @@ graph = create_react_agent(llm, tools=[get_today, days_between, day_of_week], na
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "What day of the week is today? "
-            "How many days until New Year's Day 2026? "
-            "What day of the week will that be?",
-        )
-        print(f"Status: {result.status}")
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.43_react_agent_multi_model
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "What day of the week is today? "
+        # "How many days until New Year's Day 2026? "
+        # "What day of the week will that be?",
+        # )
+        # print(f"Status: {result.status}")
+        # result.print_result()

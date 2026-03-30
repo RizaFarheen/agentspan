@@ -5,12 +5,13 @@
 
 package dev.agentspan.runtime.model;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 class AgentSSEEventTest {
 
@@ -21,7 +22,7 @@ class AgentSSEEventTest {
         AgentSSEEvent event = AgentSSEEvent.thinking("wf-1", "agent_llm");
 
         assertThat(event.getType()).isEqualTo("thinking");
-        assertThat(event.getWorkflowId()).isEqualTo("wf-1");
+        assertThat(event.getExecutionId()).isEqualTo("wf-1");
         assertThat(event.getContent()).isEqualTo("agent_llm");
         assertThat(event.getTimestamp()).isGreaterThan(0);
     }
@@ -105,7 +106,7 @@ class AgentSSEEventTest {
 
         var node = MAPPER.readTree(json);
         assertThat(node.get("type").asText()).isEqualTo("thinking");
-        assertThat(node.get("workflowId").asText()).isEqualTo("wf-1");
+        assertThat(node.get("executionId").asText()).isEqualTo("wf-1");
         assertThat(node.get("content").asText()).isEqualTo("llm_task");
         assertThat(node.get("id").asLong()).isEqualTo(5);
         // Null fields should be absent
@@ -137,7 +138,7 @@ class AgentSSEEventTest {
         AgentSSEEvent event = new AgentSSEEvent();
         event.setId(42);
         event.setType("custom");
-        event.setWorkflowId("wf-99");
+        event.setExecutionId("wf-99");
         event.setContent("msg");
         event.setToolName("tool");
         event.setArgs("argval");
@@ -150,7 +151,7 @@ class AgentSSEEventTest {
 
         assertThat(event.getId()).isEqualTo(42);
         assertThat(event.getType()).isEqualTo("custom");
-        assertThat(event.getWorkflowId()).isEqualTo("wf-99");
+        assertThat(event.getExecutionId()).isEqualTo("wf-99");
         assertThat(event.getContent()).isEqualTo("msg");
         assertThat(event.getToolName()).isEqualTo("tool");
         assertThat(event.getArgs()).isEqualTo("argval");

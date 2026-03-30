@@ -50,17 +50,25 @@ precise_agent = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    print("=== Creative Agent (temp=0.9) ===")
-    result = runtime.run(
-        creative_agent,
-        "Write a two-sentence story about a robot learning to paint.",
-    )
-    result.print_result()
 
-    print("\n=== Precise Agent (temp=0.1) ===")
-    result = runtime.run(
-        precise_agent,
-        "Review this Python code: `data = eval(user_input)`",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.openai.06_model_settings
+        runtime.deploy(creative_agent)
+        runtime.serve(creative_agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("=== Creative Agent (temp=0.9) ===")
+        # result = runtime.run(
+        # creative_agent,
+        # "Write a two-sentence story about a robot learning to paint.",
+        # )
+        # result.print_result()
+
+        # print("\n=== Precise Agent (temp=0.1) ===")
+        # result = runtime.run(
+        # precise_agent,
+        # "Review this Python code: `data = eval(user_input)`",
+        # )
+        # result.print_result()

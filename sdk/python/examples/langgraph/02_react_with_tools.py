@@ -59,10 +59,16 @@ graph = create_agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "What is the square root of 256? Also, how many words are in 'the quick brown fox'? "
-            "And what is today's date?",
-        )
-        print(f"Status: {result.status}")
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.02_react_with_tools
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "What is the square root of 256? Also, how many words are in 'the quick brown fox'? "
+        # "And what is today's date?",
+        # )
+        # print(f"Status: {result.status}")
+        # result.print_result()

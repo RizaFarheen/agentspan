@@ -55,9 +55,16 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        result = runtime.run(pipeline, "The history of the Internet")
-        print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.11_sequential_agent
+        runtime.deploy(pipeline)
+        runtime.serve(pipeline)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(pipeline, "The history of the Internet")
+        # print(f"Status: {result.status}")
+        # print(f"Output: {result.output}")
+
 
 
 if __name__ == "__main__":

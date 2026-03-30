@@ -5,6 +5,13 @@
 
 package dev.agentspan.runtime.controller;
 
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
 import dev.agentspan.runtime.model.AgentExecutionDetail;
 import dev.agentspan.runtime.model.AgentRun;
 import dev.agentspan.runtime.model.AgentSummary;
@@ -17,15 +24,8 @@ import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
 import dev.agentspan.runtime.service.AgentDagService;
 import dev.agentspan.runtime.service.AgentService;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import lombok.RequiredArgsConstructor;
-
-import java.util.List;
-import java.util.Map;
 
 @Component
 @RestController
@@ -36,16 +36,11 @@ public class AgentController {
     private final AgentService agentService;
     private final AgentDagService agentDagService;
 
-    @GetMapping
-    public String hello() {
-        return "Hello, Agent!";
-    }
-
     /**
-     * Compile an agent configuration into a Conductor workflow definition.
-     * Does not register or execute — useful for inspecting the compiled workflow.
+     * Compile an agent configuration into an execution plan.
+     * Does not register or execute — useful for inspecting the compiled definition.
      *
-     * <p>Accepts either a native {@code AgentConfig} (as before) or a framework-specific
+     * <p>Accepts either a native {@code AgentConfig} or a framework-specific
      * config via {@code StartRequest} with {@code framework} + {@code rawConfig} fields.</p>
      */
     @PostMapping("/compile")
@@ -54,9 +49,9 @@ public class AgentController {
     }
 
     /**
-     * Compile and register an agent workflow + task definitions without starting execution.
-     * This is a CI/CD operation — the workflow is registered on the server and can be
-     * triggered later via {@code /start} or by name through the Conductor API.
+     * Compile and register an agent definition without starting execution.
+     * This is a CI/CD operation — the agent is registered on the server and can be
+     * triggered later via {@code /start} or by name.
      */
     @PostMapping("/deploy")
     public StartResponse deployAgent(@RequestBody StartRequest request) {
@@ -64,8 +59,8 @@ public class AgentController {
     }
 
     /**
-     * Compile, register, and start an agent workflow execution.
-     * Returns the workflow ID and name for tracking.
+     * Compile, register, and start an agent execution.
+     * Returns the execution ID and agent name for tracking.
      */
     @PostMapping("/start")
     public StartResponse startAgent(@RequestBody StartRequest request) {
@@ -73,18 +68,18 @@ public class AgentController {
     }
 
     /**
-     * Open an SSE event stream for a running workflow.
+     * Open an SSE event stream for a running agent execution.
      * Events include: thinking, tool_call, tool_result, guardrail_pass/fail,
      * waiting (HITL), handoff, error, done.
      *
      * <p>Supports reconnection via {@code Last-Event-ID} header — missed
      * events are replayed from an in-memory buffer.</p>
      */
-    @GetMapping(value = "/stream/{workflowId}")
+    @GetMapping(value = "/stream/{executionId}")
     public SseEmitter streamAgent(
-            @PathVariable String workflowId,
+            @PathVariable String executionId,
             @RequestHeader(value = "Last-Event-ID", required = false) Long lastEventId) {
-        return agentService.openStream(workflowId, lastEventId);
+        return agentService.openStream(executionId, lastEventId);
     }
 
     /**
@@ -98,26 +93,22 @@ public class AgentController {
      *   <li>Message: {@code {"message": "..."}}</li>
      * </ul></p>
      */
-    @PostMapping("/{workflowId}/respond")
-    public void respondToAgent(
-            @PathVariable String workflowId,
-            @RequestBody Map<String, Object> output) {
-        agentService.respond(workflowId, output);
+    @PostMapping("/{executionId}/respond")
+    public void respondToAgent(@PathVariable String executionId, @RequestBody Map<String, Object> output) {
+        agentService.respond(executionId, output);
     }
 
     /**
      * Receive an SSE event pushed by a framework worker (LangGraph/LangChain).
-     * Always returns 200 — unknown workflowIds are silently dropped.
+     * Always returns 200 — unknown execution IDs are silently dropped.
      */
-    @PostMapping("/events/{workflowId}")
-    public void pushFrameworkEvent(
-            @PathVariable String workflowId,
-            @RequestBody Map<String, Object> event) {
-        agentService.pushFrameworkEvent(workflowId, event);
+    @PostMapping("/events/{executionId}")
+    public void pushFrameworkEvent(@PathVariable String executionId, @RequestBody Map<String, Object> event) {
+        agentService.pushFrameworkEvent(executionId, event);
     }
 
     /**
-     * List all registered agents (workflow defs with agent_sdk metadata).
+     * List all registered agents.
      */
     @GetMapping("/list")
     public List<AgentSummary> listAgents() {
@@ -140,16 +131,12 @@ public class AgentController {
     }
 
     @GetMapping("/{name}")
-    public Map<String, Object> getAgentDef(
-            @PathVariable String name,
-            @RequestParam(required = false) Integer version) {
+    public Map<String, Object> getAgentDef(@PathVariable String name, @RequestParam(required = false) Integer version) {
         return agentService.getAgentDef(name, version);
     }
 
     @DeleteMapping("/{name}")
-    public void deleteAgent(
-            @PathVariable String name,
-            @RequestParam(required = false) Integer version) {
+    public void deleteAgent(@PathVariable String name, @RequestParam(required = false) Integer version) {
         agentService.deleteAgent(name, version);
     }
 
@@ -161,50 +148,62 @@ public class AgentController {
         return agentService.getExecutionDetail(executionId);
     }
 
-    /**
-     * Get the current status of a workflow execution.
-     * Lightweight polling fallback when SSE is not available.
-     */
-    @GetMapping("/{workflowId}/status")
-    public Map<String, Object> getAgentStatus(@PathVariable String workflowId) {
-        return agentService.getStatus(workflowId);
+    /** Pause a running agent execution. */
+    @PutMapping("/{executionId}/pause")
+    public void pauseAgent(@PathVariable String executionId) {
+        agentService.pauseAgent(executionId);
+    }
+
+    /** Resume a paused agent execution. */
+    @PutMapping("/{executionId}/resume")
+    public void resumeAgent(@PathVariable String executionId) {
+        agentService.resumeAgent(executionId);
+    }
+
+    /** Cancel a running agent execution. */
+    @DeleteMapping("/{executionId}/cancel")
+    public void cancelAgent(@PathVariable String executionId, @RequestParam(required = false) String reason) {
+        agentService.cancelAgent(executionId, reason);
     }
 
     /**
-     * Get a workflow execution with its full task list.
+     * Get the current status of an agent execution.
+     * Lightweight polling fallback when SSE is not available.
+     */
+    @GetMapping("/{executionId}/status")
+    public Map<String, Object> getAgentStatus(@PathVariable String executionId) {
+        return agentService.getStatus(executionId);
+    }
+
+    /**
+     * Get an agent execution with its full task list.
      *
      * <p>Used by the SDK for token usage collection — returns task types,
      * output data (including token counts), and sub-workflow IDs for
      * recursive traversal into sub-agents.</p>
      */
-    @GetMapping("/execution/{id}")
-    public AgentRun getWorkflow(@PathVariable String id) {
-        return agentService.getWorkflow(id);
+    @GetMapping("/execution/{executionId}")
+    public AgentRun getExecution(@PathVariable String executionId) {
+        return agentService.getExecution(executionId);
     }
 
     /**
-     * Inject a display-only task into a running workflow's task list.
-     * Used by the SDK's DAG hook to record tool calls in the Conductor UI.
+     * Inject a display-only task into a running execution's task list.
+     * Used by the SDK's DAG hook to record tool calls in the UI.
      * Writes directly to ExecutionDAO — does not trigger decide().
      */
-    @PostMapping("/{workflowId}/tasks")
-    public InjectTaskResponse injectTask(
-            @PathVariable String workflowId,
-            @RequestBody InjectTaskRequest req) {
-        return agentDagService.injectTask(workflowId, req);
+    @PostMapping("/{executionId}/tasks")
+    public InjectTaskResponse injectTask(@PathVariable String executionId, @RequestBody InjectTaskRequest req) {
+        return agentDagService.injectTask(executionId, req);
     }
 
     /**
-     * Create a bare tracking workflow for sub-agent display.
-     * The workflow has no tasks in its definition; tasks are injected via injectTask.
+     * Create a bare tracking execution for sub-agent display.
+     * The execution has no tasks in its definition; tasks are injected via injectTask.
      * Stays RUNNING permanently — completion is a future enhancement.
-     *
-     * Note: Spring MVC resolves static segments before dynamic ones,
-     * so POST /api/agent/workflow does not conflict with GET /api/agent/{name}.
      */
-    @PostMapping("/workflow")
-    public CreateTrackingWorkflowResponse createTrackingWorkflow(
-            @RequestBody CreateTrackingWorkflowRequest req) {
+    @PostMapping("/execution")
+    public CreateTrackingWorkflowResponse createTrackingExecution(@RequestBody CreateTrackingWorkflowRequest req) {
         return agentDagService.createTrackingWorkflow(req);
     }
 }

@@ -72,9 +72,17 @@ coordinator = LlmAgent(
     sub_agents=[specialist_a, specialist_b, specialist_c],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        coordinator,
-        "Research the current state of renewable energy adoption worldwide.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.22_transfer_control
+        runtime.deploy(coordinator)
+        runtime.serve(coordinator)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # coordinator,
+        # "Research the current state of renewable energy adoption worldwide.",
+        # )
+        # result.print_result()

@@ -1,374 +1,259 @@
-# Agentspan JS SDK
+# @agentspan/sdk
 
-JavaScript SDK for building and running AI agents on [Conductor](https://github.com/conductor-oss/conductor). Define agents and tools in plain JavaScript (or TypeScript), run them durably on Conductor.
+[![npm](https://img.shields.io/npm/v/@agentspan/sdk)](https://www.npmjs.com/package/@agentspan/sdk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 
-- **JavaScript-first** — no build step required, CommonJS out of the box
-- **TypeScript support** — type definitions included; optional `@AgentTool` class decorator
-- **Conductor workers** — tool functions run as distributed Conductor tasks via [`@io-orkes/conductor-javascript`](https://github.com/conductor-oss/javascript-sdk)
-- **Same wire format** as the [Python SDK](../agentspan/sdk/python) — share agents across languages
+TypeScript SDK for building and running AI agents on [Agentspan](https://agentspan.dev). Define agents and tools in TypeScript, run them durably on the platform with crash recovery, distributed workers, and human-in-the-loop approval.
 
----
-
-## Installation
+## Quick Start
 
 ```bash
-npm install @agentspan/sdk
+npm install @agentspan/sdk zod
 ```
 
-Requires **Node 18+** (uses native `fetch`).
-
----
-
-## Quick start
-
-```js
-const { Agent, AgentRuntime, tool } = require('@agentspan/sdk')
+```typescript
+import { Agent, AgentRuntime, tool } from '@agentspan/sdk';
+import { z } from 'zod';
 
 const getWeather = tool(
-  async function getWeather({ city }) {
-    return { city, temperature_f: 72, condition: 'Sunny' }
-  },
+  async ({ city }: { city: string }) => ({ city, temp: 72, condition: 'Sunny' }),
   {
-    description: 'Get the current weather for a city.',
-    inputSchema: {
-      type: 'object',
-      properties: { city: { type: 'string' } },
-      required: ['city'],
-    },
-  }
-)
+    description: 'Get current weather for a city.',
+    inputSchema: z.object({ city: z.string() }),
+  },
+);
 
 const agent = new Agent({
   name: 'weather_agent',
   model: 'openai/gpt-4o',
   instructions: 'You are a helpful weather assistant.',
   tools: [getWeather],
-})
+});
 
-const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080' })
-const result = await runtime.run(agent, "What's the weather in SF?")
-result.printResult()
-await runtime.shutdown()
+const runtime = new AgentRuntime();
+const result = await runtime.run(agent, "What's the weather in SF?");
+result.printResult();
+await runtime.shutdown();
 ```
 
----
+## Already using Vercel AI SDK?
+
+One import change. Your code stays identical.
+
+```diff
+-import { generateText } from 'ai';
++import { generateText } from '@agentspan/sdk/vercel-ai';
+```
+
+That's it. `generateText` and `streamText` are intercepted, compiled to an agent workflow, and run on Agentspan. Tools, model, prompt, result shape -- all unchanged.
+
+When you need Agentspan-specific features (guardrails, termination, multi-agent handoff), switch to the Agent API. See [`examples/vercel-ai/README.md`](examples/vercel-ai/README.md) for the full before/after.
+
+## Already using another framework?
+
+Pass your existing agent objects directly to `runtime.run()`:
+
+<table>
+<tr><th>Framework</th><th>Integration</th></tr>
+<tr><td><b>OpenAI Agents</b></td><td>
+
+```typescript
+import { Agent } from '@openai/agents';
+import { AgentRuntime } from '@agentspan/sdk';
+
+const agent = new Agent({
+  name: 'helper', model: 'gpt-4o-mini',
+  instructions: 'You are helpful.',
+  tools: [getWeather],
+});
+// Agent format auto-detected
+const runtime = new AgentRuntime();
+await runtime.run(agent, 'Weather in SF?');
+```
+
+</td></tr>
+<tr><td><b>Google ADK</b></td><td>
+
+```typescript
+import { LlmAgent } from '@google/adk';
+import { AgentRuntime } from '@agentspan/sdk';
+
+const agent = new LlmAgent({
+  name: 'helper', model: 'gemini-2.5-flash',
+  instruction: 'You are helpful.',
+  tools: [getWeather],
+});
+// Agent format auto-detected
+const runtime = new AgentRuntime();
+await runtime.run(agent, 'Weather in Tokyo?');
+```
+
+</td></tr>
+<tr><td><b>LangGraph</b></td><td>
+
+```typescript
+import { createReactAgent }
+  from '@langchain/langgraph/prebuilt';
+import { ChatOpenAI } from '@langchain/openai';
+import { AgentRuntime } from '@agentspan/sdk';
+
+const graph = createReactAgent({
+  llm: new ChatOpenAI({ model: 'gpt-4o-mini' }),
+  tools: [searchTool],
+});
+// Add metadata for extraction
+(graph as any)._agentspan = {
+  model: 'openai/gpt-4o-mini',
+  tools: [searchTool],
+  framework: 'langgraph',
+};
+const runtime = new AgentRuntime();
+await runtime.run(graph, 'Search quantum');
+```
+
+</td></tr>
+</table>
+
+See per-framework READMEs for complete before/after guides:
+[Vercel AI](examples/vercel-ai/README.md) | [OpenAI](examples/openai/README.md) | [Google ADK](examples/adk/README.md) | [LangGraph](examples/langgraph/README.md) | [LangChain](examples/langchain/README.md)
+
+## Features
+
+### Streaming
+
+```typescript
+const stream = await runtime.stream(agent, prompt);
+
+for await (const event of stream) {
+  switch (event.type) {
+    case 'thinking':    console.log(event.content); break;
+    case 'tool_call':   console.log(event.toolName, event.args); break;
+    case 'tool_result': console.log(event.toolName, event.result); break;
+    case 'waiting':     await stream.approve(); break;
+    case 'done':        console.log(event.output); break;
+  }
+}
+```
+
+### Multi-Agent Strategies
+
+```typescript
+// Sequential pipeline
+const pipeline = researcher.pipe(writer).pipe(editor);
+
+// Parallel (scatter-gather)
+const panel = new Agent({ name: 'panel', agents: [analyst1, analyst2], strategy: 'parallel' });
+
+// Handoff (LLM decides which specialist to route to)
+const team = new Agent({ name: 'team', agents: [coder, reviewer], strategy: 'handoff' });
+
+// Also: router, round-robin, swarm, manual
+```
+
+### Guardrails
+
+```typescript
+import { guardrail, RegexGuardrail, LLMGuardrail } from '@agentspan/sdk';
+
+const piiBlocker = new RegexGuardrail({
+  name: 'pii_blocker',
+  patterns: ['\\b\\d{3}-\\d{2}-\\d{4}\\b'],
+  mode: 'block', onFail: 'raise',
+});
+
+const customCheck = guardrail(
+  async (content: string) => {
+    if (content.includes('secret')) return { passed: false, message: 'Sensitive content' };
+    return { passed: true };
+  },
+  { name: 'custom_check', position: 'output', onFail: 'retry' },
+);
+
+const agent = new Agent({ name: 'safe', guardrails: [piiBlocker, customCheck], ... });
+```
+
+### Human-in-the-Loop
+
+```typescript
+const handle = await runtime.start(agent, prompt);
+
+// Agent pauses when it hits a tool with approvalRequired: true
+const status = await handle.getStatus();
+if (status.isWaiting) {
+  await handle.approve();   // or handle.reject('reason')
+}
+
+const result = await handle.wait();
+```
+
+### Termination Conditions
+
+```typescript
+import { TextMention, MaxMessage } from '@agentspan/sdk';
+
+const agent = new Agent({
+  name: 'analyst',
+  termination: new TextMention('DONE').or(new MaxMessage(10)),
+  ...
+});
+```
+
+### Testing
+
+```typescript
+import { mockRun, expectResult } from '@agentspan/sdk/testing';
+
+const result = await mockRun(agent, 'Write an article', {
+  mockTools: { search: async () => ({ results: ['paper1'] }) },
+});
+
+expectResult(result)
+  .toBeCompleted()
+  .toContainOutput('article')
+  .toHaveUsedTool('search');
+```
 
 ## Configuration
 
-Set environment variables (or create a `.env` file — `dotenv` is auto-loaded in examples):
-
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:8080/api` | Conductor server URL |
-| `AGENTSPAN_AUTH_KEY` | — | Auth key (Orkes Cloud only) |
-| `AGENTSPAN_AUTH_SECRET` | — | Auth secret (Orkes Cloud only) |
-| `AGENTSPAN_WORKER_POLL_INTERVAL` | `100` | Worker poll interval (ms) |
-| `AGENTSPAN_LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARN` / `ERROR` |
-| `AGENT_LLM_MODEL` | — | Model in `provider/model` format, e.g. `openai/gpt-4o` |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Server API URL |
+| `AGENTSPAN_API_KEY` | -- | Bearer token |
+| `OPENAI_API_KEY` | -- | For OpenAI models |
 
-```bash
-cp .env.example .env
-# then edit .env
-```
-
----
-
-## API reference
-
-### `tool(fn, options)`
-
-Wraps a function as an agent tool. The function receives a single `input` object matching the `inputSchema` and should return a plain object (or a value that will be wrapped in `{ result }`).
-
-```js
-const myTool = tool(
-  async function myTool({ x, y }) {
-    return { sum: x + y }
-  },
-  {
-    name: 'my_tool',            // optional — defaults to function name
-    description: 'Add two numbers.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        x: { type: 'number' },
-        y: { type: 'number' },
-      },
-      required: ['x', 'y'],
-    },
-    approvalRequired: false,    // set true for human-in-the-loop
-    timeoutSeconds: 30,         // optional
-  }
-)
-```
-
-#### Server-side tools (no local worker)
-
-```js
-const { httpTool, mcpTool } = require('@agentspan/sdk')
-
-// HTTP tool — Conductor calls the endpoint directly
-const weatherApi = httpTool({
-  name: 'get_weather',
-  description: 'Fetch live weather data.',
-  url: 'https://api.weather.example.com/current',
-  method: 'GET',
-  inputSchema: {
-    type: 'object',
-    properties: { city: { type: 'string' } },
-    required: ['city'],
-  },
-})
-
-// MCP tool — routes through an MCP server
-const githubTools = mcpTool({
-  name: 'github_mcp',
-  description: 'GitHub tools via MCP.',
-  serverUrl: 'http://localhost:3001/mcp',
-})
-```
-
----
-
-### `new Agent(options)`
-
-```js
-const agent = new Agent({
-  name: 'my_agent',           // required — unique name, becomes the workflow name
-  model: 'openai/gpt-4o',     // 'provider/model' format
-  instructions: 'You are...', // system prompt (string or () => string)
-  tools: [myTool],            // tool() wrappers, httpTool/mcpTool defs, or toolsFrom() output
-  maxTurns: 25,               // max LLM iterations (default: 25)
-  temperature: 0,             // optional
-  maxTokens: 4096,            // optional
-})
-```
-
-#### Multi-agent
-
-```js
-const researcher = new Agent({ name: 'researcher', model: 'openai/gpt-4o', tools: [search] })
-const writer     = new Agent({ name: 'writer',     model: 'openai/gpt-4o' })
-
-// Handoff — LLM decides which sub-agent to call
-const coordinator = new Agent({
-  name: 'coordinator',
-  model: 'openai/gpt-4o',
-  agents: [researcher, writer],
-  strategy: 'handoff',
-})
-
-// Sequential pipeline — output of each step feeds the next
-const pipeline = new Agent({
-  name: 'pipeline',
-  agents: [researcher, writer],
-  strategy: 'sequential',
-})
-
-// Parallel — all sub-agents run concurrently
-const panel = new Agent({
-  name: 'panel',
-  agents: [researcher, writer],
-  strategy: 'parallel',
-})
-```
-
----
-
-### `new AgentRuntime(options)`
-
-```js
-const runtime = new AgentRuntime({
-  serverUrl: 'http://localhost:8080', // auto-appends /api if missing
-  authKey: '...',                     // optional
-  authSecret: '...',                  // optional
-  logLevel: 'INFO',
-})
-```
-
-#### `runtime.run(agent, prompt, [options])` → `AgentResult`
-
-Blocks until the workflow completes.
-
-```js
-const result = await runtime.run(agent, "What's the weather in SF?")
-
-console.log(result.output)        // { result: "The weather in SF is..." }
-console.log(result.status)        // 'COMPLETED'
-console.log(result.toolCalls)     // [{ name, args, result }, ...]
-console.log(result.isSuccess)     // true
-result.printResult()              // pretty-print to stdout
-```
-
-#### `runtime.start(agent, prompt, [options])` → `AgentHandle`
-
-Fire-and-forget — returns a handle immediately.
-
-```js
-const handle = await runtime.start(agent, 'Long running task...')
-
-console.log(handle.workflowId)
-
-// Poll status
-const status = await handle.getStatus()
-// { isComplete, isRunning, isWaiting, status, output, ... }
-
-// Block until done
-const result = await handle.wait()
-
-// Human-in-the-loop approval (when isWaiting === true)
-await handle.approve()
-await handle.reject('Too risky')
-```
-
-#### `runtime.stream(agent, prompt, [options])` → `AsyncIterable<AgentEvent>`
-
-Stream events as they happen.
-
-```js
-for await (const event of runtime.stream(agent, prompt)) {
-  switch (event.type) {
-    case 'thinking':
-      console.log('thinking:', event.content)
-      break
-    case 'tool_call':
-      console.log(`calling ${event.toolName}(`, event.args, ')')
-      break
-    case 'tool_result':
-      console.log(`${event.toolName} returned`, event.result)
-      break
-    case 'waiting':
-      // approval-required tool is paused — use handle.approve() / handle.reject()
-      break
-    case 'error':
-      console.error('error:', event.error)
-      break
-    case 'done':
-      console.log('output:', event.output)
-      break
-  }
-}
-```
-
-#### `runtime.plan(agent)` → workflow definition JSON
-
-Compile an agent to a Conductor workflow definition without running it.
-
-```js
-const workflowDef = await runtime.plan(agent)
-console.log(JSON.stringify(workflowDef, null, 2))
-```
-
-#### `runtime.shutdown()`
-
-Stop all workers cleanly.
-
-```js
-await runtime.shutdown()
-```
-
----
-
-## TypeScript — `@AgentTool` decorator
-
-For TypeScript projects, you can define tools as decorated class methods instead of using `tool()`. The decorator is a method decorator only (TypeScript/JavaScript limitation — standalone function decorators are not supported).
-
-```ts
-import { AgentTool, toolsFrom } from '@agentspan/sdk/decorators'
-const { Agent, AgentRuntime } = require('@agentspan/sdk')
-
-class WeatherTools {
-  @AgentTool({
-    description: 'Get the current weather for a city.',
-    inputSchema: {
-      type: 'object',
-      properties: { city: { type: 'string' } },
-      required: ['city'],
-    },
-  })
-  async getWeather({ city }: { city: string }) {
-    return { city, temperature_f: 58, condition: 'Foggy' }
-  }
-
-  @AgentTool({
-    description: 'Evaluate a math expression.',
-    inputSchema: {
-      type: 'object',
-      properties: { expression: { type: 'string' } },
-      required: ['expression'],
-    },
-  })
-  async calculate({ expression }: { expression: string }) {
-    return { expression, result: eval(expression) }
-  }
-}
-
-// toolsFrom() extracts all @AgentTool-decorated methods as tool() wrappers
-const agent = new Agent({
-  name: 'my_agent',
-  model: 'openai/gpt-4o',
-  tools: toolsFrom(new WeatherTools()),
-})
-```
-
-Build the decorator module before use:
-
-```bash
-npm run build:decorators
-```
-
-Or run directly with ts-node:
-
-```bash
-npx ts-node --project decorators/tsconfig.json examples/weather-decorators.ts
-```
-
-> **Note:** Requires `"experimentalDecorators": true` in your `tsconfig.json`.
-
----
+All config can also be passed to the `AgentRuntime` constructor.
 
 ## Examples
 
+157 examples covering every feature:
+
+| Directory | Count | Description |
+|-----------|-------|-------------|
+| [`examples/`](examples/) | 107 | Native Agentspan agents |
+| [`examples/vercel-ai/`](examples/vercel-ai/) | 10 | Vercel AI SDK integration |
+| [`examples/langgraph/`](examples/langgraph/) | 10 | LangGraph integration |
+| [`examples/langchain/`](examples/langchain/) | 10 | LangChain integration |
+| [`examples/openai/`](examples/openai/) | 10 | OpenAI Agents SDK integration |
+| [`examples/adk/`](examples/adk/) | 10 | Google ADK integration |
+
 ```bash
-# Plain JS weather example
-AGENTSPAN_SERVER_URL=http://localhost:8080 \
-AGENT_LLM_MODEL=openai/gpt-4o \
-node examples/weather.js
-
-# Custom prompt
-node examples/weather.js "What's the weather in Tokyo and London?"
-
-# Streaming events
-node examples/weather-stream.js "What's the weather in Miami?"
-
-# TypeScript @AgentTool decorator
-npx ts-node --project decorators/tsconfig.json examples/weather-decorators.ts
+npx tsx examples/01-basic-agent.ts
+npx tsx examples/vercel-ai/01-basic-agent.ts
+npx tsx examples/langgraph/02-react-with-tools.ts
 ```
 
----
+## Contributing
 
-## Project structure
+We welcome contributions! Please open an issue or PR on [GitHub](https://github.com/agentspan/agentspan).
 
+```bash
+git clone https://github.com/agentspan/agentspan.git
+cd agentspan/sdk/typescript
+npm install
+npm test        # unit tests (no server needed)
+npm run lint    # type-check
 ```
-agentspan-js/
-├── src/
-│   ├── index.js          # Public API
-│   ├── agent.js          # Agent class
-│   ├── tool.js           # tool(), httpTool(), mcpTool()
-│   ├── runtime.js        # AgentRuntime
-│   ├── config.js         # AgentConfig (env var loading)
-│   ├── result.js         # AgentResult, AgentHandle, AgentEvent
-│   ├── serializer.js     # Agent → AgentConfig JSON
-│   └── worker-manager.js # Conductor TaskManager wrapper
-├── decorators/
-│   ├── index.ts          # @AgentTool + toolsFrom() (TypeScript)
-│   └── tsconfig.json
-├── types/
-│   └── index.d.ts        # TypeScript type definitions
-├── examples/
-│   ├── weather.js             # Plain JS example
-│   ├── weather-stream.js      # Streaming events
-│   └── weather-decorators.ts  # TypeScript decorator example
-├── js-sdk-plan.md
-├── .env.example
-└── package.json
-```
+
+## License
+
+MIT

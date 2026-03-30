@@ -101,9 +101,17 @@ triage_agent = Agent(
     handoffs=[order_agent, refund_agent, sales_agent],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        triage_agent,
-        "I'd like a refund for order ORD-002, the product arrived damaged.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.openai.04_handoffs
+        runtime.deploy(triage_agent)
+        runtime.serve(triage_agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # triage_agent,
+        # "I'd like a refund for order ORD-002, the product arrived damaged.",
+        # )
+        # result.print_result()

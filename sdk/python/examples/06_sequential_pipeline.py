@@ -50,17 +50,26 @@ editor = Agent(
 
 pipeline = researcher >> writer >> editor
 
-with AgentRuntime() as runtime:
-    result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
-    result.print_result()
 
-# ── Option 2: Using strategy parameter (equivalent) ────────────────
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.06_sequential_pipeline
+        runtime.deploy(pipeline)
+        runtime.serve(pipeline)
 
-# pipeline = Agent(
-#     name="content_pipeline",
-#     model=settings.llm_model,
-#     agents=[researcher, writer, editor],
-#     strategy=Strategy.SEQUENTIAL,
-# )
-# with AgentRuntime() as runtime:
-#     result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
+        # result.print_result()
+
+        # # ── Option 2: Using strategy parameter (equivalent) ────────────────
+
+        # # pipeline = Agent(
+        # #     name="content_pipeline",
+        # #     model=settings.llm_model,
+        # #     agents=[researcher, writer, editor],
+        # #     strategy=Strategy.SEQUENTIAL,
+        # # )
+        # # with AgentRuntime() as runtime:
+        # #     result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
+

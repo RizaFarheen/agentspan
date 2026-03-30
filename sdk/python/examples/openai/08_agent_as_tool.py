@@ -92,11 +92,19 @@ manager = Agent(
     ],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        manager,
-        "Analyze this review: 'The new laptop is excellent! The display is amazing "
-        "and the battery life is wonderful. However, the keyboard feels terrible "
-        "and the trackpad is the worst I've used.'",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.openai.08_agent_as_tool
+        runtime.deploy(manager)
+        runtime.serve(manager)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # manager,
+        # "Analyze this review: 'The new laptop is excellent! The display is amazing "
+        # "and the battery life is wonderful. However, the keyboard feels terrible "
+        # "and the trackpad is the worst I've used.'",
+        # )
+        # result.print_result()

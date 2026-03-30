@@ -77,7 +77,7 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 
 // HealthCheck pings the server
 func (c *Client) HealthCheck() error {
-	resp, err := c.doRequest("GET", "/api/agent", nil)
+	resp, err := c.doRequest("GET", "/health", nil)
 	if err != nil {
 		return err
 	}
@@ -94,11 +94,11 @@ type StartRequest struct {
 
 // StartResponse from the runtime
 type StartResponse struct {
-	WorkflowID   string `json:"workflowId"`
-	WorkflowName string `json:"workflowName"`
+	ExecutionID string `json:"executionId"`
+	AgentName   string `json:"agentName"`
 }
 
-// Start compiles, registers, and starts an agent workflow
+// Start compiles, registers, and starts an agent execution
 func (c *Client) Start(req *StartRequest) (*StartResponse, error) {
 	resp, err := c.doRequest("POST", "/api/agent/start", req)
 	if err != nil {
@@ -112,7 +112,7 @@ func (c *Client) Start(req *StartRequest) (*StartResponse, error) {
 	return &result, nil
 }
 
-// Compile compiles an agent config to a workflow definition
+// Compile compiles an agent config to an execution plan
 func (c *Client) Compile(agentConfig map[string]interface{}) (map[string]interface{}, error) {
 	body := map[string]interface{}{"agentConfig": agentConfig}
 	resp, err := c.doRequest("POST", "/api/agent/compile", body)
@@ -153,7 +153,7 @@ func (c *Client) ListAgents() ([]AgentSummary, error) {
 	return result, nil
 }
 
-// GetAgent returns the workflow definition for a named agent
+// GetAgent returns the definition for a named agent
 func (c *Client) GetAgent(name string, version *int) (map[string]interface{}, error) {
 	path := "/api/agent/" + url.PathEscape(name)
 	if version != nil {
@@ -171,7 +171,7 @@ func (c *Client) GetAgent(name string, version *int) (map[string]interface{}, er
 	return result, nil
 }
 
-// DeleteAgent removes an agent workflow definition
+// DeleteAgent removes an agent definition
 func (c *Client) DeleteAgent(name string, version *int) error {
 	path := "/api/agent/" + url.PathEscape(name)
 	if version != nil {
@@ -193,7 +193,7 @@ type ExecutionSearchResult struct {
 
 // AgentExecutionSummary represents one execution in search results
 type AgentExecutionSummary struct {
-	WorkflowID    string `json:"workflowId"`
+	ExecutionID   string `json:"executionId"`
 	AgentName     string `json:"agentName"`
 	Version       int    `json:"version"`
 	Status        string `json:"status"`
@@ -235,7 +235,7 @@ func (c *Client) SearchExecutions(start, size int, agentName, status, freeText s
 
 // ExecutionDetail represents detailed execution status
 type ExecutionDetail struct {
-	WorkflowID  string                 `json:"workflowId"`
+	ExecutionID string                 `json:"executionId"`
 	AgentName   string                 `json:"agentName"`
 	Version     int                    `json:"version"`
 	Status      string                 `json:"status"`
@@ -266,9 +266,9 @@ func (c *Client) GetExecutionDetail(executionId string) (*ExecutionDetail, error
 	return &result, nil
 }
 
-// Status gets the workflow execution status (legacy endpoint)
-func (c *Client) Status(workflowID string) (map[string]interface{}, error) {
-	resp, err := c.doRequest("GET", "/api/agent/"+workflowID+"/status", nil)
+// Status gets the execution status
+func (c *Client) Status(executionID string) (map[string]interface{}, error) {
+	resp, err := c.doRequest("GET", "/api/agent/"+url.PathEscape(executionID)+"/status", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -281,13 +281,13 @@ func (c *Client) Status(workflowID string) (map[string]interface{}, error) {
 }
 
 // Respond sends a HITL response
-func (c *Client) Respond(workflowID string, approved bool, reason, message string) error {
+func (c *Client) Respond(executionID string, approved bool, reason, message string) error {
 	body := map[string]interface{}{
 		"approved": approved,
 		"reason":   reason,
 		"message":  message,
 	}
-	resp, err := c.doRequest("POST", "/api/agent/"+workflowID+"/respond", body)
+	resp, err := c.doRequest("POST", "/api/agent/"+url.PathEscape(executionID)+"/respond", body)
 	if err != nil {
 		return err
 	}
@@ -303,14 +303,14 @@ type SSEEvent struct {
 }
 
 // Stream opens an SSE connection and sends events to the channel
-func (c *Client) Stream(workflowID string, lastEventID string, events chan<- SSEEvent, done chan<- error) {
+func (c *Client) Stream(executionID string, lastEventID string, events chan<- SSEEvent, done chan<- error) {
 	go func() {
 		defer close(events)
 		defer close(done)
 
 		streamClient := &http.Client{Timeout: 0} // no timeout for SSE
 
-		req, err := http.NewRequest("GET", c.baseURL+"/api/agent/stream/"+workflowID, nil)
+		req, err := http.NewRequest("GET", c.baseURL+"/api/agent/stream/"+url.PathEscape(executionID), nil)
 		if err != nil {
 			done <- err
 			return
@@ -340,14 +340,19 @@ func (c *Client) Stream(workflowID string, lastEventID string, events chan<- SSE
 		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 
 		var current SSEEvent
+		var dataLines []string
 		for scanner.Scan() {
 			line := scanner.Text()
 
 			if line == "" {
-				// Empty line = end of event
+				// Empty line = end of event; join accumulated data lines per SSE spec
+				if len(dataLines) > 0 {
+					current.Data = strings.Join(dataLines, "\n")
+				}
 				if current.Data != "" || current.Event != "" {
 					events <- current
 					current = SSEEvent{}
+					dataLines = dataLines[:0]
 				}
 				continue
 			}
@@ -358,16 +363,25 @@ func (c *Client) Stream(workflowID string, lastEventID string, events chan<- SSE
 			}
 
 			if strings.HasPrefix(line, "id:") {
-				current.ID = strings.TrimSpace(strings.TrimPrefix(line, "id:"))
+				current.ID = sseFieldValue(line, "id:")
 			} else if strings.HasPrefix(line, "event:") {
-				current.Event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+				current.Event = sseFieldValue(line, "event:")
 			} else if strings.HasPrefix(line, "data:") {
-				current.Data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+				dataLines = append(dataLines, sseFieldValue(line, "data:"))
 			}
 		}
 
 		done <- scanner.Err()
 	}()
+}
+
+// sseFieldValue extracts the value from an SSE field line by stripping the
+// prefix and, per the WHATWG SSE spec, removing exactly one leading U+0020
+// space character (not all whitespace).
+func sseFieldValue(line, prefix string) string {
+	v := strings.TrimPrefix(line, prefix)
+	v = strings.TrimPrefix(v, " ") // strip at most one leading space per spec
+	return v
 }
 
 // ─── Auth API ─────────────────────────────────────────────────────────────────

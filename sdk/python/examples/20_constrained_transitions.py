@@ -64,9 +64,18 @@ code_review = Agent(
     },
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        code_review,
-        "Write a Python function to validate email addresses using regex.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.20_constrained_transitions
+        runtime.deploy(code_review)
+        runtime.serve(code_review)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     code_review,
+        #     "Write a Python function to validate email addresses using regex.",
+        # )
+        # result.print_result()
+

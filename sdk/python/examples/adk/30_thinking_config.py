@@ -51,10 +51,18 @@ agent = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "If a train travels 120 km in 2 hours, then speeds up by 50% for "
-        "the next 3 hours, what is the total distance traveled?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.30_thinking_config
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "If a train travels 120 km in 2 hours, then speeds up by 50% for "
+        # "the next 3 hours, what is the total distance traveled?",
+        # )
+        # result.print_result()

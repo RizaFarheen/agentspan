@@ -42,23 +42,10 @@ logger = logging.getLogger("agentspan.agents.runtime")
 
 
 def _default_task_def(name: str) -> Any:
-    """Create a TaskDef with standard retry policy for agent worker tasks."""
-    from conductor.client.http.models.task_def import TaskDef
+    """Create a TaskDef with standard retry policy for agent worker tasks.
 
-    td = TaskDef(name=name)
-    td.retry_count = 2
-    td.retry_logic = "LINEAR_BACKOFF"
-    td.retry_delay_seconds = 2
-    td.timeout_seconds = 120
-    td.response_timeout_seconds = 120
-    td.timeout_policy = "RETRY"
-    return td
-
-
-def _passthrough_task_def(name: str) -> Any:
-    """Create a TaskDef with extended timeout for framework passthrough workers.
-
-    LangGraph/LangChain graphs can run much longer than the 120s default.
+    Timeout is 0 (no timeout) — the agent configuration controls execution
+    duration, not the task definition.
     """
     from conductor.client.http.models.task_def import TaskDef
 
@@ -66,8 +53,26 @@ def _passthrough_task_def(name: str) -> Any:
     td.retry_count = 2
     td.retry_logic = "LINEAR_BACKOFF"
     td.retry_delay_seconds = 2
-    td.timeout_seconds = 600
-    td.response_timeout_seconds = 600
+    td.timeout_seconds = 0
+    td.response_timeout_seconds = 3600
+    td.timeout_policy = "RETRY"
+    return td
+
+
+def _passthrough_task_def(name: str) -> Any:
+    """Create a TaskDef for framework passthrough workers.
+
+    Timeout is 0 (no timeout) — the agent configuration controls execution
+    duration, not the task definition.
+    """
+    from conductor.client.http.models.task_def import TaskDef
+
+    td = TaskDef(name=name)
+    td.retry_count = 2
+    td.retry_logic = "LINEAR_BACKOFF"
+    td.retry_delay_seconds = 2
+    td.timeout_seconds = 0
+    td.response_timeout_seconds = 3600
     td.timeout_policy = "RETRY"
     return td
 
@@ -240,7 +245,7 @@ class AgentRuntime:
         if server_url is not None:
             overrides["server_url"] = server_url
         if api_key is not None:
-            overrides["auth_key"] = api_key
+            overrides["api_key"] = api_key
         if api_secret is not None:
             overrides["auth_secret"] = api_secret
         self._config = replace(base, **overrides) if overrides else base
@@ -307,6 +312,7 @@ class AgentRuntime:
         # Async HTTP client for agent API endpoints
         self._http = AgentHttpClient(
             server_url=self._config.server_url,
+            api_key=self._config.api_key or "",
             auth_key=self._config.auth_key or "",
             auth_secret=self._config.auth_secret or "",
         )
@@ -346,11 +352,41 @@ class AgentRuntime:
         headers: Dict[str, str] = {}
         if content_type:
             headers["Content-Type"] = content_type
-        if self._config.auth_key:
+        if self._config.api_key:
+            headers["Authorization"] = f"Bearer {self._config.api_key}"
+        elif self._config.auth_key:
             headers["X-Auth-Key"] = self._config.auth_key
-        if self._config.auth_secret:
-            headers["X-Auth-Secret"] = self._config.auth_secret
+            if self._config.auth_secret:
+                headers["X-Auth-Secret"] = self._config.auth_secret
         return headers
+
+    def _register_workflow_credentials(
+        self, workflow_id: str, credentials: Optional[List[str]]
+    ) -> None:
+        """Register request-scoped credential names for extracted framework tools."""
+        if not credentials:
+            return
+        from agentspan.agents.runtime._dispatch import (
+            _workflow_credentials,
+            _workflow_credentials_lock,
+        )
+
+        with _workflow_credentials_lock:
+            _workflow_credentials[workflow_id] = list(credentials)
+
+    def _clear_workflow_credentials(
+        self, workflow_id: str, credentials: Optional[List[str]]
+    ) -> None:
+        """Clear request-scoped credential names after workflow completion."""
+        if not credentials:
+            return
+        from agentspan.agents.runtime._dispatch import (
+            _workflow_credentials,
+            _workflow_credentials_lock,
+        )
+
+        with _workflow_credentials_lock:
+            _workflow_credentials.pop(workflow_id, None)
 
     def _start_via_server(
         self,
@@ -398,9 +434,17 @@ class AgentRuntime:
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
         data = resp.json()
-        workflow_id = data["workflowId"]
-        logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
-        return workflow_id
+        workflow_id = data.get("executionId", "")
+        required_workers: Optional[set] = None
+        if "requiredWorkers" in data:
+            required_workers = set(data["requiredWorkers"])
+            logger.info(
+                "Started agent '%s' via server (workflow_id=%s, requiredWorkers=%s)",
+                agent.name, workflow_id, sorted(required_workers),
+            )
+        else:
+            logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
+        return workflow_id, required_workers
 
     async def _start_via_server_async(
         self,
@@ -411,6 +455,7 @@ class AgentRuntime:
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
     ) -> str:
         """Async version of :meth:`_start_via_server`."""
         from agentspan.agents.config_serializer import AgentConfigSerializer
@@ -428,11 +473,21 @@ class AgentRuntime:
             payload["idempotencyKey"] = idempotency_key
         if timeout is not None:
             payload["timeoutSeconds"] = timeout
+        if credentials:
+            payload["credentials"] = credentials
 
         data = await self._http.start_agent(payload)
-        workflow_id = data["workflowId"]
-        logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
-        return workflow_id
+        workflow_id = data.get("executionId", "")
+        required_workers: Optional[set] = None
+        if "requiredWorkers" in data:
+            required_workers = set(data["requiredWorkers"])
+            logger.info(
+                "Started agent '%s' via server (workflow_id=%s, requiredWorkers=%s)",
+                agent.name, workflow_id, sorted(required_workers),
+            )
+        else:
+            logger.info("Started agent '%s' via server (workflow_id=%s)", agent.name, workflow_id)
+        return workflow_id, required_workers
 
     async def _start_framework_via_server_async(
         self,
@@ -443,6 +498,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        credentials: Optional[List[str]] = None,
     ) -> str:
         """Async version of :meth:`_start_framework_via_server`."""
         payload: Dict[str, Any] = {
@@ -454,9 +510,11 @@ class AgentRuntime:
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
+        if credentials:
+            payload["credentials"] = credentials
 
         data = await self._http.start_agent(payload)
-        workflow_id = data["workflowId"]
+        workflow_id = data.get("executionId", "")
         logger.info(
             "Started %s framework agent via server (workflow_id=%s)",
             framework,
@@ -652,12 +710,19 @@ class AgentRuntime:
             worker_names = self._collect_worker_names(agent)
             self._registered_tool_names.update(worker_names)
 
-    def _prepare_workers(self, agent: Agent) -> None:
+    def _prepare_workers(
+        self, agent: Agent, *, required_workers: Optional[set] = None
+    ) -> None:
         """Register and start workers without compiling.
 
         Used when starting via the server API (``/api/agent/start``)
         which handles compilation server-side.  We still need local
         workers for tool execution, custom guardrails, etc.
+
+        When *required_workers* is provided (from the server's
+        ``requiredWorkers`` response), only system workers whose task
+        names appear in the set are registered.  User-defined tool
+        workers are always registered.
         """
         # Auto-register integrations if enabled
         if self._config.auto_register_integrations:
@@ -666,13 +731,18 @@ class AgentRuntime:
         # Associate prompt templates with the agent's model (if any)
         self._associate_templates_with_models(agent)
 
+        if required_workers is not None:
+            logger.info("Server expects workers: %s", sorted(required_workers))
+
         # Register worker functions locally
-        self._register_workers(agent)
+        self._register_workers(agent, required_workers=required_workers)
 
         # Start worker polling if needed
         if self._config.auto_start_workers and self._has_worker_tools(agent):
             with self._worker_start_lock:
-                worker_names = self._collect_worker_names(agent)
+                worker_names = self._collect_worker_names(
+                    agent, required_workers=required_workers
+                )
                 new_workers = worker_names - self._registered_tool_names
                 if new_workers:
                     logger.info(
@@ -690,28 +760,37 @@ class AgentRuntime:
                     # window caused by a full stop/restart cycle.
                     self._worker_manager.start()
 
-    def _collect_worker_names(self, agent: Agent) -> set:
+    def _collect_worker_names(
+        self, agent: Agent, *, required_workers: Optional[set] = None
+    ) -> set:
         """Collect all worker task names from an agent tree.
 
-        Includes tools, custom guardrails, stop_when, termination,
-        check_transfer, router, handoff, and manual selection workers.
-        Also recurses into agent_tool nested agents.
+        When *required_workers* is provided (from the server's
+        ``requiredWorkers`` response), the server-provided set is used
+        as the authoritative list of system workers.  User-defined tool
+        names are still collected from the agent tree and merged in.
+
+        When *required_workers* is ``None`` (older server / fallback),
+        the full detection logic runs as before.
         """
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.tool import get_tool_def
 
-        names: set = set()
-
-        # Tools (and tool-level guardrails)
+        # Always collect user-defined tool names from the agent tree
+        tool_names: set = set()
         for t in agent.tools:
             try:
                 td = get_tool_def(t)
                 if td.tool_type in ("worker", "cli"):
-                    names.add(td.name)
+                    tool_names.add(td.name)
                 elif td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                     nested_agent = td.config["agent"]
                     if not getattr(nested_agent, "external", False):
-                        names.update(self._collect_worker_names(nested_agent))
+                        tool_names.update(
+                            self._collect_worker_names(
+                                nested_agent, required_workers=required_workers
+                            )
+                        )
                 # Tool-level guardrails
                 for g in td.guardrails:
                     if (
@@ -719,9 +798,26 @@ class AgentRuntime:
                         and not isinstance(g, (RegexGuardrail, LLMGuardrail))
                         and g.func is not None
                     ):
-                        names.add(g.name)
+                        tool_names.add(g.name)
             except TypeError:
                 continue
+
+        # Recurse into sub-agents for their tool names
+        for sub in agent.agents:
+            if getattr(sub, "is_claude_code", False):
+                tool_names.add(sub.name)
+            elif not getattr(sub, "external", False):
+                tool_names.update(
+                    self._collect_worker_names(sub, required_workers=required_workers)
+                )
+
+        # If the server told us which system workers are needed, use that
+        # as the authoritative list and merge in user-defined tool names.
+        if required_workers is not None:
+            return tool_names | required_workers
+
+        # Fallback: detect system workers from the agent tree
+        names: set = set(tool_names)
 
         # Custom guardrails (not Regex/LLM/external)
         custom_guardrails = [
@@ -763,16 +859,23 @@ class AgentRuntime:
         if agent.handoffs:
             names.add(f"{agent.name}_handoff_check")
 
+        # Swarm transfer workers — prefixed with SOURCE agent name
+        if agent.strategy == "swarm" and agent.agents:
+            all_names = [agent.name] + [sub.name for sub in agent.agents]
+            for n in all_names:
+                for peer in all_names:
+                    if peer != n:
+                        names.add(f"{n}_transfer_to_{peer}")
+
         # Manual selection
         if agent.strategy == "manual" and agent.agents:
             names.add(f"{agent.name}_process_selection")
 
-        # Recurse into sub-agents
-        for sub in agent.agents:
-            names.update(self._collect_worker_names(sub))
         return names
 
-    def _register_workers(self, agent: Agent) -> None:
+    def _register_workers(
+        self, agent: Agent, *, required_workers: Optional[set] = None
+    ) -> None:
         """Register all workers needed for SDK-side execution.
 
         With server-side compilation, the workflow JSON comes from the
@@ -780,11 +883,24 @@ class AgentRuntime:
         registered locally for polling.  This covers tools, custom
         guardrails, stop_when, termination, check_transfer, router,
         handoff, and manual selection workers.
+
+        When *required_workers* is provided (from the server's
+        ``requiredWorkers`` response), system workers are only registered
+        if their task name appears in the set.  User-defined tool workers
+        (from ``@tool``) are always registered regardless.  When
+        *required_workers* is ``None`` (older server or fallback), all
+        workers are registered unconditionally (previous behavior).
         """
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.runtime.tool_registry import ToolRegistry
 
-        # 1. Tools (and tool-level guardrails)
+        def _server_needs(task_name: str) -> bool:
+            """Return True if the server expects this system worker."""
+            if required_workers is None:
+                return True  # fallback: register everything
+            return task_name in required_workers
+
+        # 1. Tools (and tool-level guardrails) — always registered
         if agent.tools:
             tc = ToolRegistry()
             tc.register_tool_workers(agent.tools, agent.name)
@@ -796,7 +912,7 @@ class AgentRuntime:
                 if td.tool_type == "agent_tool" and td.config and "agent" in td.config:
                     nested_agent = td.config["agent"]
                     if not getattr(nested_agent, "external", False):
-                        self._register_workers(nested_agent)
+                        self._register_workers(nested_agent, required_workers=required_workers)
                 # Register tool-level guardrail workers
                 tool_guardrails = [
                     g
@@ -806,7 +922,8 @@ class AgentRuntime:
                     and g.func is not None
                 ]
                 for g in tool_guardrails:
-                    self._register_single_guardrail_worker(g)
+                    if _server_needs(g.name):
+                        self._register_single_guardrail_worker(g)
 
         # 2. Custom guardrails (not Regex/LLM/external)
         custom_guardrails = [
@@ -817,11 +934,17 @@ class AgentRuntime:
             and g.func is not None
         ]
         if custom_guardrails:
-            self._register_guardrail_worker(agent.name, custom_guardrails)
+            # Check if any guardrail worker is needed by the server
+            needed_guardrails = [g for g in custom_guardrails if _server_needs(g.name)]
+            combined_name = f"{agent.name}_output_guardrail"
+            if needed_guardrails or _server_needs(combined_name):
+                self._register_guardrail_worker(agent.name, custom_guardrails)
 
         # 3. stop_when
         if agent.stop_when and callable(agent.stop_when):
-            self._register_stop_when_worker(agent.name, agent.stop_when)
+            task_name = f"{agent.name}_stop_when"
+            if _server_needs(task_name):
+                self._register_stop_when_worker(agent.name, agent.stop_when)
 
         # 3b. Callbacks (legacy + CallbackHandler chaining)
         from agentspan.agents.callback import (
@@ -840,19 +963,27 @@ class AgentRuntime:
             legacy_fn = getattr(agent, legacy_attr, None) if legacy_attr else None
             chained = _chain_callbacks_for_position(position, handlers, legacy_fn)
             if chained is not None:
-                self._register_callback_worker(agent.name, position, chained)
+                task_name = f"{agent.name}_{position}"
+                if _server_needs(task_name):
+                    self._register_callback_worker(agent.name, position, chained)
 
         # 3c. Callable gate (sequential pipeline)
         if getattr(agent, "gate", None) is not None and callable(agent.gate):
-            self._register_gate_worker(agent.name, agent.gate)
+            task_name = f"{agent.name}_gate"
+            if _server_needs(task_name):
+                self._register_gate_worker(agent.name, agent.gate)
 
         # 4. termination
         if agent.termination:
-            self._register_termination_worker(agent.name, agent.termination)
+            task_name = f"{agent.name}_termination"
+            if _server_needs(task_name):
+                self._register_termination_worker(agent.name, agent.termination)
 
         # 5. Check transfer (agent has tools + sub-agents → hybrid handoff)
         if agent.tools and agent.agents:
-            self._register_check_transfer_worker(agent.name)
+            task_name = f"{agent.name}_check_transfer"
+            if _server_needs(task_name):
+                self._register_check_transfer_worker(agent.name)
 
         # 6. Function-based router
         if (
@@ -861,27 +992,70 @@ class AgentRuntime:
             and callable(agent.router)
             and not hasattr(agent.router, "model")
         ):
-            self._register_router_worker(agent)
+            task_name = f"{agent.name}_router_fn"
+            if _server_needs(task_name):
+                self._register_router_worker(agent)
 
         # 7. Handoff check (swarm with handoff conditions)
         if agent.handoffs:
-            self._register_handoff_worker(agent)
+            task_name = f"{agent.name}_handoff_check"
+            if _server_needs(task_name):
+                self._register_handoff_worker(agent)
 
         # 7b. Swarm transfer tools and check_transfer workers
         if agent.strategy == "swarm" and agent.agents:
-            self._register_swarm_transfer_workers(agent)
-            self._register_check_transfer_worker(agent.name)  # parent
+            # Register transfer workers if any of them are needed
+            if required_workers is None or any(
+                "_transfer_to_" in w for w in required_workers
+            ):
+                self._register_swarm_transfer_workers(agent)
+            if _server_needs(f"{agent.name}_check_transfer"):
+                self._register_check_transfer_worker(agent.name)  # parent
             for sub in agent.agents:
-                self._register_check_transfer_worker(sub.name)
+                if _server_needs(f"{sub.name}_check_transfer"):
+                    self._register_check_transfer_worker(sub.name)
 
         # 8. Manual selection
         if agent.strategy == "manual" and agent.agents:
-            self._register_manual_selection_worker(agent)
+            task_name = f"{agent.name}_process_selection"
+            if _server_needs(task_name):
+                self._register_manual_selection_worker(agent)
 
         # Recurse into sub-agents
         for sub in agent.agents:
-            if not sub.external:
-                self._register_workers(sub)
+            if getattr(sub, "is_claude_code", False):
+                if _server_needs(sub.name):
+                    # Register passthrough worker for claude-code sub-agent
+                    from agentspan.agents.frameworks.claude_agent_sdk import (
+                        agent_to_claude_code_options,
+                        make_claude_agent_sdk_worker,
+                    )
+                    from agentspan.agents.frameworks.serializer import WorkerInfo
+
+                    cc_options = agent_to_claude_code_options(sub)
+                    worker_func = make_claude_agent_sdk_worker(
+                        cc_options,
+                        sub.name,
+                        self._config.server_url,
+                        self._config.auth_key or "",
+                        self._config.auth_secret or "",
+                    )
+                    worker = WorkerInfo(
+                        name=sub.name,
+                        description=f"Claude Agent SDK passthrough worker for {sub.name}",
+                        input_schema={
+                            "type": "object",
+                            "properties": {
+                                "prompt": {"type": "string"},
+                                "session_id": {"type": "string"},
+                            },
+                        },
+                        func=worker_func,
+                        _pre_wrapped=True,
+                    )
+                    self._register_passthrough_worker(worker)
+            elif not sub.external:
+                self._register_workers(sub, required_workers=required_workers)
 
     # ── Worker registration helpers ────────────────────────────────
 
@@ -1167,8 +1341,8 @@ class AgentRuntime:
         async def check_transfer_worker(tool_calls: object = None, _unused: str = "") -> object:
             for tc in tool_calls or []:
                 name = tc.get("name", "")
-                if name.startswith("transfer_to_"):
-                    return {"is_transfer": True, "transfer_to": name[len("transfer_to_") :]}
+                if "_transfer_to_" in name:
+                    return {"is_transfer": True, "transfer_to": name.split("_transfer_to_", 1)[1]}
             return {"is_transfer": False, "transfer_to": ""}
 
         check_transfer_worker.__annotations__ = {
@@ -1328,7 +1502,9 @@ class AgentRuntime:
             for peer_name in all_names:
                 if peer_name == name:
                     continue
-                tool_name = f"transfer_to_{peer_name}"
+                # Prefix with the SOURCE agent name (the one calling transfer),
+                # matching the server compiler which uses self.getName()
+                tool_name = f"{name}_transfer_to_{peer_name}"
                 if tool_name in registered:
                     continue
                 registered.add(tool_name)
@@ -1342,7 +1518,7 @@ class AgentRuntime:
 
                         async def transfer_worker() -> str:
                             return (
-                                f"ERROR: transfer_to_{target} is not available. "
+                                f"ERROR: {tn} is not available. "
                                 f"Use a different transfer tool, or if you are "
                                 f"done, just provide your final response without "
                                 f"calling any transfer tool."
@@ -1623,6 +1799,9 @@ class AgentRuntime:
         ``LLMGuardrail`` (LlmChatComplete), and external guardrails
         (SimpleTask) do not need workers.
         """
+        # Claude-code agents always need a passthrough worker
+        if getattr(agent, "is_claude_code", False):
+            return True
         from agentspan.agents.guardrail import LLMGuardrail, RegexGuardrail
         from agentspan.agents.tool import get_tool_def
 
@@ -1773,7 +1952,8 @@ class AgentRuntime:
             resp.raise_for_status()
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
-        return resp.json()["workflowName"]
+        deploy_data = resp.json()
+        return deploy_data.get("agentName", "")
 
     async def _deploy_via_server_async(self, agent: Any, *, framework: Optional[str] = None) -> str:
         """Async version of :meth:`_deploy_via_server`."""
@@ -1792,7 +1972,7 @@ class AgentRuntime:
             payload = {"agentConfig": serializer.serialize(agent)}
 
         data = await self._http.deploy_agent(payload)
-        return data["workflowName"]
+        return data.get("agentName", "")
 
     # ── Serve (runtime worker service) ─────────────────────────────
 
@@ -1981,6 +2161,7 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
                 on_event=on_event,
                 timeout=timeout,
+                credentials=credentials,
                 **kwargs,
             )
 
@@ -2004,9 +2185,6 @@ class AgentRuntime:
             if prior_messages:
                 agent = self._inject_session_memory(agent, prior_messages)
 
-        # Register workers locally, then start via server
-        self._prepare_workers(agent)
-
         resolved_prompt = self._resolve_prompt(prompt)
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
 
@@ -2014,7 +2192,10 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s'", agent.name)
 
-        workflow_id = self._start_via_server(
+        # Start via server first to get requiredWorkers, then register
+        # locally.  Conductor queues tasks so workers can start polling
+        # immediately after registration without missing work.
+        workflow_id, required_workers = self._start_via_server(
             agent,
             resolved_prompt,
             media=media,
@@ -2024,14 +2205,9 @@ class AgentRuntime:
             credentials=credentials,
         )
 
-        # Register workflow-level credentials for framework-extracted tools
-        if credentials:
-            from agentspan.agents.runtime._dispatch import (
-                _workflow_credentials,
-                _workflow_credentials_lock,
-            )
-            with _workflow_credentials_lock:
-                _workflow_credentials[workflow_id] = list(credentials)
+        self._prepare_workers(agent, required_workers=required_workers)
+
+        self._register_workflow_credentials(workflow_id, credentials)
 
         # Poll until complete
         effective_timeout = timeout or (
@@ -2040,10 +2216,7 @@ class AgentRuntime:
         try:
             status = self._poll_status_until_complete(workflow_id, timeout=effective_timeout)
         finally:
-            # Clean up workflow credentials
-            if credentials:
-                with _workflow_credentials_lock:
-                    _workflow_credentials.pop(workflow_id, None)
+            self._clear_workflow_credentials(workflow_id, credentials)
 
         output = status.output
         raw_status = status.status
@@ -2309,6 +2482,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Run a foreign-framework agent via server-side normalization."""
@@ -2346,43 +2520,48 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
+            credentials=credentials,
         )
+        self._register_workflow_credentials(workflow_id, credentials)
 
-        if on_event is not None:
-            return self._run_framework_with_events(
-                workflow_id,
-                correlation_id,
-                on_event,
-                timeout=timeout,
+        try:
+            if on_event is not None:
+                return self._run_framework_with_events(
+                    workflow_id,
+                    correlation_id,
+                    on_event,
+                    timeout=timeout,
+                )
+
+            # Poll until complete
+            status = self._poll_status_until_complete(workflow_id, timeout=timeout)
+
+            output = status.output
+            raw_status = status.status
+
+            if raw_status in ("FAILED", "TERMINATED"):
+                logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
+                has_output = output and not (
+                    isinstance(output, dict) and all(v is None for v in output.values())
+                )
+                if not has_output and status.reason:
+                    output = status.reason
+
+            output = self._normalize_output(output, raw_status, status.reason)
+            logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
+            token_usage = self._extract_token_usage(workflow_id)
+            return AgentResult(
+                output=output,
+                workflow_id=workflow_id,
+                correlation_id=correlation_id,
+                status=raw_status,
+                finish_reason=self._derive_finish_reason(raw_status, status.output),
+                error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
+                token_usage=token_usage,
+                sub_results=self._extract_sub_results(output),
             )
-
-        # Poll until complete
-        status = self._poll_status_until_complete(workflow_id, timeout=timeout)
-
-        output = status.output
-        raw_status = status.status
-
-        if raw_status in ("FAILED", "TERMINATED"):
-            logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
-            has_output = output and not (
-                isinstance(output, dict) and all(v is None for v in output.values())
-            )
-            if not has_output and status.reason:
-                output = status.reason
-
-        output = self._normalize_output(output, raw_status, status.reason)
-        logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
-        token_usage = self._extract_token_usage(workflow_id)
-        return AgentResult(
-            output=output,
-            workflow_id=workflow_id,
-            correlation_id=correlation_id,
-            status=raw_status,
-            finish_reason=self._derive_finish_reason(raw_status, status.output),
-            error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
-            token_usage=token_usage,
-            sub_results=self._extract_sub_results(output),
-        )
+        finally:
+            self._clear_workflow_credentials(workflow_id, credentials)
 
     def _start_framework(
         self,
@@ -2431,6 +2610,7 @@ class AgentRuntime:
         media: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
+        credentials: Optional[List[str]] = None,
     ) -> str:
         """POST to /api/agent/start with framework + rawConfig."""
         import requests as req_lib
@@ -2444,6 +2624,8 @@ class AgentRuntime:
         }
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
+        if credentials:
+            payload["credentials"] = credentials
 
         url = self._agent_api_url("/start")
         resp = req_lib.post(url, json=payload, headers=self._agent_api_headers(), timeout=30)
@@ -2452,7 +2634,7 @@ class AgentRuntime:
         except req_lib.exceptions.HTTPError as exc:
             _raise_api_error(exc, url=url)
         data = resp.json()
-        workflow_id = data["workflowId"]
+        workflow_id = data.get("executionId", "")
         logger.info(
             "Started %s framework agent via server (workflow_id=%s)",
             framework,
@@ -2470,6 +2652,10 @@ class AgentRuntime:
         from agentspan.agents.runtime._dispatch import make_tool_worker
 
         for w in workers:
+            try:
+                setattr(w.func, "_agentspan_framework_callable", True)
+            except Exception:
+                pass
             wrapper = make_tool_worker(w.func, w.name)
             worker_task(
                 task_definition_name=w.name,
@@ -2580,9 +2766,7 @@ class AgentRuntime:
                 wrapped = make_llm_finish_worker(w.func, w.name, llm_var_name)
             elif w.name in router_refs:
                 is_dynamic = extra.get("is_dynamic_fanout", False)
-                wrapped = make_router_worker(
-                    w.func, w.name, is_dynamic_fanout=is_dynamic
-                )
+                wrapped = make_router_worker(w.func, w.name, is_dynamic_fanout=is_dynamic)
             else:
                 wrapped = make_node_worker(w.func, w.name)
 
@@ -2625,6 +2809,21 @@ class AgentRuntime:
             from agentspan.agents.frameworks.langchain import make_langchain_worker
 
             return make_langchain_worker(agent_obj, name, server_url, auth_key, auth_secret)
+        elif framework == "claude_agent_sdk":
+            from agentspan.agents.frameworks.claude_agent_sdk import (
+                agent_to_claude_code_options,
+                make_claude_agent_sdk_worker,
+            )
+
+            from agentspan.agents.agent import Agent as AgentClass
+
+            # CRITICAL: convert Agent → ClaudeCodeOptions before passing to worker
+            if isinstance(agent_obj, AgentClass):
+                options = agent_to_claude_code_options(agent_obj)
+            else:
+                options = agent_obj  # Already ClaudeCodeOptions
+
+            return make_claude_agent_sdk_worker(options, name, server_url, auth_key, auth_secret)
         raise ValueError(f"Unknown passthrough framework: {framework}")
 
     def _run_framework_with_events(
@@ -2838,7 +3037,7 @@ class AgentRuntime:
     def _stream_sse(self, workflow_id: str) -> Iterator[AgentEvent]:
         """Consume SSE event stream from the server.
 
-        Connects to ``GET /api/agent/stream/{workflowId}`` and yields
+        Connects to ``GET /api/agent/stream/{executionId}`` and yields
         :class:`AgentEvent` objects as they arrive.  Auto-reconnects with
         ``Last-Event-ID`` if the connection drops.
 
@@ -2983,7 +3182,7 @@ class AgentRuntime:
             result=data.get("result"),
             target=data.get("target"),
             output=data.get("output"),
-            workflow_id=data.get("workflowId", workflow_id),
+            workflow_id=data.get("executionId", workflow_id),
             guardrail_name=data.get("guardrailName"),
         )
 
@@ -3044,9 +3243,6 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
             )
 
-        # Register workers locally (tools, guardrails, etc.)
-        self._prepare_workers(agent)
-
         resolved_prompt = self._resolve_prompt(prompt)
 
         # Run input guardrails before workflow submission
@@ -3054,9 +3250,9 @@ class AgentRuntime:
 
         correlation_id = str(uuid.uuid4())
 
-        # Start via the agent runtime server API
+        # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
-        workflow_id = self._start_via_server(
+        workflow_id, required_workers = self._start_via_server(
             agent,
             resolved_prompt,
             media=media,
@@ -3064,6 +3260,8 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
         )
+
+        self._prepare_workers(agent, required_workers=required_workers)
 
         return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
 
@@ -3336,6 +3534,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Execute an agent asynchronously (async-first implementation).
@@ -3385,6 +3584,7 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
                 on_event=on_event,
                 timeout=timeout,
+                credentials=credentials,
                 **kwargs,
             )
 
@@ -3408,9 +3608,6 @@ class AgentRuntime:
             if prior_messages:
                 agent = self._inject_session_memory(agent, prior_messages)
 
-        # Register workers locally (sync), then start via server (async)
-        self._prepare_workers(agent)
-
         resolved_prompt = self._resolve_prompt(prompt)
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
 
@@ -3418,21 +3615,29 @@ class AgentRuntime:
 
         logger.info("Executing agent '%s' (async)", agent.name)
 
-        workflow_id = await self._start_via_server_async(
+        # Start via server first to get requiredWorkers, then register locally
+        workflow_id, required_workers = await self._start_via_server_async(
             agent,
             resolved_prompt,
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
             timeout=timeout,
+            credentials=credentials,
         )
+
+        self._prepare_workers(agent, required_workers=required_workers)
+        self._register_workflow_credentials(workflow_id, credentials)
 
         effective_timeout = timeout or (
             agent.timeout_seconds if agent.timeout_seconds > 0 else None
         )
-        status = await self._poll_status_until_complete_async(
-            workflow_id, timeout=effective_timeout
-        )
+        try:
+            status = await self._poll_status_until_complete_async(
+                workflow_id, timeout=effective_timeout
+            )
+        finally:
+            self._clear_workflow_credentials(workflow_id, credentials)
 
         output = status.output
         raw_status = status.status
@@ -3532,14 +3737,14 @@ class AgentRuntime:
                 idempotency_key=idempotency_key,
             )
 
-        self._prepare_workers(agent)
         resolved_prompt = self._resolve_prompt(prompt)
         resolved_prompt = self._check_input_guardrails(agent, resolved_prompt)
 
         correlation_id = str(uuid.uuid4())
 
+        # Start via server first to get requiredWorkers, then register locally
         effective_timeout = agent.timeout_seconds if agent.timeout_seconds > 0 else None
-        workflow_id = await self._start_via_server_async(
+        workflow_id, required_workers = await self._start_via_server_async(
             agent,
             resolved_prompt,
             media=media,
@@ -3547,6 +3752,8 @@ class AgentRuntime:
             idempotency_key=idempotency_key,
             timeout=effective_timeout,
         )
+
+        self._prepare_workers(agent, required_workers=required_workers)
 
         return AgentHandle(workflow_id=workflow_id, runtime=self, correlation_id=correlation_id)
 
@@ -3803,6 +4010,7 @@ class AgentRuntime:
         idempotency_key: Optional[str] = None,
         on_event: Optional[Any] = None,
         timeout: Optional[int] = None,
+        credentials: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> AgentResult:
         """Async version of :meth:`_run_framework`."""
@@ -3836,61 +4044,66 @@ class AgentRuntime:
             media=media,
             session_id=session_id,
             idempotency_key=idempotency_key,
+            credentials=credentials,
         )
+        self._register_workflow_credentials(workflow_id, credentials)
 
-        if on_event is not None:
-            captured_events: List[AgentEvent] = []
-            async for event in self._stream_workflow_async(workflow_id):
-                captured_events.append(event)
-                on_event(event)
+        try:
+            if on_event is not None:
+                captured_events: List[AgentEvent] = []
+                async for event in self._stream_workflow_async(workflow_id):
+                    captured_events.append(event)
+                    on_event(event)
+
+                status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
+                output = status.output
+                has_output = output and not (
+                    isinstance(output, dict) and all(v is None for v in output.values())
+                )
+                if not has_output and status.reason and status.status in ("FAILED", "TERMINATED"):
+                    output = status.reason
+                output = self._normalize_output(output, status.status, status.reason)
+                token_usage = self._extract_token_usage(workflow_id)
+                return AgentResult(
+                    output=output,
+                    workflow_id=workflow_id,
+                    correlation_id=correlation_id,
+                    status=status.status,
+                    finish_reason=self._derive_finish_reason(status.status, status.output),
+                    error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+                    token_usage=token_usage,
+                    events=captured_events,
+                    sub_results=self._extract_sub_results(output),
+                )
 
             status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
+
             output = status.output
-            has_output = output and not (
-                isinstance(output, dict) and all(v is None for v in output.values())
-            )
-            if not has_output and status.reason and status.status in ("FAILED", "TERMINATED"):
-                output = status.reason
-            output = self._normalize_output(output, status.status, status.reason)
+            raw_status = status.status
+
+            if raw_status in ("FAILED", "TERMINATED"):
+                logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
+                has_output = output and not (
+                    isinstance(output, dict) and all(v is None for v in output.values())
+                )
+                if not has_output and status.reason:
+                    output = status.reason
+
+            output = self._normalize_output(output, raw_status, status.reason)
+            logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
             token_usage = self._extract_token_usage(workflow_id)
             return AgentResult(
                 output=output,
                 workflow_id=workflow_id,
                 correlation_id=correlation_id,
-                status=status.status,
-                finish_reason=self._derive_finish_reason(status.status, status.output),
-                error=status.reason if status.status in ("FAILED", "TERMINATED") else None,
+                status=raw_status,
+                finish_reason=self._derive_finish_reason(raw_status, status.output),
+                error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
                 token_usage=token_usage,
-                events=captured_events,
                 sub_results=self._extract_sub_results(output),
             )
-
-        status = await self._poll_status_until_complete_async(workflow_id, timeout=timeout)
-
-        output = status.output
-        raw_status = status.status
-
-        if raw_status in ("FAILED", "TERMINATED"):
-            logger.warning("Framework agent '%s' workflow %s", agent_name, raw_status)
-            has_output = output and not (
-                isinstance(output, dict) and all(v is None for v in output.values())
-            )
-            if not has_output and status.reason:
-                output = status.reason
-
-        output = self._normalize_output(output, raw_status, status.reason)
-        logger.info("Framework agent '%s' completed (workflow_id=%s)", agent_name, workflow_id)
-        token_usage = self._extract_token_usage(workflow_id)
-        return AgentResult(
-            output=output,
-            workflow_id=workflow_id,
-            correlation_id=correlation_id,
-            status=raw_status,
-            finish_reason=self._derive_finish_reason(raw_status, status.output),
-            error=status.reason if raw_status in ("FAILED", "TERMINATED") else None,
-            token_usage=token_usage,
-            sub_results=self._extract_sub_results(output),
-        )
+        finally:
+            self._clear_workflow_credentials(workflow_id, credentials)
 
     async def _start_framework_async(
         self,
@@ -3965,7 +4178,7 @@ class AgentRuntime:
     def get_status(self, workflow_id: str) -> AgentStatus:
         """Get the current status of an agent workflow.
 
-        Fetches from ``/api/agent/{workflowId}/status``.
+        Fetches from ``/api/agent/{executionId}/status``.
 
         Args:
             workflow_id: The Conductor workflow ID.
@@ -4009,7 +4222,7 @@ class AgentRuntime:
         human-in-the-loop pause.  ``approve()``, ``reject()``, and
         ``send_message()`` are convenience wrappers around this.
 
-        Posts to ``/api/agent/{workflowId}/respond``.
+        Posts to ``/api/agent/{executionId}/respond``.
 
         Args:
             workflow_id: The Conductor workflow ID.
@@ -4142,7 +4355,7 @@ class AgentRuntime:
             executions = resp.json().get("results", [])
 
             for execution in executions:
-                wf_id = execution.get("workflowId")
+                wf_id = execution.get("executionId")
                 if not wf_id:
                     continue
                 wf = self._workflow_client.get_workflow(wf_id, include_tasks=False)

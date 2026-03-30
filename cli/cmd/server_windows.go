@@ -23,12 +23,10 @@ func processRunning(pid int) bool {
 	if err != nil {
 		return false
 	}
-	// On Windows, FindProcess always succeeds; try to open the process
-	err = process.Signal(os.Kill)
-	if err != nil {
-		return false
-	}
-	return true
+	// On Windows, FindProcess always succeeds. Signal(0) checks liveness
+	// without terminating the process.
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
 }
 
 func getFreeDiskMB(path string) int64 {

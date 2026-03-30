@@ -92,9 +92,19 @@ agent4 = Agent(
     termination=complex_stop,
 )
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Simple text mention termination ---")
-    result = runtime.run(agent1, "What are AI agents?")
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ─────────────────────────────────────────────────────────────
+
+
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.19_composable_termination
+        runtime.deploy(agent1)
+        runtime.serve(agent1)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Simple text mention termination ---")
+        # result = runtime.run(agent1, "What are AI agents?")
+        # result.print_result()
+

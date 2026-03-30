@@ -88,9 +88,17 @@ agent = Agent(
     tools=[get_user_preferences, search_tutorials],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "I want to learn Python. What tutorials do you recommend?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.08_instruction_templating
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "I want to learn Python. What tutorials do you recommend?",
+        # )
+        # result.print_result()

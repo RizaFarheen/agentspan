@@ -104,8 +104,15 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent,
-            "List the 5 most recently updated repos for the 'agentspan' GitHub user.",
-        )
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.16_credentials_isolated_tool
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     agent,
+        #     "List the 5 most recently updated repos for the 'agentspan' GitHub org.",
+        # )
+        # result.print_result()
+

@@ -106,10 +106,20 @@ ceo = Agent(
     strategy=Strategy.SWARM,
 )
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Technical question (CEO -> Engineering -> Backend) ---")
-    result = runtime.run(ceo, "Design a REST API for a user management system with authentication "
-                              "and then come up with a marketing campaign for the system")
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ─────────────────────────────────────────────────────────────
+
+
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.13_hierarchical_agents
+        runtime.deploy(ceo)
+        runtime.serve(ceo)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Technical question (CEO -> Engineering -> Backend) ---")
+        # result = runtime.run(ceo, "Design a REST API for a user management system with authentication "
+        #                           "and then come up with a marketing campaign for the system")
+        # result.print_result()
+

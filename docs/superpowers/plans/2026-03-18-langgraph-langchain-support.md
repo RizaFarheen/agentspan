@@ -975,7 +975,7 @@ class TestMakeLanggraphWorker:
 
         with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
             worker_fn = make_langgraph_worker(
-                graph, "test_graph", "http://localhost:8080", "key", "secret"
+                graph, "test_graph", "http://localhost:6767", "key", "secret"
             )
             result = worker_fn(task)
 
@@ -990,7 +990,7 @@ class TestMakeLanggraphWorker:
 
         with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
             worker_fn = make_langgraph_worker(
-                graph, "test_graph", "http://localhost:8080", "key", "secret"
+                graph, "test_graph", "http://localhost:6767", "key", "secret"
             )
             worker_fn(task)
 
@@ -1008,7 +1008,7 @@ class TestMakeLanggraphWorker:
 
         with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
             worker_fn = make_langgraph_worker(
-                graph, "test_graph", "http://localhost:8080", "key", "secret"
+                graph, "test_graph", "http://localhost:6767", "key", "secret"
             )
             result = worker_fn(task)
 
@@ -1029,7 +1029,7 @@ class TestMakeLanggraphWorker:
 
         with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking") as mock_push:
             worker_fn = make_langgraph_worker(
-                graph, "test_graph", "http://localhost:8080", "key", "secret"
+                graph, "test_graph", "http://localhost:6767", "key", "secret"
             )
             worker_fn(task)
 
@@ -1051,7 +1051,7 @@ class TestMakeLanggraphWorker:
 
         with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
             worker_fn = make_langgraph_worker(
-                graph, "test_graph", "http://localhost:8080", "key", "secret"
+                graph, "test_graph", "http://localhost:6767", "key", "secret"
             )
             worker_fn(task)
 
@@ -1393,7 +1393,7 @@ class TestMakeLangchainWorker:
 
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
-                executor, "my_executor", "http://localhost:8080", "key", "secret"
+                executor, "my_executor", "http://localhost:6767", "key", "secret"
             )
             result = worker_fn(task)
 
@@ -1408,7 +1408,7 @@ class TestMakeLangchainWorker:
 
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
-                executor, "my_executor", "http://localhost:8080", "key", "secret"
+                executor, "my_executor", "http://localhost:6767", "key", "secret"
             )
             worker_fn(task)
 
@@ -1424,7 +1424,7 @@ class TestMakeLangchainWorker:
 
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
-                executor, "my_executor", "http://localhost:8080", "key", "secret"
+                executor, "my_executor", "http://localhost:6767", "key", "secret"
             )
             result = worker_fn(task)
 
@@ -1444,7 +1444,7 @@ class TestMakeLangchainWorker:
 
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking", side_effect=fake_push):
             # Simulate callback being triggered
-            handler = AgentspanCallbackHandler("wf-push-test", "http://localhost:8080", "k", "s")
+            handler = AgentspanCallbackHandler("wf-push-test", "http://localhost:6767", "k", "s")
             handler.on_tool_start({"name": "search"}, "python", run_id=None)
             handler.on_tool_end("result text", run_id=None)
 
@@ -1988,7 +1988,7 @@ class TestLangGraphReActDetection:
         with patch.object(react_graph, "stream", return_value=iter(stream_chunks)):
             with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
-                    react_graph, "react_agent", "http://localhost:8080", "key", "secret"
+                    react_graph, "react_agent", "http://localhost:6767", "key", "secret"
                 )
                 result = worker_fn(task)
 
@@ -2015,7 +2015,7 @@ class TestLangGraphReActDetection:
         with patch.object(react_graph, "stream", return_value=iter(stream_chunks)) as mock_stream:
             with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
-                    react_graph, "react_agent", "http://localhost:8080", "key", "secret"
+                    react_graph, "react_agent", "http://localhost:6767", "key", "secret"
                 )
                 worker_fn(task)
 
@@ -2129,7 +2129,7 @@ class TestCustomStateGraph:
         with patch.object(custom_graph, "stream", return_value=iter(stream_chunks)):
             with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
-                    custom_graph, "custom_graph", "http://localhost:8080", "k", "s"
+                    custom_graph, "custom_graph", "http://localhost:6767", "k", "s"
                 )
                 result = worker_fn(task)
 
@@ -2155,7 +2155,7 @@ class TestCustomStateGraph:
         with patch.object(custom_graph, "stream", return_value=iter(stream_chunks)) as mock_stream:
             with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
-                    custom_graph, "custom_graph", "http://localhost:8080", "k", "s"
+                    custom_graph, "custom_graph", "http://localhost:6767", "k", "s"
                 )
                 worker_fn(task)
 
@@ -2268,7 +2268,7 @@ class TestCheckpointerSupport:
         with patch.object(graph_with_checkpointer, "stream", return_value=iter(stream_chunks)) as mock_stream:
             with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
-                    graph_with_checkpointer, "memory_graph", "http://localhost:8080", "k", "s"
+                    graph_with_checkpointer, "memory_graph", "http://localhost:6767", "k", "s"
                 )
                 worker_fn(task)
 
@@ -2294,7 +2294,7 @@ class TestCheckpointerSupport:
         with patch.object(graph_with_checkpointer, "stream", return_value=iter(stream_chunks)) as mock_stream:
             with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
                 worker_fn = make_langgraph_worker(
-                    graph_with_checkpointer, "memory_graph", "http://localhost:8080", "k", "s"
+                    graph_with_checkpointer, "memory_graph", "http://localhost:6767", "k", "s"
                 )
                 worker_fn(task)
 
@@ -2316,7 +2316,7 @@ class TestCheckpointerSupport:
 
         with patch("agentspan.agents.frameworks.langgraph._push_event_nonblocking"):
             worker_fn = make_langgraph_worker(
-                graph_with_checkpointer, "memory_graph", "http://localhost:8080", "k", "s"
+                graph_with_checkpointer, "memory_graph", "http://localhost:6767", "k", "s"
             )
             result = worker_fn(task)
 
@@ -2400,7 +2400,7 @@ class TestLangChainWorkerInvocation:
 
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
-                agent_executor, "math_executor", "http://localhost:8080", "k", "s"
+                agent_executor, "math_executor", "http://localhost:6767", "k", "s"
             )
             result = worker_fn(task)
 
@@ -2418,7 +2418,7 @@ class TestLangChainWorkerInvocation:
 
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking"):
             worker_fn = make_langchain_worker(
-                agent_executor, "math_executor", "http://localhost:8080", "k", "s"
+                agent_executor, "math_executor", "http://localhost:6767", "k", "s"
             )
             worker_fn(task)
 
@@ -2434,7 +2434,7 @@ class TestLangChainWorkerInvocation:
         pushed = []
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking",
                    side_effect=lambda wf_id, event, *a: pushed.append(event)):
-            handler = AgentspanCallbackHandler("wf-1", "http://localhost:8080", "k", "s")
+            handler = AgentspanCallbackHandler("wf-1", "http://localhost:6767", "k", "s")
             handler.on_tool_start({"name": "calculator"}, "6*7", run_id=None)
 
         assert len(pushed) == 1
@@ -2447,7 +2447,7 @@ class TestLangChainWorkerInvocation:
         pushed = []
         with patch("agentspan.agents.frameworks.langchain._push_event_nonblocking",
                    side_effect=lambda wf_id, event, *a: pushed.append(event)):
-            handler = AgentspanCallbackHandler("wf-1", "http://localhost:8080", "k", "s")
+            handler = AgentspanCallbackHandler("wf-1", "http://localhost:6767", "k", "s")
             handler.on_tool_start({"name": "calculator"}, "6*7", run_id=None)
             handler.on_tool_end("42", run_id=None)
 

@@ -26,6 +26,14 @@ agent = Agent(
     instruction="You are a friendly greeter. Reply with a warm hello and one fun fact.",
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Say hello!")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.00_hello_world
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(agent, "Say hello!")
+        # result.print_result()

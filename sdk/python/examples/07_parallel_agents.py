@@ -53,6 +53,15 @@ analysis = Agent(
     strategy=Strategy.PARALLEL,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(analysis, "Launching an AI-powered healthcare diagnostic tool in the US market")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.07_parallel_agents
+        runtime.deploy(analysis)
+        runtime.serve(analysis)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(analysis, "Launching an AI-powered healthcare diagnostic tool in the US market")
+        # result.print_result()
+

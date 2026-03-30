@@ -127,9 +127,18 @@ responder = Agent(
 # Sequential pipeline enforces data flow: collect → validate → respond
 pipeline = collector >> validator >> responder
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        pipeline,
-        "Tell me everything about user U001 including their financial details.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.43_data_security_pipeline
+        runtime.deploy(pipeline)
+        runtime.serve(pipeline)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     pipeline,
+        #     "Tell me everything about user U001 including their financial details.",
+        # )
+        # result.print_result()
+

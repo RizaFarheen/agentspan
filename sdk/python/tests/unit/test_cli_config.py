@@ -65,7 +65,11 @@ class TestMakeCliTool:
 
     def test_tool_has_correct_name(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
-        assert tool_fn._tool_def.name == "run_command"
+        assert tool_fn._tool_def.name == "run_command"  # No agent prefix when agent_name=""
+
+    def test_tool_has_agent_prefixed_name(self):
+        tool_fn = _make_cli_tool(allowed_commands=["git"], agent_name="my_agent")
+        assert tool_fn._tool_def.name == "my_agent_run_command"
 
     def test_tool_has_description(self):
         tool_fn = _make_cli_tool(allowed_commands=["git"])
@@ -173,21 +177,21 @@ class TestAgentCliIntegration:
 
         agent = Agent(name="ops", model="openai/gpt-4o", cli_commands=True)
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" in tool_names
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_cli_commands_false_no_tool(self):
         from agentspan.agents.agent import Agent
 
         agent = Agent(name="ops", model="openai/gpt-4o", cli_commands=False)
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" not in tool_names
+        assert not any(n.endswith("_run_command") for n in tool_names)
 
     def test_default_has_no_cli_tool(self):
         from agentspan.agents.agent import Agent
 
         agent = Agent(name="ops", model="openai/gpt-4o")
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" not in tool_names
+        assert not any(n.endswith("_run_command") for n in tool_names)
 
     def test_cli_allowed_commands_propagated(self):
         from agentspan.agents.agent import Agent
@@ -212,7 +216,7 @@ class TestAgentCliIntegration:
         agent = Agent(name="ops", model="openai/gpt-4o", cli_config=cfg)
         assert agent.cli_config is cfg
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" in tool_names
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_coexists_with_code_execution(self):
         from agentspan.agents.agent import Agent
@@ -224,8 +228,8 @@ class TestAgentCliIntegration:
             cli_commands=True,
         )
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "execute_code" in tool_names
-        assert "run_command" in tool_names
+        assert any(n.endswith("_execute_code") for n in tool_names)
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_coexists_with_manual_tools(self):
         from agentspan.agents.agent import Agent
@@ -244,7 +248,7 @@ class TestAgentCliIntegration:
         )
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
         assert "search" in tool_names
-        assert "run_command" in tool_names
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_agent_decorator_support(self):
         from agentspan.agents.agent import Agent, _resolve_agent, agent
@@ -258,7 +262,7 @@ class TestAgentCliIntegration:
         assert resolved.cli_config is not None
         assert resolved.cli_config.allowed_commands == ["git"]
         tool_names = [t._tool_def.name for t in resolved.tools if hasattr(t, "_tool_def")]
-        assert "run_command" in tool_names
+        assert any(n.endswith("_run_command") for n in tool_names)
 
     def test_cli_commands_fallback_to_allowed_commands(self):
         """When cli_commands=True with no cli_allowed_commands, falls back to allowed_commands."""
@@ -291,4 +295,4 @@ class TestAgentCliIntegration:
         cfg = CliConfig(enabled=False, allowed_commands=["git"])
         agent = Agent(name="ops", model="openai/gpt-4o", cli_config=cfg)
         tool_names = [t._tool_def.name for t in agent.tools if hasattr(t, "_tool_def")]
-        assert "run_command" not in tool_names
+        assert not any(n.endswith("_run_command") for n in tool_names)

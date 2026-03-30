@@ -36,6 +36,7 @@ dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "pytest-cov>=4.0",
+    "pytest-xdist>=3.0",
     "ruff>=0.4",
     "mypy>=1.10",
 ]
@@ -94,6 +95,7 @@ no_strict_optional = true
 
 [dependency-groups]
 dev = [
+    "claude-code-sdk>=0.0.20",
     "langchain>=0.3.28",
     "langchain-core>=0.3.83",
     "langchain-openai>=0.3.35",

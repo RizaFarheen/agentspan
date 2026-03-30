@@ -38,7 +38,7 @@ pip install agentspan                         # installs the Python SDK
 export OPENAI_API_KEY=sk-...                  # or any supported provider
 
 # 2. Start the server
-agentspan server start                        # runs on localhost:8080 with UI
+agentspan server start                        # runs on localhost:6767 with UI
 ```
 
 ```python
@@ -57,7 +57,7 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-That's it. The server auto-starts workers, compiles your agent to a durable workflow, and executes it. Open `http://localhost:8080` to see the visual workflow UI.
+That's it. The server auto-starts workers, compiles your agent to a durable workflow, and executes it. Open `http://localhost:6767` to see the visual workflow UI.
 
 <details><summary>Alternative install methods</summary>
 
@@ -402,7 +402,7 @@ weather_api = http_tool(
 )
 
 # MCP server tools (auto-discovered)
-github = mcp_tool(server_url="http://localhost:8080/mcp")
+github = mcp_tool(server_url="http://localhost:6767/mcp")
 
 agent = Agent(name="assistant", model="openai/gpt-4o", tools=[stripe, weather_api, github])
 
@@ -642,14 +642,15 @@ For production workloads, use PostgreSQL for durability and concurrent access.
 **1. Start PostgreSQL with Docker Compose:**
 
 ```bash
-cd server
-docker compose up -d
+cd deployment/docker-compose
+cp .env.example .env
+docker compose up -d postgres
 ```
 
 This starts PostgreSQL 16 on port 5432 with:
-- User: `conductor`
-- Password: `conductor`
-- Database: `conductor`
+- User: `agentspan` (default)
+- Password: `changeme` (default)
+- Database: `agentspan` (default)
 
 **2. Start the server with the Postgres profile:**
 
@@ -669,43 +670,18 @@ agentspan server start
 
 ### Docker Deployment
 
-Run the Agentspan server and PostgreSQL together:
-
-```yaml
-# docker-compose.yml
-services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: conductor
-      POSTGRES_PASSWORD: conductor
-      POSTGRES_DB: conductor
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-  agentspan:
-    image: agentspan/server:latest
-    ports:
-      - "8080:8080"
-    environment:
-      SPRING_PROFILES_ACTIVE: postgres
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/conductor
-      SPRING_DATASOURCE_USERNAME: conductor
-      SPRING_DATASOURCE_PASSWORD: conductor
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      # Add other provider keys as needed
-    depends_on:
-      - postgres
-
-volumes:
-  pgdata:
-```
+Run the Agentspan server and PostgreSQL together using the deployment Compose stack:
 
 ```bash
+cd deployment/docker-compose
+cp .env.example .env
 docker compose up -d
 ```
+
+Compose files:
+- `deployment/docker-compose/compose.yaml`
+- `deployment/docker-compose/.env.example`
+- `deployment/docker-compose/README.md`
 
 ### Configuration Reference
 
@@ -713,7 +689,7 @@ The server auto-enables LLM providers when their API key is set. No manual integ
 
 | Setting | Env Var | Default |
 |---|---|---|
-| Server port | `SERVER_PORT` | `8080` |
+| Server port | `SERVER_PORT` | `6767` |
 | Database backend | `SPRING_PROFILES_ACTIVE` | `default` (SQLite) |
 | SQLite path | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` |
 | Postgres URL | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/conductor` |
@@ -726,9 +702,12 @@ The server auto-enables LLM providers when their API key is set. No manual integ
 ```
 ├── cli/                  # Go CLI (agentspan server start/stop/logs)
 ├── server/               # Java runtime server (Spring Boot + Conductor)
-│   ├── docker-compose.yml
 │   └── src/
-├── ui/                   # React workflow UI (served at localhost:8080)
+├── deployment/
+│   ├── k8s/              # Kubernetes manifests
+│   ├── helm/             # Helm chart
+│   └── docker-compose/   # Compose stack (single node)
+├── ui/                   # React workflow UI (served at localhost:6767)
 ├── sdk/
 │   ├── python/           # Python SDK
 │   │   ├── src/agentspan/agents/

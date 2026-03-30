@@ -114,7 +114,7 @@ const agent = new Agent({
 ```js
 const { AgentRuntime } = require('@agentspan/sdk')
 
-const runtime = new AgentRuntime({ serverUrl: 'http://localhost:8080' })
+const runtime = new AgentRuntime({ serverUrl: 'http://localhost:6767' })
 
 // Blocking run — awaits completion
 const result = await runtime.run(agent, "What's the weather in SF?")
@@ -220,7 +220,7 @@ AgentRuntime._prepareWorkers(agent)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:8080/api` | Conductor server URL |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Conductor server URL |
 | `AGENTSPAN_AUTH_KEY` | — | Auth key (Orkes Cloud) |
 | `AGENTSPAN_AUTH_SECRET` | — | Auth secret (Orkes Cloud) |
 | `AGENTSPAN_WORKER_POLL_INTERVAL` | `100` | Worker poll interval (ms) |
@@ -242,22 +242,22 @@ cp .env.example .env
 # Edit .env: set AGENT_LLM_MODEL=openai/gpt-4o
 
 # Run weather example (plain JS)
-AGENTSPAN_SERVER_URL=http://localhost:8080 \
+AGENTSPAN_SERVER_URL=http://localhost:6767 \
 AGENT_LLM_MODEL=openai/gpt-4o \
 node examples/weather.js
 
 # Custom prompt
-AGENTSPAN_SERVER_URL=http://localhost:8080 \
+AGENTSPAN_SERVER_URL=http://localhost:6767 \
 AGENT_LLM_MODEL=openai/gpt-4o \
 node examples/weather.js "What's the weather in Tokyo and London?"
 
 # Run streaming example
-AGENTSPAN_SERVER_URL=http://localhost:8080 \
+AGENTSPAN_SERVER_URL=http://localhost:6767 \
 AGENT_LLM_MODEL=openai/gpt-4o \
 node examples/weather-stream.js
 
 # Run TypeScript decorator example (requires ts-node)
-AGENTSPAN_SERVER_URL=http://localhost:8080 \
+AGENTSPAN_SERVER_URL=http://localhost:6767 \
 AGENT_LLM_MODEL=openai/gpt-4o \
 npx ts-node --project decorators/tsconfig.json examples/weather-decorators.ts
 ```

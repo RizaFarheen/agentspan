@@ -53,6 +53,13 @@ def stream_to_console(prompt: str):
 
 
 if __name__ == "__main__":
-    stream_to_console(
-        "Explain the concept of gradient descent in machine learning in about 150 words."
-    )
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.28_streaming_tokens
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # stream_to_console(
+        #     "Explain the concept of gradient descent in machine learning in about 150 words."
+        # )

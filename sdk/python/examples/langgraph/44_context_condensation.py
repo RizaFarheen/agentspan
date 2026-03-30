@@ -347,12 +347,19 @@ if __name__ == "__main__":
     print()
 
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "Produce comprehensive analyses for each of the following 25 technology domains "
-            "by calling deep_analyst once per domain, then summarise the cross-domain trends. "
-            "Domains: " + ", ".join(DOMAINS) + ".",
-        )
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.44_context_condensation
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "Produce comprehensive analyses for each of the following 25 technology domains "
+        # "by calling deep_analyst once per domain, then summarise the cross-domain trends. "
+        # "Domains: " + ", ".join(DOMAINS) + ".",
+        # )
+
 
     print(f"\nStatus: {result.status}")
     result.print_result()
