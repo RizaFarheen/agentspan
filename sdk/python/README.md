@@ -118,7 +118,7 @@ agentspan server logs    # View server logs
 <details><summary>Configure remote Agentspan server connection</summary>
 
 ```bash
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 ```
 
 Or use a `.env` file:
@@ -330,7 +330,7 @@ weather_api = http_tool(
     input_schema={"type": "object", "properties": {"city": {"type": "string"}}},
 )
 
-github = mcp_tool(server_url="http://localhost:8080/mcp")  # Auto-discovered
+github = mcp_tool(server_url="http://localhost:6767/mcp")  # Auto-discovered
 
 agent = Agent(name="assistant", model="openai/gpt-4o", tools=[weather_api, github])
 

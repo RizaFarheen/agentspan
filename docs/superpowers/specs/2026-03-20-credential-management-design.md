@@ -530,7 +530,7 @@ CLI_CREDENTIAL_MAP = {
 ```python
 @dataclass
 class AgentConfig:
-    server_url: str              = "http://localhost:8080/api"
+    server_url: str              = "http://localhost:6767/api"
     api_key: str | None          = None    # Bearer token or static API key (Authorization header)
     auth_key: str | None         = None    # kept for backward compat
     auth_secret: str | None      = None    # kept for backward compat

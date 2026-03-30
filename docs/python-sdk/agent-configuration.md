@@ -609,7 +609,7 @@ agent = Agent(
 ```python
 from agentspan.agents import AgentRuntime
 
-with AgentRuntime(server_url="http://localhost:8080/api") as runtime:
+with AgentRuntime(server_url="http://localhost:6767/api") as runtime:
     result = runtime.run(agent, "Hello!")
 ```
 
@@ -662,7 +662,7 @@ Common parameters for execution methods:
 from agentspan.agents import AgentConfig
 
 config = AgentConfig(
-    server_url="http://localhost:8080/api",
+    server_url="http://localhost:6767/api",
     auth_key="key",
     auth_secret="secret",
     default_timeout_seconds=0,

@@ -217,7 +217,7 @@ expectResult(result)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENTSPAN_SERVER_URL` | `http://localhost:8080/api` | Server API URL |
+| `AGENTSPAN_SERVER_URL` | `http://localhost:6767/api` | Server API URL |
 | `AGENTSPAN_API_KEY` | -- | Bearer token |
 | `OPENAI_API_KEY` | -- | For OpenAI models |
 

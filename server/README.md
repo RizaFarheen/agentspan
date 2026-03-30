@@ -274,7 +274,7 @@ See [`examples/adk/35_rag_agent.py`](../sdk/python/examples/adk/35_rag_agent.py)
 
 | Property | Env Var | Default |
 |----------|---------|---------|
-| `server.port` | `SERVER_PORT` | `8080` |
+| `server.port` | `SERVER_PORT` | `6767` |
 | `conductor.db.type` | — | `sqlite` |
 | `spring.datasource.url` | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` |
 | `spring.datasource.username` | `SPRING_DATASOURCE_USERNAME` | — |

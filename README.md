@@ -38,7 +38,7 @@ pip install agentspan                         # installs the Python SDK
 export OPENAI_API_KEY=sk-...                  # or any supported provider
 
 # 2. Start the server
-agentspan server start                        # runs on localhost:8080 with UI
+agentspan server start                        # runs on localhost:6767 with UI
 ```
 
 ```python
@@ -57,7 +57,7 @@ with AgentRuntime() as runtime:
     result.print_result()
 ```
 
-That's it. The server auto-starts workers, compiles your agent to a durable workflow, and executes it. Open `http://localhost:8080` to see the visual workflow UI.
+That's it. The server auto-starts workers, compiles your agent to a durable workflow, and executes it. Open `http://localhost:6767` to see the visual workflow UI.
 
 <details><summary>Alternative install methods</summary>
 
@@ -402,7 +402,7 @@ weather_api = http_tool(
 )
 
 # MCP server tools (auto-discovered)
-github = mcp_tool(server_url="http://localhost:8080/mcp")
+github = mcp_tool(server_url="http://localhost:6767/mcp")
 
 agent = Agent(name="assistant", model="openai/gpt-4o", tools=[stripe, weather_api, github])
 
@@ -689,7 +689,7 @@ The server auto-enables LLM providers when their API key is set. No manual integ
 
 | Setting | Env Var | Default |
 |---|---|---|
-| Server port | `SERVER_PORT` | `8080` |
+| Server port | `SERVER_PORT` | `6767` |
 | Database backend | `SPRING_PROFILES_ACTIVE` | `default` (SQLite) |
 | SQLite path | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:agent-runtime.db` |
 | Postgres URL | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/conductor` |
@@ -707,7 +707,7 @@ The server auto-enables LLM providers when their API key is set. No manual integ
 │   ├── k8s/              # Kubernetes manifests
 │   ├── helm/             # Helm chart
 │   └── docker-compose/   # Compose stack (single node)
-├── ui/                   # React workflow UI (served at localhost:8080)
+├── ui/                   # React workflow UI (served at localhost:6767)
 ├── sdk/
 │   ├── python/           # Python SDK
 │   │   ├── src/agentspan/agents/

@@ -307,7 +307,7 @@ class TestMakeClaudeAgentSdkWorker:
         ):
             mock_asyncio.run.return_value = ("The code looks good", None)
             worker_fn = make_claude_agent_sdk_worker(
-                options, "test_agent", "http://localhost:8080", "key", "secret"
+                options, "test_agent", "http://localhost:6767", "key", "secret"
             )
             result = worker_fn(task)
 
@@ -327,7 +327,7 @@ class TestMakeClaudeAgentSdkWorker:
         ):
             mock_asyncio.run.side_effect = RuntimeError("SDK error")
             worker_fn = make_claude_agent_sdk_worker(
-                options, "test_agent", "http://localhost:8080", "key", "secret"
+                options, "test_agent", "http://localhost:6767", "key", "secret"
             )
             result = worker_fn(task)
 
@@ -347,7 +347,7 @@ class TestMakeClaudeAgentSdkWorker:
         ):
             mock_asyncio.run.return_value = ("result", {"input_tokens": 100})
             worker_fn = make_claude_agent_sdk_worker(
-                options, "test_agent", "http://localhost:8080", "key", "secret"
+                options, "test_agent", "http://localhost:6767", "key", "secret"
             )
             result = worker_fn(task)
 
@@ -920,7 +920,7 @@ Add to `sdk/python/tests/unit/test_passthrough_registration.py` in `TestBuildPas
         from agentspan.agents.runtime.config import AgentConfig
 
         config = AgentConfig(
-            server_url="http://testserver:8080/api",
+            server_url="http://testserver:6767/api",
             auth_key="my_key",
             auth_secret="my_secret",
         )
@@ -937,7 +937,7 @@ Add to `sdk/python/tests/unit/test_passthrough_registration.py` in `TestBuildPas
             runtime._build_passthrough_func(options, "claude_agent_sdk", "test_agent")
 
         mock_worker.assert_called_once_with(
-            options, "test_agent", "http://testserver:8080/api", "my_key", "my_secret"
+            options, "test_agent", "http://testserver:6767/api", "my_key", "my_secret"
         )
 ```
 
