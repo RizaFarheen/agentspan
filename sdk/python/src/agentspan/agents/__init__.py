@@ -56,7 +56,13 @@ from agentspan.agents.code_executor import (
 from agentspan.agents.exceptions import AgentAPIError, AgentNotFoundError, AgentspanError
 
 # Skills
-from agentspan.agents.skill import SkillLoadError, load_skills, skill
+from agentspan.agents.skill import (
+    SkillLoadError,
+    format_prompt_with_params,
+    format_skill_params,
+    load_skills,
+    skill,
+)
 
 # Extended agent types
 from agentspan.agents.ext import GPTAssistantAgent, UserProxyAgent

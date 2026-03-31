@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -670,6 +671,99 @@ func TestSkillServe_InvalidDir(t *testing.T) {
 	err := runSkillServe(nil, []string{dir})
 	if err == nil {
 		t.Fatal("expected error for directory without SKILL.md")
+	}
+}
+
+// ── Param Flag Parsing ──────────────────────────────────────────────────────
+
+func TestParseParamFlags(t *testing.T) {
+	flags := []string{"rounds=5", "style=verbose"}
+	result, err := parseParamFlags(flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("got %d params, want 2", len(result))
+	}
+	if result[0][0] != "rounds" || result[0][1] != "5" {
+		t.Errorf("param[0] = %v, want [rounds, 5]", result[0])
+	}
+	if result[1][0] != "style" || result[1][1] != "verbose" {
+		t.Errorf("param[1] = %v, want [style, verbose]", result[1])
+	}
+}
+
+func TestParseParamFlags_Empty(t *testing.T) {
+	result, err := parseParamFlags(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("got %d params, want 0", len(result))
+	}
+}
+
+func TestParseParamFlags_InvalidFormat(t *testing.T) {
+	_, err := parseParamFlags([]string{"no-equals-sign"})
+	if err == nil {
+		t.Fatal("expected error for invalid format")
+	}
+}
+
+func TestParseParamFlags_EmptyKey(t *testing.T) {
+	_, err := parseParamFlags([]string{"=value"})
+	if err == nil {
+		t.Fatal("expected error for empty key")
+	}
+}
+
+func TestParseParamFlags_EmptyValueAllowed(t *testing.T) {
+	result, err := parseParamFlags([]string{"key="})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0][0] != "key" || result[0][1] != "" {
+		t.Errorf("param = %v, want [key, ]", result[0])
+	}
+}
+
+func TestParseParamFlags_ValueWithEquals(t *testing.T) {
+	result, err := parseParamFlags([]string{"expr=a=b"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0][0] != "expr" || result[0][1] != "a=b" {
+		t.Errorf("param = %v, want [expr, a=b]", result[0])
+	}
+}
+
+// ── Prompt Formatting ───────────────────────────────────────────────────────
+
+func TestFormatPromptWithParams_Empty(t *testing.T) {
+	result := formatPromptWithParams("hello", nil)
+	if result != "hello" {
+		t.Errorf("got %q, want 'hello'", result)
+	}
+}
+
+func TestFormatPromptWithParams_WithParams(t *testing.T) {
+	params := [][2]string{{"rounds", "5"}, {"style", "verbose"}}
+	result := formatPromptWithParams("Review this code", params)
+
+	if !strings.Contains(result, "[Skill Parameters]") {
+		t.Error("missing [Skill Parameters] header")
+	}
+	if !strings.Contains(result, "rounds: 5") {
+		t.Error("missing rounds param")
+	}
+	if !strings.Contains(result, "style: verbose") {
+		t.Error("missing style param")
+	}
+	if !strings.Contains(result, "[User Request]") {
+		t.Error("missing [User Request] header")
+	}
+	if !strings.HasSuffix(result, "Review this code") {
+		t.Error("prompt not at end")
 	}
 }
 

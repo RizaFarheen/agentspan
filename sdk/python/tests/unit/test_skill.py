@@ -448,3 +448,136 @@ class TestAutoSplitSections:
         read_worker = next(w for w in workers if "read_skill_file" in w.name)
         result = read_worker.func(path="skill_section:nonexistent")
         assert "ERROR" in result
+
+
+# ── Skill Parameters ─────────────────────────────────────────────────────
+
+
+class TestSkillParams:
+    """Test skill parameter parsing, defaulting, and prompt formatting."""
+
+    def test_frontmatter_params_stored_as_defaults(self, tmp_path):
+        """Params declared in frontmatter are stored in defaultParams."""
+        from agentspan.agents.skill import skill
+
+        skill_dir = tmp_path / "param-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: param-skill\ndescription: test\n"
+            "params:\n  rounds:\n    type: integer\n    default: 3\n"
+            "    description: Number of rounds\n"
+            "  style:\n    type: string\n    default: concise\n---\n# Body"
+        )
+        agent = skill(skill_dir, model="openai/gpt-4o")
+        assert agent._framework_config["defaultParams"] == {
+            "rounds": 3,
+            "style": "concise",
+        }
+
+    def test_frontmatter_params_bare_values(self, tmp_path):
+        """Bare values (not dicts) in params are stored directly."""
+        from agentspan.agents.skill import skill
+
+        skill_dir = tmp_path / "bare-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: bare-skill\ndescription: test\n"
+            "params:\n  rounds: 3\n  verbose: true\n---\n# Body"
+        )
+        agent = skill(skill_dir, model="openai/gpt-4o")
+        assert agent._framework_config["defaultParams"] == {
+            "rounds": 3,
+            "verbose": True,
+        }
+
+    def test_no_frontmatter_params_empty_defaults(self):
+        """Skills without params in frontmatter have empty defaultParams."""
+        from agentspan.agents.skill import skill
+
+        agent = skill(FIXTURES / "simple-skill", model="openai/gpt-4o")
+        assert agent._framework_config["defaultParams"] == {}
+
+    def test_runtime_params_override_defaults(self, tmp_path):
+        """Runtime params override frontmatter defaults."""
+        from agentspan.agents.skill import skill
+
+        skill_dir = tmp_path / "override-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: override-skill\ndescription: test\n"
+            "params:\n  rounds:\n    type: integer\n    default: 3\n---\n# Body"
+        )
+        agent = skill(skill_dir, model="openai/gpt-4o", params={"rounds": 5})
+        assert agent._skill_params == {"rounds": 5}
+
+    def test_runtime_params_add_new_keys(self, tmp_path):
+        """Runtime params can add keys not in frontmatter defaults."""
+        from agentspan.agents.skill import skill
+
+        skill_dir = tmp_path / "extra-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: extra-skill\ndescription: test\n"
+            "params:\n  rounds:\n    type: integer\n    default: 3\n---\n# Body"
+        )
+        agent = skill(
+            skill_dir, model="openai/gpt-4o", params={"rounds": 5, "verbose": True}
+        )
+        assert agent._skill_params == {"rounds": 5, "verbose": True}
+
+    def test_merged_params_uses_defaults_when_no_override(self, tmp_path):
+        """Merged params include defaults for keys not overridden."""
+        from agentspan.agents.skill import skill
+
+        skill_dir = tmp_path / "merge-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: merge-skill\ndescription: test\n"
+            "params:\n  rounds:\n    type: integer\n    default: 3\n"
+            "  style:\n    type: string\n    default: concise\n---\n# Body"
+        )
+        agent = skill(skill_dir, model="openai/gpt-4o", params={"rounds": 7})
+        assert agent._skill_params == {"rounds": 7, "style": "concise"}
+
+
+class TestFormatSkillParams:
+    """Test prompt formatting with skill parameters."""
+
+    def test_format_skill_params_produces_prefix(self):
+        from agentspan.agents.skill import format_skill_params
+
+        result = format_skill_params({"rounds": 5, "style": "verbose"})
+        assert "[Skill Parameters]" in result
+        assert "rounds: 5" in result
+        assert "style: verbose" in result
+
+    def test_format_skill_params_empty_returns_empty(self):
+        from agentspan.agents.skill import format_skill_params
+
+        assert format_skill_params({}) == ""
+
+    def test_format_prompt_with_params(self):
+        from agentspan.agents.skill import format_prompt_with_params
+
+        result = format_prompt_with_params("Review this code", {"rounds": 5})
+        assert result.startswith("[Skill Parameters]")
+        assert "rounds: 5" in result
+        assert "[User Request]" in result
+        assert result.endswith("Review this code")
+
+    def test_format_prompt_with_params_empty_passthrough(self):
+        from agentspan.agents.skill import format_prompt_with_params
+
+        result = format_prompt_with_params("Review this code", {})
+        assert result == "Review this code"
+
+    def test_format_prompt_with_multiple_params(self):
+        from agentspan.agents.skill import format_prompt_with_params
+
+        result = format_prompt_with_params(
+            "Review this code", {"rounds": 5, "style": "verbose"}
+        )
+        assert "rounds: 5" in result
+        assert "style: verbose" in result
+        assert "[Skill Parameters]" in result
+        assert "[User Request]" in result

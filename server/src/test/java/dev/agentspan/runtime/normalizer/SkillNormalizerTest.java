@@ -132,7 +132,8 @@ class SkillNormalizerTest {
             assertNotNull(schema, "agent_tool '" + tool.getName() + "' should have inputSchema");
             Map<String, Object> props = (Map<String, Object>) schema.get("properties");
             assertNotNull(props, "agent_tool '" + tool.getName() + "' inputSchema should have properties");
-            assertTrue(props.containsKey("request"),
+            assertTrue(
+                    props.containsKey("request"),
                     "agent_tool '" + tool.getName() + "' should have 'request' in properties");
         }
     }
@@ -236,12 +237,14 @@ class SkillNormalizerTest {
         AgentConfig config = normalizer.normalize(loadFixture("large-skill"));
         String instructions = (String) config.getInstructions();
         // Instructions should NOT contain the full body — should have a TOC instead
-        assertTrue(instructions.contains("Available sections (use read_skill_file to load)"),
+        assertTrue(
+                instructions.contains("Available sections (use read_skill_file to load)"),
                 "Instructions should contain table of contents");
-        assertTrue(instructions.contains("skill_section:workflow-definitions"),
+        assertTrue(
+                instructions.contains("skill_section:workflow-definitions"),
                 "TOC should list workflow-definitions section");
-        assertTrue(instructions.contains("skill_section:running-workflows"),
-                "TOC should list running-workflows section");
+        assertTrue(
+                instructions.contains("skill_section:running-workflows"), "TOC should list running-workflows section");
     }
 
     @Test
@@ -249,9 +252,11 @@ class SkillNormalizerTest {
         AgentConfig config = normalizer.normalize(loadFixture("large-skill"));
         String instructions = (String) config.getInstructions();
         // Preamble content (before first ## heading) should be preserved
-        assertTrue(instructions.contains("You are the Conductor orchestrator"),
+        assertTrue(
+                instructions.contains("You are the Conductor orchestrator"),
                 "Instructions should contain preamble content");
-        assertTrue(instructions.contains("Always validate inputs before processing"),
+        assertTrue(
+                instructions.contains("Always validate inputs before processing"),
                 "Instructions should contain preamble rules");
     }
 
@@ -260,7 +265,8 @@ class SkillNormalizerTest {
         AgentConfig config = normalizer.normalize(loadFixture("large-skill"));
         String instructions = (String) config.getInstructions();
         // The full body has ~180K chars; instructions should be much shorter
-        assertTrue(instructions.length() < 50000,
+        assertTrue(
+                instructions.length() < 50000,
                 "Instructions should be shorter than threshold after splitting, got: " + instructions.length());
     }
 
@@ -278,16 +284,16 @@ class SkillNormalizerTest {
         List<String> enumValues = (List<String>) pathProp.get("enum");
 
         // Should include virtual section entries
-        assertTrue(enumValues.contains("skill_section:workflow-definitions"),
+        assertTrue(
+                enumValues.contains("skill_section:workflow-definitions"),
                 "Enum should include workflow-definitions section");
-        assertTrue(enumValues.contains("skill_section:running-workflows"),
+        assertTrue(
+                enumValues.contains("skill_section:running-workflows"),
                 "Enum should include running-workflows section");
-        assertTrue(enumValues.contains("skill_section:error-handling"),
-                "Enum should include error-handling section");
+        assertTrue(enumValues.contains("skill_section:error-handling"), "Enum should include error-handling section");
 
         // Should ALSO include real resource files
-        assertTrue(enumValues.contains("references/api-reference.md"),
-                "Enum should still include real resource files");
+        assertTrue(enumValues.contains("references/api-reference.md"), "Enum should still include real resource files");
     }
 
     @Test
@@ -306,9 +312,8 @@ class SkillNormalizerTest {
         @SuppressWarnings("unchecked")
         List<String> enumValues = (List<String>) pathProp.get("enum");
 
-        long sectionCount = enumValues.stream()
-                .filter(e -> e.startsWith("skill_section:"))
-                .count();
+        long sectionCount =
+                enumValues.stream().filter(e -> e.startsWith("skill_section:")).count();
         assertEquals(8, sectionCount, "Should have 8 sections from the large skill");
     }
 
@@ -317,10 +322,8 @@ class SkillNormalizerTest {
         AgentConfig config = normalizer.normalize(loadFixture("simple-skill"));
         String instructions = (String) config.getInstructions();
         // Small skill should keep full body as instructions
-        assertTrue(instructions.contains("You are a helpful assistant"),
-                "Small skill should retain full body");
-        assertFalse(instructions.contains("Available sections"),
-                "Small skill should NOT have a table of contents");
+        assertTrue(instructions.contains("You are a helpful assistant"), "Small skill should retain full body");
+        assertFalse(instructions.contains("Available sections"), "Small skill should NOT have a table of contents");
     }
 
     @Test
@@ -328,8 +331,7 @@ class SkillNormalizerTest {
         // The conductor-skill fixture has a small body — should not be split
         AgentConfig config = normalizer.normalize(loadFixture("conductor-skill"));
         String instructions = (String) config.getInstructions();
-        assertFalse(instructions.contains("Available sections"),
-                "Small conductor-skill fixture should NOT be split");
+        assertFalse(instructions.contains("Available sections"), "Small conductor-skill fixture should NOT be split");
     }
 
     // --- Cross-skill reference tests ---
@@ -376,7 +378,8 @@ class SkillNormalizerTest {
     void largeSkillDescriptionInInstructions() throws Exception {
         AgentConfig config = normalizer.normalize(loadFixture("large-skill"));
         String instructions = (String) config.getInstructions();
-        assertTrue(instructions.contains("A large skill for testing section splitting"),
+        assertTrue(
+                instructions.contains("A large skill for testing section splitting"),
                 "Instructions should contain the skill description");
     }
 }

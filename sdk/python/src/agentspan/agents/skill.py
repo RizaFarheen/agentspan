@@ -103,11 +103,45 @@ def detect_language(path: Path) -> str:
     return "bash"  # default
 
 
+def format_skill_params(params: Dict[str, Any]) -> str:
+    """Format skill parameters as a prompt prefix.
+
+    Args:
+        params: Key-value pairs to inject.
+
+    Returns:
+        Formatted string like ``[Skill Parameters]\\nkey: value\\n...``
+        or empty string if params is empty.
+    """
+    if not params:
+        return ""
+    lines = [f"{k}: {v}" for k, v in params.items()]
+    return "[Skill Parameters]\n" + "\n".join(lines)
+
+
+def format_prompt_with_params(prompt: str, params: Dict[str, Any]) -> str:
+    """Prepend skill parameters to the user prompt.
+
+    Args:
+        prompt: The original user prompt.
+        params: Skill parameters to inject.
+
+    Returns:
+        The prompt with a ``[Skill Parameters]`` prefix followed by
+        ``[User Request]``, or the original prompt when *params* is empty.
+    """
+    prefix = format_skill_params(params)
+    if not prefix:
+        return prompt
+    return f"{prefix}\n\n[User Request]\n{prompt}"
+
+
 def skill(
     path: Union[str, Path],
     model: Union[str, Any] = "",
     agent_models: Optional[Dict[str, str]] = None,
     search_path: Optional[List[str]] = None,
+    params: Optional[Dict[str, Any]] = None,
 ) -> Agent:
     """Load an Agent Skills directory as an Agentspan Agent.
 
@@ -116,6 +150,8 @@ def skill(
         model: Model for the orchestrator agent. Also default for sub-agents.
         agent_models: Per-sub-agent model overrides.
         search_path: Additional directories to search for cross-skill references.
+        params: Runtime parameter overrides. Merged on top of default
+            ``params`` declared in the SKILL.md frontmatter.
 
     Returns:
         Agent that can be run, composed, deployed, and served.
@@ -134,6 +170,18 @@ def skill(
     skill_md = skill_md_path.read_text()
     frontmatter = parse_frontmatter(skill_md)
     name = frontmatter["name"]
+
+    # 1b. Extract default params from frontmatter and merge overrides
+    default_params: Dict[str, Any] = {}
+    fm_params = frontmatter.get("params")
+    if isinstance(fm_params, dict):
+        for pname, pdef in fm_params.items():
+            if isinstance(pdef, dict) and "default" in pdef:
+                default_params[pname] = pdef["default"]
+            else:
+                # Bare value (e.g. params: {rounds: 3})
+                default_params[pname] = pdef
+    merged_params = {**default_params, **(params or {})}
 
     # 2. Discover *-agent.md files
     agent_files: Dict[str, str] = {}
@@ -198,6 +246,7 @@ def skill(
         },
         "resourceFiles": resource_files,
         "crossSkillRefs": cross_refs,
+        "defaultParams": default_params,
     }
 
     # 7. Return Agent with framework marker
@@ -207,6 +256,7 @@ def skill(
     agent._skill_path = path
     agent._skill_scripts = scripts
     agent._skill_sections = skill_sections
+    agent._skill_params = merged_params
     return agent
 
 

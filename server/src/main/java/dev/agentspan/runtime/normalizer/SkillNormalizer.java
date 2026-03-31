@@ -75,8 +75,11 @@ public class SkillNormalizer implements AgentConfigNormalizer {
             if (!skillSections.isEmpty()) {
                 String preamble = extractPreamble(body);
                 body = buildSplitInstructions(description, preamble, skillSections);
-                log.info("Skill '{}': body exceeded {}chars, split into {} sections",
-                        name, SECTION_SPLIT_THRESHOLD, skillSections.size());
+                log.info(
+                        "Skill '{}': body exceeded {}chars, split into {} sections",
+                        name,
+                        SECTION_SPLIT_THRESHOLD,
+                        skillSections.size());
             }
         }
 
@@ -176,7 +179,7 @@ public class SkillNormalizer implements AgentConfigNormalizer {
 
             String readDescription = !skillSections.isEmpty()
                     ? "Read a reference file or skill section from the " + name + " skill. "
-                      + "Use skill_section:* paths to load instruction sections on demand."
+                            + "Use skill_section:* paths to load instruction sections on demand."
                     : "Read a reference or resource file from the " + name + " skill directory";
 
             Map<String, Object> inputSchema = new LinkedHashMap<>();
@@ -187,7 +190,8 @@ public class SkillNormalizer implements AgentConfigNormalizer {
                             "path",
                             Map.of(
                                     "type", "string",
-                                    "description", "Relative path within the skill directory, or skill_section:<name> for instruction sections",
+                                    "description",
+                                            "Relative path within the skill directory, or skill_section:<name> for instruction sections",
                                     "enum", allReadableFiles)));
             inputSchema.put("required", List.of("path"));
 
@@ -198,8 +202,11 @@ public class SkillNormalizer implements AgentConfigNormalizer {
                     .inputSchema(inputSchema)
                     .build());
 
-            log.debug("Skill '{}': created read_skill_file tool with {} resources + {} sections",
-                    name, resourceFiles.size(), skillSections.size());
+            log.debug(
+                    "Skill '{}': created read_skill_file tool with {} resources + {} sections",
+                    name,
+                    resourceFiles.size(),
+                    skillSections.size());
         }
 
         // Step 7: Wire cross-skill references
@@ -230,8 +237,7 @@ public class SkillNormalizer implements AgentConfigNormalizer {
                                         "type",
                                         "string",
                                         "description",
-                                        "The request or question to send to the "
-                                                + refAgent.getName() + " agent")));
+                                        "The request or question to send to the " + refAgent.getName() + " agent")));
                 refInputSchema.put("required", List.of("request"));
 
                 tools.add(ToolConfig.builder()
@@ -325,8 +331,7 @@ public class SkillNormalizer implements AgentConfigNormalizer {
     /**
      * Build compact orchestrator instructions with description, preamble, and TOC.
      */
-    String buildSplitInstructions(String description, String preamble,
-                                   Map<String, String> sections) {
+    String buildSplitInstructions(String description, String preamble, Map<String, String> sections) {
         StringBuilder sb = new StringBuilder();
         if (description != null && !description.isEmpty()) {
             sb.append(description).append("\n\n");
@@ -340,8 +345,13 @@ public class SkillNormalizer implements AgentConfigNormalizer {
             String content = entry.getValue();
             // Extract original heading text from section content
             String firstLine = content.split("\n", 2)[0];
-            String heading = firstLine.startsWith("## ") ? firstLine.substring(3).trim() : slug;
-            sb.append("- skill_section:").append(slug).append(" — ").append(heading).append("\n");
+            String heading =
+                    firstLine.startsWith("## ") ? firstLine.substring(3).trim() : slug;
+            sb.append("- skill_section:")
+                    .append(slug)
+                    .append(" — ")
+                    .append(heading)
+                    .append("\n");
         }
         return sb.toString().trim();
     }

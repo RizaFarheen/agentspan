@@ -56,6 +56,7 @@ agent = skill(
     model="openai/gpt-4o",
     agent_models={"gilfoyle": "anthropic/claude-sonnet-4-6"},
     search_path=["~/.claude/skills/"],
+    params={"rounds": 5},
 )
 ```
 
@@ -67,6 +68,7 @@ agent = skill(
 | `model` | `str` | `""` | Model for the orchestrator agent. Also the default for sub-agents. Format: `"provider/model"`. |
 | `agent_models` | `dict[str, str]` | `None` | Per-sub-agent model overrides. Keys are agent names (from `*-agent.md` filenames). |
 | `search_path` | `list[str]` | `None` | Additional directories to search for cross-skill references. Defaults to `./.agents/skills/`, `~/.agents/skills/`. |
+| `params` | `dict[str, Any]` | `None` | Runtime parameter overrides. Merged on top of defaults declared in the SKILL.md frontmatter `params` section. |
 
 ### Returns
 
@@ -144,6 +146,87 @@ If a SKILL.md references another skill (e.g., "invoke the writing-plans skill"),
 2. `./.agents/skills/` (project-level)
 3. `~/.agents/skills/` (user-level)
 4. Explicit `search_path`
+
+---
+
+## Skill Parameters
+
+Skills can declare parameters in the SKILL.md frontmatter. Parameters allow callers to customize skill behavior without editing the skill itself.
+
+### Declaring parameters
+
+Add a `params` section to the SKILL.md frontmatter:
+
+```yaml
+---
+name: dg
+description: Adversarial code review
+params:
+  rounds:
+    type: integer
+    default: 3
+    description: Number of debate rounds
+  style:
+    type: string
+    default: concise
+    description: Output verbosity
+---
+```
+
+Each parameter can be a full definition (with `type`, `default`, `description`) or a bare default value:
+
+```yaml
+params:
+  rounds: 3
+  verbose: true
+```
+
+### Passing parameters (Python SDK)
+
+Pass `params` to the `skill()` function. Runtime values override frontmatter defaults:
+
+```python
+# Use frontmatter defaults (rounds=3)
+dg = skill("~/.claude/skills/dg", model="openai/gpt-4o")
+
+# Override rounds to 5
+dg = skill("~/.claude/skills/dg", model="openai/gpt-4o", params={"rounds": 5})
+```
+
+You can also format parameters into a prompt manually using the helper functions:
+
+```python
+from agentspan.agents import format_prompt_with_params
+
+prompt = format_prompt_with_params("Review this code", {"rounds": 5})
+# "[Skill Parameters]\nrounds: 5\n\n[User Request]\nReview this code"
+```
+
+### Passing parameters (CLI)
+
+Use the `--param key=value` flag (repeatable):
+
+```bash
+agentspan skill run ~/.claude/skills/dg "Review auth.py" \
+    --model openai/gpt-4o \
+    --param rounds=5 \
+    --param style=verbose
+```
+
+### How it works
+
+Parameters are injected as a structured prefix to the user prompt:
+
+```
+[Skill Parameters]
+rounds: 5
+style: verbose
+
+[User Request]
+Review this code for security issues
+```
+
+The skill's orchestrator agent sees both the parameters and the original request, and can adjust its behavior accordingly (e.g., running more debate rounds, changing output format).
 
 ---
 
@@ -262,6 +345,7 @@ agentspan skill run <path> "<prompt>" [flags]
 | `--model <model>` | Orchestrator + default model |
 | `--agent-model <name>=<model>` | Per-sub-agent override (repeatable) |
 | `--search-path <dir>` | Cross-skill search directory (repeatable) |
+| `--param <key>=<value>` | Skill parameter override (repeatable) |
 | `--timeout <seconds>` | Execution timeout |
 | `--stream` | Stream SSE events to stdout |
 
@@ -275,6 +359,11 @@ agentspan skill run ~/.claude/skills/dg "Review auth.py" --model openai/gpt-4o
 agentspan skill run ~/.claude/skills/dg "Review PR #42" \
     --model openai/gpt-4o-mini \
     --agent-model gilfoyle=anthropic/claude-sonnet-4-6
+
+# With skill parameters
+agentspan skill run ~/.claude/skills/dg "Review auth.py" \
+    --model openai/gpt-4o \
+    --param rounds=5 --param style=verbose
 
 # Stream events
 agentspan skill run ~/.claude/skills/conductor "List all workflows" \

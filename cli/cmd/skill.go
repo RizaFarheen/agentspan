@@ -25,6 +25,7 @@ var (
 	skillModel       string
 	skillAgentModels []string
 	skillSearchPaths []string
+	skillParams      []string
 	skillTimeout     int
 	skillStream      bool
 )
@@ -66,6 +67,7 @@ func init() {
 	skillRunCmd.Flags().StringVar(&skillModel, "model", "", "Orchestrator and default model (required)")
 	skillRunCmd.Flags().StringArrayVar(&skillAgentModels, "agent-model", nil, "Sub-agent model override (name=model, repeatable)")
 	skillRunCmd.Flags().StringArrayVar(&skillSearchPaths, "search-path", nil, "Cross-skill search directory (repeatable)")
+	skillRunCmd.Flags().StringArrayVar(&skillParams, "param", nil, "Skill parameter override (key=value, repeatable)")
 	skillRunCmd.Flags().IntVar(&skillTimeout, "timeout", 300, "Execution timeout in seconds")
 	skillRunCmd.Flags().BoolVar(&skillStream, "stream", false, "Stream SSE events in real-time")
 
@@ -90,6 +92,13 @@ func runSkillRun(cmd *cobra.Command, args []string) error {
 	if skillModel == "" {
 		return fmt.Errorf("--model is required for skill run")
 	}
+
+	// Parse --param flags and format prompt
+	params, err := parseParamFlags(skillParams)
+	if err != nil {
+		return err
+	}
+	prompt = formatPromptWithParams(prompt, params)
 
 	payload, skillName, err := buildSkillPayload(skillPath)
 	if err != nil {
@@ -676,4 +685,39 @@ func parseAgentModelFlags(flags []string) (map[string]string, error) {
 		result[parts[0]] = parts[1]
 	}
 	return result, nil
+}
+
+// parseParamFlags parses --param flags in "key=value" format into an
+// ordered slice of key-value pairs. The slice preserves flag order so the
+// prompt prefix is deterministic.
+func parseParamFlags(flags []string) ([][2]string, error) {
+	var result [][2]string
+	for _, flag := range flags {
+		parts := strings.SplitN(flag, "=", 2)
+		if len(parts) != 2 || parts[0] == "" {
+			return nil, fmt.Errorf("invalid --param value %q: expected key=value", flag)
+		}
+		result = append(result, [2]string{parts[0], parts[1]})
+	}
+	return result, nil
+}
+
+// formatPromptWithParams prepends a [Skill Parameters] block to the prompt
+// when params are provided. Returns the original prompt unchanged when
+// params is empty.
+func formatPromptWithParams(prompt string, params [][2]string) string {
+	if len(params) == 0 {
+		return prompt
+	}
+	var sb strings.Builder
+	sb.WriteString("[Skill Parameters]\n")
+	for _, kv := range params {
+		sb.WriteString(kv[0])
+		sb.WriteString(": ")
+		sb.WriteString(kv[1])
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n[User Request]\n")
+	sb.WriteString(prompt)
+	return sb.String()
 }
