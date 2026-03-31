@@ -335,8 +335,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
                     // with assistant messages ("assistant message prefill"). Convert
                     // the partial assistant text to a user continuation message instead.
                     String finishReason = response.getFinishReason();
-                    boolean hitTokenLimit = "MAX_TOKENS".equals(finishReason)
-                            || "LENGTH".equals(finishReason);
+                    boolean hitTokenLimit = "MAX_TOKENS".equals(finishReason) || "LENGTH".equals(finishReason);
                     ChatMessage.Role msgRole = hitTokenLimit ? ChatMessage.Role.user : role;
                     String msgText = hitTokenLimit && text != null && !text.isBlank()
                             ? "You were saying:\n\n" + text + "\n\nPlease continue where you left off."
