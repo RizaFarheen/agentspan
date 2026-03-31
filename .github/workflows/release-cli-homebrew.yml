@@ -41,7 +41,7 @@ jobs:
       - name: Checkout Homebrew tap
         uses: actions/checkout@v4
         with:
-          repository: agentspan/homebrew-tap
+          repository: agentspan/homebrew-agentspan
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 
