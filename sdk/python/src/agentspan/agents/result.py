@@ -482,9 +482,9 @@ class AgentStream:
 
         # Fetch token usage from the server if a fetcher was provided
         token_usage = None
-        if self._token_fetcher and self.handle.workflow_id:
+        if self._token_fetcher and self.handle.execution_id:
             try:
-                token_usage = self._token_fetcher(self.handle.workflow_id)
+                token_usage = self._token_fetcher(self.handle.execution_id)
             except Exception:
                 pass  # token tracking is best-effort
 
@@ -604,9 +604,9 @@ def _build_result_from_events(
 
     # Fetch token usage from the server if a fetcher was provided
     token_usage = None
-    if token_fetcher and handle.workflow_id:
+    if token_fetcher and handle.execution_id:
         try:
-            token_usage = token_fetcher(handle.workflow_id)
+            token_usage = token_fetcher(handle.execution_id)
         except Exception:
             pass  # token tracking is best-effort
 
