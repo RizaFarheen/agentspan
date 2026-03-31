@@ -1,4 +1,4 @@
-name: Release
+name: Release Server + CLI Artifacts
 
 on:
   release:
@@ -6,13 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g. 0.0.10). Defaults to latest release tag."
-        required: false
+        description: "Version to release when run manually (e.g. 0.0.10)"
+        required: true
         type: string
 
 permissions:
   contents: write
-  id-token: write
   packages: write
 
 jobs:
@@ -60,57 +59,9 @@ jobs:
       version: ${{ needs.prepare.outputs.version }}
     secrets: inherit
 
-  cli-npm:
-    needs: [prepare]
-    uses: ./.github/workflows/release-cli-npm.yml
-    with:
-      version: ${{ needs.prepare.outputs.version }}
-    secrets: inherit
-
   cli-homebrew:
     needs: [prepare, cli-github]
     uses: ./.github/workflows/release-cli-homebrew.yml
-    with:
-      version: ${{ needs.prepare.outputs.version }}
-    secrets: inherit
-
-  # ── SDKs ─────────────────────────────────────────────────────────
-  python-sdk:
-    needs: [prepare]
-    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      contents: read
-      id-token: write
-    defaults:
-      run:
-        working-directory: sdk/python
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Update pyproject.toml version
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
-
-      - name: Install build tools
-        run: pip install build
-
-      - name: Build package
-        run: python -m build
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: sdk/python/dist/
-
-  js-sdk:
-    needs: [prepare]
-    uses: ./.github/workflows/release-js-sdk.yml
     with:
       version: ${{ needs.prepare.outputs.version }}
     secrets: inherit
