@@ -1,7 +1,9 @@
 # ─── Stage 1: Build the UI ────────────────────────────────────────────────────
 # Build context must be the repo root so both ui/ and server/ are accessible.
 #   docker build -f server/Dockerfile -t agentspan/server:latest .
-FROM node:22-alpine AS ui-builder
+# The UI output is static and architecture-independent, so build it on the
+# native build host rather than under per-target emulation in multi-arch builds.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS ui-builder
 
 WORKDIR /ui
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -17,7 +19,9 @@ ENV VITE_WF_SERVER=""
 RUN pnpm build
 
 # ─── Stage 2: Build the server (embed UI into static resources) ───────────────
-FROM eclipse-temurin:21-jdk AS builder
+# The Spring Boot jar is also architecture-independent, so keep this on the
+# native build host and only vary the final runtime image per target platform.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /build
 COPY server/build.gradle server/settings.gradle server/gradle.properties ./
