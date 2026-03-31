@@ -35,8 +35,11 @@ The durable runtime server that executes AI agents. Compiles agent definitions i
 ```bash
 cd server
 
-# Build the server with the latest UI embedded into src/main/resources/static
+# Build the server JAR using the checked-in embedded UI
 ./gradlew bootJar
+
+# Refresh the embedded UI and package it into the JAR
+./gradlew bootJar -PbuildUI=true
 
 # Run with default config (SQLite)
 java -jar build/libs/agentspan-runtime.jar
@@ -56,6 +59,8 @@ For container builds:
 ```bash
 docker build -f server/Dockerfile -t agentspan/server:latest .
 ```
+
+`bootJar` does not rebuild the UI by default. That keeps local Java builds fast for developers. Release packaging that needs the latest embedded frontend should use `-PbuildUI=true`, or run `./gradlew syncUiStatic` explicitly before building.
 
 ### Set LLM provider API keys
 
@@ -339,6 +344,9 @@ The server is a Spring Boot application (Java 21) built on top of [Conductor](ht
 
 ```bash
 ./gradlew bootJar
+
+# Or refresh the embedded UI before packaging
+./gradlew bootJar -PbuildUI=true
 ```
 
 ### Run tests

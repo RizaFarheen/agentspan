@@ -37,7 +37,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build bootJar
-        run: ./gradlew bootJar
+        run: ./gradlew bootJar -PbuildUI=true
 
       - name: Prepare release asset
         run: cp build/libs/agentspan-runtime.jar ../agentspan-server-${{ inputs.version }}.jar

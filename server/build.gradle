@@ -8,6 +8,11 @@ plugins {
 def uiDir = file("${projectDir}/../ui")
 def uiDistDir = file("${uiDir}/dist")
 def serverStaticDir = file("${projectDir}/src/main/resources/static")
+def buildUiProperty = project.findProperty('buildUI')
+def buildUiEnabled = buildUiProperty != null && (
+    buildUiProperty.toString().trim().isEmpty() ||
+    buildUiProperty.toString().toBoolean()
+)
 def shellCommand = { String command ->
     org.gradle.internal.os.OperatingSystem.current().isWindows()
         ? ['cmd', '/c', command]
@@ -213,7 +218,7 @@ tasks.register('installUiDependencies', Exec) {
 
 tasks.register('buildUi', Exec) {
     group = 'build'
-    description = 'Build the latest UI bundle for the embedded server UI'
+    description = 'Build the latest UI bundle for the embedded server UI (opt-in via -PbuildUI for bootJar)'
     onlyIf { uiDir.exists() }
     dependsOn 'installUiDependencies'
     workingDir uiDir
@@ -247,6 +252,8 @@ tasks.named('processResources') {
 }
 
 tasks.named('bootJar') {
-    dependsOn 'syncUiStatic'
+    if (buildUiEnabled) {
+        dependsOn 'syncUiStatic'
+    }
     archiveFileName = 'agentspan-runtime.jar'
 }
