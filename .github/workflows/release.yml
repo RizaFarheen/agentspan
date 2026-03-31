@@ -77,10 +77,36 @@ jobs:
   # ── SDKs ─────────────────────────────────────────────────────────
   python-sdk:
     needs: [prepare]
-    uses: ./.github/workflows/release-python-sdk.yml
-    with:
-      version: ${{ needs.prepare.outputs.version }}
-    secrets: inherit
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Update pyproject.toml version
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/python/dist/
 
   js-sdk:
     needs: [prepare]
