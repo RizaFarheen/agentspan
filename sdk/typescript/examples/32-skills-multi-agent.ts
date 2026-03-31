@@ -28,6 +28,9 @@ const conductorSkill = skill('~/.claude/skills/conductor', {
 // ── Shared tools ───────────────────────────────────────────────────
 const runTests = tool(
   async (args: { code: string }) => {
+    if (!args.code) {
+      return { result: 'ERROR: no code provided to test' };
+    }
     if (args.code.includes('SELECT *') && args.code.includes("f'")) {
       return { result: 'FAIL: test_sql_injection detected SQL injection vulnerability' };
     }
@@ -190,7 +193,7 @@ async function exampleParallel() {
 async function exampleOrchestrator() {
   const techLead = new Agent({
     name: 'tech_lead',
-    model: secondaryLlmModel,
+    model: llmModel,
     instructions:
       'You are a tech lead managing a review and deployment pipeline.\n\n' +
       '1. Run code review using dg tool\n' +

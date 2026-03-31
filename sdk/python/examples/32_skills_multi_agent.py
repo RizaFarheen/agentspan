@@ -230,6 +230,8 @@ def example_parallel():
 @tool
 def run_tests(code: str) -> str:
     """Run unit tests on the provided code (simulated)."""
+    if not code:
+        return "ERROR: no code provided to test"
     if "SELECT *" in code and "f'" in code:
         return "FAIL: test_sql_injection detected SQL injection vulnerability"
     if "subprocess" in code and "shell=True" in code:
@@ -239,7 +241,7 @@ def run_tests(code: str) -> str:
 
 tech_lead = Agent(
     name="tech_lead",
-    model=settings.secondary_llm_model,
+    model=settings.llm_model,
     instructions=(
         "You are a tech lead managing a code review and deployment pipeline.\n\n"
         "Your workflow:\n"
