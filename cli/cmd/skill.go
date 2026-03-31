@@ -4,10 +4,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/agentspan/agentspan/cli/client"
@@ -102,10 +105,16 @@ func runSkillRun(cmd *cobra.Command, args []string) error {
 	cfg := getConfig()
 	c := newClient(cfg)
 
+	// Start workers for read_skill_file and script tools BEFORE the execution
+	config, _ := payload["config"].(map[string]interface{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	startSkillWorkers(ctx, c, skillName, skillPath, config)
+
 	// Framework agents use top-level "framework" + "rawConfig", not "agentConfig"
 	startPayload := map[string]interface{}{
 		"framework": "skill",
-		"rawConfig": payload["config"],
+		"rawConfig": config,
 		"prompt":    prompt,
 	}
 
@@ -116,13 +125,16 @@ func runSkillRun(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Skill: %s (Execution: %s)\n", resp.AgentName, resp.ExecutionID)
 
+	var runErr error
 	if skillStream {
 		fmt.Println()
-		return streamExecution(c, resp.ExecutionID, "")
+		runErr = streamExecution(c, resp.ExecutionID, "")
+	} else {
+		runErr = pollExecution(c, resp.ExecutionID, time.Duration(skillTimeout)*time.Second)
 	}
 
-	// Poll for completion
-	return pollExecution(c, resp.ExecutionID, time.Duration(skillTimeout)*time.Second)
+	cancel() // stop workers
+	return runErr
 }
 
 // ── Load ────────────────────────────────────────────────────────────────────
@@ -252,6 +264,140 @@ func stripNulls(v interface{}) interface{} {
 	default:
 		return v
 	}
+}
+
+// ── Skill Workers ───────────────────────────────────────────────────────────
+
+// startSkillWorkers launches background goroutines that poll for and execute
+// skill worker tasks (read_skill_file and script tools). Workers run until
+// the context is cancelled.
+func startSkillWorkers(ctx context.Context, c *client.Client, skillName, skillPath string, config map[string]interface{}) {
+	absPath, _ := filepath.Abs(skillPath)
+
+	// Collect resource files for read_skill_file validation
+	resourceFiles := make(map[string]bool)
+	if rf, ok := config["resourceFiles"].([]interface{}); ok {
+		for _, f := range rf {
+			if s, ok := f.(string); ok {
+				resourceFiles[s] = true
+			}
+		}
+	}
+	// Also allow root files (non-agent, non-SKILL.md)
+	entries, _ := os.ReadDir(absPath)
+	for _, e := range entries {
+		if !e.IsDir() && e.Name() != "SKILL.md" && !strings.HasSuffix(e.Name(), "-agent.md") {
+			resourceFiles[e.Name()] = true
+		}
+	}
+
+	// Worker 1: read_skill_file
+	taskName := skillName + "__read_skill_file"
+	go pollWorker(ctx, c, taskName, func(input map[string]interface{}) (interface{}, error) {
+		path, _ := input["path"].(string)
+		if path == "" {
+			return nil, fmt.Errorf("missing 'path' parameter")
+		}
+		if !resourceFiles[path] {
+			available := make([]string, 0, len(resourceFiles))
+			for k := range resourceFiles {
+				available = append(available, k)
+			}
+			return fmt.Sprintf("ERROR: '%s' not found. Available: %v", path, available), nil
+		}
+		fullPath := filepath.Join(absPath, path)
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			return fmt.Sprintf("ERROR: failed to read '%s': %v", path, err), nil
+		}
+		return string(data), nil
+	})
+
+	// Worker 2+: script tools
+	if scripts, ok := config["scripts"].(map[string]interface{}); ok {
+		for scriptName, scriptInfo := range scripts {
+			sName := skillName + "__" + scriptName
+			info, _ := scriptInfo.(map[string]interface{})
+			filename, _ := info["filename"].(string)
+			language, _ := info["language"].(string)
+			scriptPath := filepath.Join(absPath, "scripts", filename)
+
+			go pollWorker(ctx, c, sName, func(input map[string]interface{}) (interface{}, error) {
+				command, _ := input["command"].(string)
+				return executeScript(scriptPath, language, command)
+			})
+		}
+	}
+}
+
+// pollWorker polls for tasks of the given type and executes the handler.
+func pollWorker(ctx context.Context, c *client.Client, taskType string, handler func(map[string]interface{}) (interface{}, error)) {
+	var once sync.Once
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		task, err := c.PollTask(taskType)
+		if err != nil || task == nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		once.Do(func() {
+			color.HiBlack("  Worker registered: %s", taskType)
+		})
+
+		taskID, _ := task["taskId"].(string)
+		workflowID, _ := task["workflowInstanceId"].(string)
+		if taskID == "" {
+			continue
+		}
+
+		inputData, _ := task["inputData"].(map[string]interface{})
+		output, execErr := handler(inputData)
+
+		result := map[string]interface{}{
+			"taskId":             taskID,
+			"workflowInstanceId": workflowID,
+			"workerId":           "agentspan-cli",
+			"status":             "COMPLETED",
+			"outputData":         map[string]interface{}{"result": output},
+		}
+		if execErr != nil {
+			result["status"] = "FAILED"
+			result["reasonForIncompletion"] = execErr.Error()
+		}
+
+		if err := c.UpdateTask(result); err != nil {
+			color.Red("  Worker error (%s): %v", taskType, err)
+		}
+	}
+}
+
+// executeScript runs a script file with the given language and command args.
+func executeScript(scriptPath, language, command string) (interface{}, error) {
+	var cmd *exec.Cmd
+	switch language {
+	case "python":
+		cmd = exec.Command("python3", scriptPath, command)
+	case "node":
+		cmd = exec.Command("node", scriptPath, command)
+	case "ruby":
+		cmd = exec.Command("ruby", scriptPath, command)
+	case "go":
+		cmd = exec.Command("go", "run", scriptPath, command)
+	default: // bash
+		cmd = exec.Command("bash", scriptPath, command)
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("script failed: %w\n%s", err, string(out))
+	}
+	return string(out), nil
 }
 
 // ── Skill Directory Reading ─────────────────────────────────────────────────

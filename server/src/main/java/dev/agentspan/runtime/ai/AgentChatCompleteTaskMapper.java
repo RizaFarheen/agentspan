@@ -123,6 +123,7 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
             }
             getHistory(workflowModel, taskModel, chatCompletion);
             condenseIfNeeded(chatCompletion, taskModel, workflowModel);
+            ensureEndsWithUserMessage(chatCompletion, taskModel);
             updateTaskModel(chatCompletion, taskModel);
         } catch (Exception e) {
             if (e instanceof TerminateWorkflowException) {
@@ -505,6 +506,28 @@ public class AgentChatCompleteTaskMapper extends AIModelTaskMapper<ChatCompletio
         }
 
         return (int) (totalChars / CHARS_PER_TOKEN);
+    }
+
+    /**
+     * Ensure the conversation ends with a user message. Claude/Anthropic models reject
+     * conversations ending with an assistant message ("assistant message prefill").
+     * This happens after a MAX_TOKENS finish where the partial assistant text is appended.
+     * Adds a "Please continue." user message if needed.
+     */
+    private void ensureEndsWithUserMessage(ChatCompletion chatCompletion, TaskModel task) {
+        List<ChatMessage> messages = chatCompletion.getMessages();
+        if (messages == null || messages.isEmpty()) return;
+
+        ChatMessage last = messages.get(messages.size() - 1);
+        ChatMessage.Role lastRole = last.getRole();
+        // Claude models reject conversations ending with assistant messages.
+        // Also check tool_call role since that's also an assistant-side message.
+        if (lastRole == ChatMessage.Role.assistant
+                || lastRole == ChatMessage.Role.tool_call
+                || "assistant".equalsIgnoreCase(String.valueOf(lastRole))) {
+            log.info("Appending user continuation message (last role was {})", lastRole);
+            messages.add(new ChatMessage(ChatMessage.Role.user, "Please continue where you left off."));
+        }
     }
 
     /**

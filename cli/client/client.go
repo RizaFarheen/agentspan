@@ -127,6 +127,33 @@ func (c *Client) StartFramework(payload map[string]interface{}) (*StartResponse,
 	return &result, nil
 }
 
+// PollTask polls for a task of the given type. Returns nil if no task available.
+func (c *Client) PollTask(taskType string) (map[string]interface{}, error) {
+	resp, err := c.doRequest("GET", "/api/tasks/poll/"+url.PathEscape(taskType), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
+		return nil, nil // no task available
+	}
+	var task map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
+		return nil, nil // empty body
+	}
+	return task, nil
+}
+
+// UpdateTask reports the result of a completed task.
+func (c *Client) UpdateTask(result map[string]interface{}) error {
+	resp, err := c.doRequest("POST", "/api/tasks", result)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
 // Compile compiles an agent config to an execution plan
 func (c *Client) Compile(agentConfig map[string]interface{}) (map[string]interface{}, error) {
 	body := map[string]interface{}{"agentConfig": agentConfig}
