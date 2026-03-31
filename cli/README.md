@@ -29,7 +29,7 @@ Command-line interface for managing the Agentspan runtime — start servers, run
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew install agentspan/agentspan/agentspan
+brew install agentspan/tap/agentspan
 ```
 
 ### npm

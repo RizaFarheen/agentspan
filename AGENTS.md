@@ -315,7 +315,7 @@ Published via three channels (triggered by `cli-v*` git tags):
 
 1. **GitHub Releases** — 6 platform binaries (`agentspan_{os}_{arch}`)
 2. **npm** (`@agentspan-ai/agentspan`) — JS wrapper downloads Go binary on `postinstall`
-3. **Homebrew** (`agentspan/homebrew-agentspan` tap) — macOS/Linux formula
+3. **Homebrew** (`agentspan/homebrew-tap` tap) — macOS/Linux formula
 
 Release workflow: `.github/workflows/release-cli.yml`
 
