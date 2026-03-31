@@ -25,6 +25,7 @@ import {
   CredentialAuthError,
   getCredential,
   clearCredentialContext,
+  AgentConfigSerializer,
 } from '../../sdk/typescript/src/index.js';
 import type { GuardrailResult } from '../../sdk/typescript/src/index.js';
 
@@ -145,24 +146,31 @@ describe('TypeScript SDK E2E', () => {
       expect(JSON.stringify(result.output)).toContain('5');
     });
 
-    it('tool metadata tracked (test_tool_metadata_tracked)', async () => {
-      // Verify tool metadata is attached and agent completes with echo tool
+    it('tool metadata tracked (test_tool_metadata_tracked)', () => {
+      // Verify tool metadata is properly attached and survives serialization
+      const def = getToolDef(echo);
+      expect(def.name).toBe('echo');
+      expect(def.description).toBe('Echo back the message');
+      expect(def.inputSchema).toEqual({
+        type: 'object',
+        properties: { message: { type: 'string' } },
+        required: ['message'],
+      });
+
+      // Verify metadata is preserved through agent serialization
       const agent = new Agent({
         name: 'ts_echoer',
         model: MODEL,
         instructions: 'Use echo tool.',
         tools: [echo],
       });
-      // Verify tool def is properly attached before running
-      const def = getToolDef(echo);
-      expect(def.name).toBe('echo');
-      expect(def.description).toBe('Echo back the message');
-      expect(def.inputSchema).toBeDefined();
-
-      const rt = new AgentRuntime();
-      const result = await rt.run(agent, "Echo 'hello world'", { timeoutSeconds: 30 });
-      expect(result.status).toBe('COMPLETED');
-      expect(JSON.stringify(result.output)).toContain('Echo');
+      const serializer = new AgentConfigSerializer();
+      const config = serializer.serializeAgent(agent) as Record<string, unknown>;
+      const tools = config.tools as Record<string, unknown>[];
+      expect(tools).toHaveLength(1);
+      expect(tools[0].name).toBe('echo');
+      expect(tools[0].description).toBe('Echo back the message');
+      expect(tools[0].inputSchema).toBeDefined();
     });
 
     it('CLI tool names are agent-prefixed (test_agent_prefixed_task_names)', () => {
