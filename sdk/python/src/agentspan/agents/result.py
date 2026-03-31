@@ -350,6 +350,9 @@ class EventType(str, Enum):
     DONE = "done"
     GUARDRAIL_PASS = "guardrail_pass"
     GUARDRAIL_FAIL = "guardrail_fail"
+    SIGNAL_RECEIVED = "signal_received"
+    SIGNAL_ACCEPTED = "signal_accepted"
+    SIGNAL_REJECTED = "signal_rejected"
 
 
 @dataclass

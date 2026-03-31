@@ -85,6 +85,9 @@ from agentspan.agents.handoff import HandoffCondition, OnCondition, OnTextMentio
 # Memory
 from agentspan.agents.memory import ConversationMemory
 
+# Signal types
+from agentspan.agents.signal import SignalReceipt, SignalStatus
+
 # Result types
 from agentspan.agents.result import (
     AgentEvent,
@@ -312,4 +315,7 @@ __all__ = [
     "skill",
     "load_skills",
     "SkillLoadError",
+    # Signal types
+    "SignalReceipt",
+    "SignalStatus",
 ]
