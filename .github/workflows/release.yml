@@ -72,7 +72,6 @@ jobs:
     uses: ./.github/workflows/release-cli-homebrew.yml
     with:
       version: ${{ needs.prepare.outputs.version }}
-      tag: v${{ needs.prepare.outputs.version }}
     secrets: inherit
 
   # ── SDKs ─────────────────────────────────────────────────────────

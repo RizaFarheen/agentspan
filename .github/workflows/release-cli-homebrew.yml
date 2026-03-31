@@ -7,16 +7,9 @@ on:
         description: "Version to publish (e.g. 1.0.0)"
         required: true
         type: string
-      tag:
-        description: "GitHub release tag to download binaries from (e.g. v1.0.0)"
-        required: true
-        type: string
   workflow_call:
     inputs:
       version:
-        required: true
-        type: string
-      tag:
         required: true
         type: string
 
@@ -31,7 +24,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ inputs.tag }}"
+          TAG="v${{ inputs.version }}"
           REPO="${{ github.repository }}"
           mkdir -p dist
           for binary in agentspan_darwin_amd64 agentspan_darwin_arm64 agentspan_linux_amd64 agentspan_linux_arm64; do
