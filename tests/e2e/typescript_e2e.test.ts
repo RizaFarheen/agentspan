@@ -140,7 +140,7 @@ describe('TypeScript SDK E2E', () => {
         tools: [addNumbers],
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, 'What is 2 + 3?', { timeout: 60000 });
+      const result = await rt.run(agent, 'What is 2 + 3?', { timeoutSeconds: 60 });
       expect(result.status).toBe('COMPLETED');
       expect(JSON.stringify(result.output)).toContain('5');
     });
@@ -153,7 +153,7 @@ describe('TypeScript SDK E2E', () => {
         tools: [echo],
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, "Echo 'hello world'", { timeout: 60000 });
+      const result = await rt.run(agent, "Echo 'hello world'", { timeoutSeconds: 60 });
       expect(result.status).toBe('COMPLETED');
     });
 
@@ -195,7 +195,7 @@ describe('TypeScript SDK E2E', () => {
       });
       const pipeline = step1.pipe(step2);
       const rt = new AgentRuntime();
-      const result = await rt.run(pipeline, 'Go', { timeout: 120000 });
+      const result = await rt.run(pipeline, 'Go', { timeoutSeconds: 120 });
       expect(result.status).toBe('COMPLETED');
     });
 
@@ -258,7 +258,7 @@ describe('TypeScript SDK E2E', () => {
       const result = await rt.run(
         agent,
         'Show me the profile for customer CUST-7.',
-        { timeout: 60000 },
+        { timeoutSeconds: 60 },
       );
       // Should complete (agent retries and eventually omits the email)
       expect(['COMPLETED', 'FAILED']).toContain(result.status);
@@ -283,7 +283,7 @@ describe('TypeScript SDK E2E', () => {
       const result = await rt.run(
         agent,
         'Look up customer CUST-7 and give me their full profile.',
-        { timeout: 120000 },
+        { timeoutSeconds: 120 },
       );
       // Agent should complete — either retried successfully or exhausted retries
       expect(['COMPLETED', 'FAILED']).toContain(result.status);
@@ -303,7 +303,7 @@ describe('TypeScript SDK E2E', () => {
         ],
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, 'Greet me.', { timeout: 60000 });
+      const result = await rt.run(agent, 'Greet me.', { timeoutSeconds: 60 });
       // on_fail=raise should cause terminal failure
       expect(['FAILED', 'TERMINATED']).toContain(result.status);
     });
@@ -342,7 +342,7 @@ describe('TypeScript SDK E2E', () => {
         termination: new TextMention('TASK_COMPLETE'),
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, 'What is 2+2?', { timeout: 60000 });
+      const result = await rt.run(agent, 'What is 2+2?', { timeoutSeconds: 60 });
       expect(result.status).toBe('COMPLETED');
     });
 
@@ -356,7 +356,7 @@ describe('TypeScript SDK E2E', () => {
         termination: new MaxMessage(5),
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, 'Tell me about AI.', { timeout: 60000 });
+      const result = await rt.run(agent, 'Tell me about AI.', { timeoutSeconds: 60 });
       // Should complete — termination condition fires after 5 messages
       expect(result.status).toBe('COMPLETED');
     });
@@ -382,7 +382,7 @@ describe('TypeScript SDK E2E', () => {
         callbacks: [new TrackingHandler()],
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, 'Hi', { timeout: 60000 });
+      const result = await rt.run(agent, 'Hi', { timeoutSeconds: 60 });
       expect(result.status).toBe('COMPLETED');
     });
 
@@ -403,7 +403,7 @@ describe('TypeScript SDK E2E', () => {
         callbacks: [new LifecycleHandler()],
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, 'Go', { timeout: 60000 });
+      const result = await rt.run(agent, 'Go', { timeoutSeconds: 60 });
       expect(result.status).toBe('COMPLETED');
     });
   });
@@ -431,7 +431,7 @@ describe('TypeScript SDK E2E', () => {
       const result = await rt.run(
         pipeline,
         'Everything is fine, nothing needs fixing.',
-        { timeout: 60000 },
+        { timeoutSeconds: 60 },
       );
       expect(result.status).toBe('COMPLETED');
     });
@@ -456,7 +456,7 @@ describe('TypeScript SDK E2E', () => {
       const result = await rt.run(
         pipeline,
         'The server is returning 500 errors on the /api/users endpoint.',
-        { timeout: 60000 },
+        { timeoutSeconds: 60 },
       );
       expect(result.status).toBe('COMPLETED');
     });
@@ -489,7 +489,7 @@ describe('TypeScript SDK E2E', () => {
       const result = await rt.run(
         support,
         'What is the balance on my account?',
-        { timeout: 60000 },
+        { timeoutSeconds: 60 },
       );
       expect(result.status).toBe('COMPLETED');
     });
@@ -512,7 +512,7 @@ describe('TypeScript SDK E2E', () => {
         strategy: 'parallel',
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(team, 'Remote work', { timeout: 60000 });
+      const result = await rt.run(team, 'Remote work', { timeoutSeconds: 60 });
       expect(result.status).toBe('COMPLETED');
     });
 
@@ -544,7 +544,7 @@ describe('TypeScript SDK E2E', () => {
       const result = await rt.run(
         team,
         'Write a Python function to reverse a string.',
-        { timeout: 60000 },
+        { timeoutSeconds: 60 },
       );
       expect(result.status).toBe('COMPLETED');
     });
@@ -580,7 +580,7 @@ describe('TypeScript SDK E2E', () => {
       const result = await rt.run(
         agent,
         'Just say hello, do not use any tools.',
-        { timeout: 60000 },
+        { timeoutSeconds: 60 },
       );
       // Agent should complete — it doesn't call the tool so credential is never resolved
       expect(result.status).toBe('COMPLETED');
@@ -620,7 +620,7 @@ describe('TypeScript SDK E2E', () => {
         instructions: 'Say hello.',
       });
       const rt = new AgentRuntime();
-      const result = await rt.run(agent, 'Hello', { timeout: 60000 });
+      const result = await rt.run(agent, 'Hello', { timeoutSeconds: 60 });
       expect(['FAILED', 'TERMINATED', 'FAILED_WITH_TERMINAL_ERROR']).toContain(
         result.status,
       );
