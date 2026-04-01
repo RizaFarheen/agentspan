@@ -30,7 +30,7 @@ Add to ``server/src/main/resources/application.properties`` and restart::
     agentspan.default-context-window=10000
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY
 """
 
@@ -349,16 +349,16 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.langgraph.44_context_condensation
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        # runtime.deploy(graph)
+        # runtime.serve(graph)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # graph,
-        # "Produce comprehensive analyses for each of the following 25 technology domains "
-        # "by calling deep_analyst once per domain, then summarise the cross-domain trends. "
-        # "Domains: " + ", ".join(DOMAINS) + ".",
-        # )
+        # Direct run for local development:
+        result = runtime.run(
+        graph,
+        "Produce comprehensive analyses for each of the following 25 technology domains "
+        "by calling deep_analyst once per domain, then summarise the cross-domain trends. "
+        "Domains: " + ", ".join(DOMAINS) + ".",
+        )
 
 
     print(f"\nStatus: {result.status}")

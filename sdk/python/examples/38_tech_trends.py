@@ -315,17 +315,14 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.38_tech_trends
-        runtime.deploy(pipeline)
-        runtime.serve(pipeline)
+        # runtime.deploy(pipeline)
+        # runtime.serve(pipeline)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        #     pipeline,
-        #     (
-        #         "Compare Python and Rust: which has stronger developer mindshare and "
-        #         "ecosystem momentum right now? Use real HackerNews data and package "
-        #         "download statistics to support your analysis."
-        #     ),
-        # )
-        # result.print_result()
-
+        # Direct run for local development:
+        result = runtime.run(
+            pipeline,
+            "Compare Python and Rust: which has stronger developer mindshare and "
+            "ecosystem momentum right now? Use real HackerNews data and package "
+            "download statistics to support your analysis.",
+        )
+        result.print_result()

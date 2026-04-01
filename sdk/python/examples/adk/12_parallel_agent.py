@@ -57,13 +57,13 @@ def main():
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.adk.12_parallel_agent
-        runtime.deploy(parallel_analysis)
-        runtime.serve(parallel_analysis)
+        # runtime.deploy(parallel_analysis)
+        # runtime.serve(parallel_analysis)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(parallel_analysis, "Analyze Tesla's electric vehicle business")
-        # print(f"Status: {result.status}")
-        # print(f"Output: {result.output}")
+        # Direct run for local development:
+        result = runtime.run(parallel_analysis, "Analyze Tesla's electric vehicle business")
+        print(f"Status: {result.status}")
+        result.print_result()
 
 
 

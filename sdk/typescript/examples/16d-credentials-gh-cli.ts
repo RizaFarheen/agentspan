@@ -17,7 +17,7 @@
  *   - GH_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 import { llmModel } from './settings.js';
 
 export const agent = new Agent({
@@ -40,20 +40,19 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(agent);
-    await runtime.serve(agent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(agent);
+    // await runtime.serve(agent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // const result = await runtime.run(
-    // agent,
-    // "List the 5 most recently updated repos for the 'agentspan'",
-    // );
-    // result.printResult();
+    const result = await runtime.run(
+    agent,
+    "List the 5 most recently updated repos for the 'agentspan'",
+    );
+    result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('16d-credentials-gh-cli.ts') || process.argv[1]?.endsWith('16d-credentials-gh-cli.js')) {

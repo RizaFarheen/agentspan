@@ -93,17 +93,17 @@ def main():
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.adk.16_customer_service
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        # runtime.deploy(agent)
+        # runtime.serve(agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # agent,
-        # "I'm customer ACC-001. Can you check my billing history and tell me my current plan? "
-        # "I'm thinking about downgrading to the basic plan.",
-        # )
-        # print(f"Status: {result.status}")
-        # print(f"Output: {result.output}")
+        # Direct run for local development:
+        result = runtime.run(
+        agent,
+        "I'm customer ACC-001. Can you check my billing history and tell me my current plan? "
+        "I'm thinking about downgrading to the basic plan.",
+        )
+        print(f"Status: {result.status}")
+        result.print_result()
 
 
 

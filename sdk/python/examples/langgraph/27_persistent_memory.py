@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: multi-turn chatbot that remembers earlier exchanges
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -58,20 +58,20 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.langgraph.27_persistent_memory
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        # runtime.deploy(graph)
+        # runtime.serve(graph)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("=== Alice's conversation ===")
-        # for msg in ["Hi, my name is Alice!", "What's my name?", "What did I just tell you?"]:
-        # result = runtime.run(graph, msg, session_id="alice")
-        # print(f"Alice: {msg}")
-        # result.print_result()
-        # print()
+        # Direct run for local development:
+        print("=== Alice's conversation ===")
+        for msg in ["Hi, my name is Alice!", "What's my name?", "What did I just tell you?"]:
+            result = runtime.run(graph, msg, session_id="alice")
+            print(f"Alice: {msg}")
+            result.print_result()
+            print()
 
-        # print("=== Bob's conversation (separate session) ===")
-        # for msg in ["I'm Bob. I love hiking.", "What hobby did I mention?"]:
-        # result = runtime.run(graph, msg, session_id="bob")
-        # print(f"Bob:  {msg}")
-        # result.print_result()
-        # print()
+        print("=== Bob's conversation (separate session) ===")
+        for msg in ["I'm Bob. I love hiking.", "What hobby did I mention?"]:
+            result = runtime.run(graph, msg, session_id="bob")
+            print(f"Bob:  {msg}")
+            result.print_result()
+            print()

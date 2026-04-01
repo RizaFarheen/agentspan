@@ -11,7 +11,7 @@
  *
  * Requirements:
  *   - Conductor server with LLM support
- *   - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+ *   - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
@@ -121,24 +121,23 @@ async function main() {
   try {
     // Deploy to server. CLI alternative (recommended for CI/CD):
     //   agentspan deploy <module>
-    await runtime.deploy(petAgent);
-    await runtime.serve(petAgent);
-
-    // Quick test: uncomment below (and comment out serve) to run directly.
+    // await runtime.deploy(petAgent);
+    // await runtime.serve(petAgent);
+    // Direct run for local development:
     // const runtime = new AgentRuntime();
     // try {
-    // // Example 1: Petstore
-    // console.log('=== Petstore API ===');
-    // const result = await runtime.run(petAgent, "List all available pets with status 'available'");
-    // result.printResult();
+    // Example 1: Petstore
+    console.log('=== Petstore API ===');
+    const result = await runtime.run(petAgent, "List all available pets with status 'available'");
+    result.printResult();
 
-    // // Example 3: Mixed tools
-    // console.log('\n=== Mixed Tools ===');
-    // const result2 = await runtime.run(multiToolAgent, "What's sqrt(144)? Also find pets named 'doggie'.");
-    // result2.printResult();
+    // Example 3: Mixed tools
+    console.log('\n=== Mixed Tools ===');
+    const result2 = await runtime.run(multiToolAgent, "What's sqrt(144)? Also find pets named 'doggie'.");
+    result2.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('71-api-tool.ts') || process.argv[1]?.endsWith('71-api-tool.js')) {

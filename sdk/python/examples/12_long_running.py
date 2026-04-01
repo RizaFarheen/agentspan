@@ -9,7 +9,7 @@ monitored from the UI or via the API.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -34,10 +34,32 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.12_long_running
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        # runtime.deploy(agent)
+        # runtime.serve(agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
+        result = runtime.run(agent, "What are the key metrics to track for a SaaS product?")
+
+        result.print_result()
+
+
+        # Production pattern:
+
+        # 1. Deploy once during CI/CD:
+
+        # runtime.deploy(agent)
+
+        # CLI alternative:
+
+        # agentspan deploy --package examples.12_long_running
+
+        #
+
+        # 2. In a separate long-lived worker process:
+
+        # runtime.serve(agent)
+
+
+        # Async handle alternative:
         # handle = runtime.start(agent, "What are the key metrics to track for a SaaS product?")
         # print(f"Agent started: {handle.execution_id}")
 
@@ -51,5 +73,5 @@ if __name__ == "__main__":
         #     time.sleep(1)
         # else:
         #     print("\nAgent still running. Check the Conductor UI:")
-        #     print(f"  http://localhost:8080/execution/{handle.execution_id}")
+        #     print(f"  http://localhost:6767/execution/{handle.execution_id}")
 
