@@ -126,12 +126,15 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.58_scatter_gather
-        # runtime.deploy(coordinator)
-        # runtime.serve(coordinator)
-
-        # Direct run for local development:
         result = runtime.run(coordinator, prompt)
         print("--- Coordinator Result ---")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.58_scatter_gather
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)

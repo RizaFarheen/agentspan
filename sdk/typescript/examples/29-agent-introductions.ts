@@ -72,19 +72,21 @@ export const designReview = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(designReview);
-    // await runtime.serve(designReview);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     designReview,
     'We need to design a new user authentication system for our SaaS platform. ' +
     'Should we use OAuth 2.0, SAML, or build our own JWT-based system?',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(designReview);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents design_review
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(designReview);
   } finally {
     await runtime.shutdown();
   }

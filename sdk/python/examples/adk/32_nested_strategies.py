@@ -66,14 +66,17 @@ pipeline = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.32_nested_strategies
-        # runtime.deploy(pipeline)
-        # runtime.serve(pipeline)
-
-        # Direct run for local development:
         result = runtime.run(
         pipeline,
         "Launching an AI-powered healthcare diagnostics tool in the US",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.32_nested_strategies
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(pipeline)

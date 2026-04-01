@@ -116,13 +116,6 @@ const SAMPLE_IMAGE_2 = 'https://orkes.io/icons/hero-section-workflow_updated.png
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(visionAgent);
-    // await runtime.serve(visionAgent);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     // --- 1. Single image analysis ---
     console.log('=== Single Image Analysis ===');
     const result1 = await runtime.run(
@@ -158,6 +151,15 @@ async function main() {
     { media: [SAMPLE_IMAGE_2] },
     );
     result4.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(visionAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents vision_analyst
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(visionAgent);
   } finally {
     await runtime.shutdown();
   }

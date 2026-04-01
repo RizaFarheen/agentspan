@@ -114,11 +114,6 @@ const prompt =
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(codingTeam);
-    // await runtime.serve(codingTeam);
-    // Direct run for local development:
     console.log('='.repeat(60));
     console.log('  GitHub Coding Agent (Simplified)');
     console.log(`  Repo: ${REPO}`);
@@ -127,8 +122,6 @@ async function main() {
     console.log('  Tools: built-in code execution (any language)');
     console.log('='.repeat(60));
     console.log(`\nPrompt: ${prompt}\n`);
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(codingTeam, prompt);
 
     const output = result.output;
@@ -147,6 +140,15 @@ async function main() {
 
     console.log(`\nFinish reason: ${result.finishReason}`);
     console.log(`Execution ID: ${result.executionId}`);
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(codingTeam);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents coding_team
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(codingTeam);
   } finally {
     await runtime.shutdown();
   }

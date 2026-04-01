@@ -72,12 +72,6 @@ analysis = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.65_parallel_with_tools
-        # runtime.deploy(analysis)
-        # runtime.serve(analysis)
-
-        # Direct run for local development:
         result = runtime.run(
             analysis,
             "Check account ACC-200 balance and look up order ORD-300 status.",
@@ -96,4 +90,13 @@ if __name__ == "__main__":
             checks.append("[WARN] Expected order status in output")
         for c in checks:
             print(c)
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(analysis)
+        # CLI alternative:
+        # agentspan deploy --package examples.65_parallel_with_tools
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(analysis)
 

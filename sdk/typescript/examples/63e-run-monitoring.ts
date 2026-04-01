@@ -21,7 +21,7 @@ if (process.argv[1]?.endsWith('63e-run-monitoring.ts') || process.argv[1]?.endsW
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(monitoringAgent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents monitoring
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(monitoringAgent);

@@ -121,16 +121,19 @@ pipeline = assistant >> safety_checker
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.44_safety_guardrails
-        # runtime.deploy(pipeline)
-        # runtime.serve(pipeline)
-
-        # Direct run for local development:
         result = runtime.run(
             pipeline,
             "What are the contact details for our support team? "
             "Include email support@company.com and phone 555-123-4567.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.44_safety_guardrails
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(pipeline)
 

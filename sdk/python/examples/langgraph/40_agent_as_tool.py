@@ -117,21 +117,18 @@ orch_builder.add_edge("tools", "orchestrator")
 graph = orch_builder.compile(name="orchestrator_with_subagents")
 
 if __name__ == "__main__":
-    queries = [
-        "What is 15% of 847, rounded to the nearest whole number?",
-        "Who invented the World Wide Web and in what year?",
-        "Improve this sentence: 'The meeting was went not good and people was unhappy.'",
-    ]
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.40_agent_as_tool
-        # runtime.deploy(graph)
-        # runtime.serve(graph)
-
-        # Direct run for local development:
         for query in queries:
             print(f"\nQuery: {query}")
             result = runtime.run(graph, query)
             result.print_result()
             print("-" * 60)
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.40_agent_as_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

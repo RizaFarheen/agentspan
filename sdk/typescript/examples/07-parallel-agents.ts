@@ -52,18 +52,20 @@ export const analysis = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(analysis);
-    // await runtime.serve(analysis);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     analysis,
     'Launching an AI-powered healthcare diagnostic tool in the US market',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(analysis);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents analysis
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(analysis);
   } finally {
     await runtime.shutdown();
   }

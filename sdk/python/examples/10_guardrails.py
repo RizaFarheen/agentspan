@@ -109,12 +109,6 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.10_guardrails
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
-        # Direct run for local development:
         # This prompt triggers both tools:
         #   1. get_order_status("ORD-42")   → safe data, passes guardrail
         #   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
@@ -130,4 +124,13 @@ if __name__ == "__main__":
             print("[WARN] PII leaked through the guardrail!")
         else:
             print("[OK] PII was redacted from the final output.")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.10_guardrails
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

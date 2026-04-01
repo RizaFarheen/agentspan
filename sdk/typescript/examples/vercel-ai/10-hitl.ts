@@ -137,7 +137,7 @@ async function main() {
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(agent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples/vercel-ai
+    // agentspan deploy --package sdk/typescript/examples/vercel-ai --agents hitl_agent
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(agent);

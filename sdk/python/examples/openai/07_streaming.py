@@ -53,36 +53,15 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.openai.07_streaming
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
         result = runtime.run(agent, "What's your return policy for electronics?")
 
         result.print_result()
 
-
         # Production pattern:
-
         # 1. Deploy once during CI/CD:
-
         # runtime.deploy(agent)
-
         # CLI alternative:
-
         # agentspan deploy --package examples.openai.07_streaming
-
         #
-
         # 2. In a separate long-lived worker process:
-
         # runtime.serve(agent)
-
-
-        # Streaming alternative:
-        # print("Streaming events:\n")
-        # for event in runtime.stream(agent, "What's your return policy for electronics?"):
-        # detail = event.content or event.tool_name or event.output or ""
-        # print(f"  [{event.type}] {detail}")
-        # print("\nStream complete.")

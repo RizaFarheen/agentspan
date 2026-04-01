@@ -39,12 +39,6 @@ jupyter_coder = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.39b_jupyter_code_execution
-        # runtime.deploy(jupyter_coder)
-        # runtime.serve(jupyter_coder)
-
-        # Direct run for local development:
         print("--- Jupyter Kernel Code Execution ---")
         result = runtime.run(
             jupyter_coder,
@@ -53,4 +47,13 @@ if __name__ == "__main__":
             "the sum of 'fibs' (it should still exist from the first call).",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(jupyter_coder)
+        # CLI alternative:
+        # agentspan deploy --package examples.39b_jupyter_code_execution
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(jupyter_coder)
 

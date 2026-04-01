@@ -44,21 +44,17 @@ export const publishingAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(publishingAgent);
-    // await runtime.serve(publishingAgent);
     const result = await runtime.run(publishingAgent, 'Write a short article outline about TypeScript, but do not publish it.');
     result.printResult();
 
     // Production pattern:
     // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
+    // await runtime.deploy(publishingAgent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents publisher
     //
     // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
+    // await runtime.serve(publishingAgent);
 
     // Interactive HITL alternative:
     // const agentStream = await runtime.stream(
@@ -95,8 +91,6 @@ async function main() {
 
     // const result = await agentStream.getResult();
     // result.printResult();
-
-    // await runtime.shutdown();
   } finally {
     await runtime.shutdown();
   }

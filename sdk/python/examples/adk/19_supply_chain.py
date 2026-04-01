@@ -124,12 +124,6 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.19_supply_chain
-        # runtime.deploy(coordinator)
-        # runtime.serve(coordinator)
-
-        # Direct run for local development:
         result = runtime.run(
         coordinator,
         "Give me a full supply chain status report. Check both warehouses, "
@@ -137,6 +131,15 @@ def main():
         )
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.19_supply_chain
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)
 
 
 

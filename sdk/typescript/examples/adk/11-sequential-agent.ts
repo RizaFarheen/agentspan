@@ -55,14 +55,18 @@ export const pipeline = new SequentialAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(pipeline);
-    // await runtime.serve(pipeline);
-    // Direct run for local development:
     const result = await runtime.run(pipeline, 'The history of the Internet');
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents content_pipeline
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
   } finally {
     await runtime.shutdown();
   }

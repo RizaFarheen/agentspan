@@ -53,12 +53,15 @@ team = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.08_router_agent
-        # runtime.deploy(team)
-        # runtime.serve(team)
-
-        # Direct run for local development:
         result = runtime.run(team, "Write a Python function to validate email addresses using regex")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(team)
+        # CLI alternative:
+        # agentspan deploy --package examples.08_router_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(team)
 

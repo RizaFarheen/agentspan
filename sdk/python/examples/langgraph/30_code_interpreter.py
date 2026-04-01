@@ -121,21 +121,18 @@ graph = create_agent(
 )
 
 if __name__ == "__main__":
-    queries = [
-        "Calculate (2**10 - 1) * 3 + 7",
-        "Check the syntax of: def hello(: print('hi')",
-        "Explain this code:\nfor i in range(5):\n    print(i * 2)",
-    ]
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.30_code_interpreter
-        # runtime.deploy(graph)
-        # runtime.serve(graph)
-
-        # Direct run for local development:
         for query in queries:
             print(f"\nQuery: {query}")
             result = runtime.run(graph, query)
             result.print_result()
             print("-" * 60)
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.30_code_interpreter
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

@@ -72,12 +72,15 @@ graph = builder.compile(name="retry_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.23_retry_on_error
-        # runtime.deploy(graph)
-        # runtime.serve(graph)
-
-        # Direct run for local development:
         result = runtime.run(graph, "What is the speed of light in meters per second?")
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.23_retry_on_error
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

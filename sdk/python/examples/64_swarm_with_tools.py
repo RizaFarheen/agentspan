@@ -82,12 +82,6 @@ support = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.64_swarm_with_tools
-        # runtime.deploy(support)
-        # runtime.serve(support)
-
-        # Direct run for local development:
         # ── Scenario 1: Billing question → billing specialist uses check_balance
         print("=" * 60)
         print("  Scenario 1: Billing question (swarm → billing + tool)")
@@ -113,4 +107,13 @@ if __name__ == "__main__":
             print("[OK] Order specialist used lookup_order tool")
         else:
             print("[WARN] Expected shipping status in output")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(support)
+        # CLI alternative:
+        # agentspan deploy --package examples.64_swarm_with_tools
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(support)
 

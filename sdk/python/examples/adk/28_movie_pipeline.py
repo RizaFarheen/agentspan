@@ -202,15 +202,18 @@ movie_pipeline = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.28_movie_pipeline
-        # runtime.deploy(movie_pipeline)
-        # runtime.serve(movie_pipeline)
-
-        # Direct run for local development:
         result = runtime.run(
         movie_pipeline,
         "Create a 3-scene short film about a robot discovering music "
         "for the first time in a post-apocalyptic world.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(movie_pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.28_movie_pipeline
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(movie_pipeline)

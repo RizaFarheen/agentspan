@@ -51,18 +51,22 @@ creative_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.05_generation_config
-        # runtime.deploy(factual_agent)
-        # runtime.serve(factual_agent)
-
-        # Direct run for local development:
         print("=== Factual Agent (temp=0.1) ===")
         result = runtime.run(
         factual_agent,
         "What is the speed of light in a vacuum?",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(factual_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.05_generation_config
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(factual_agent)
+
 
         print("\n=== Creative Agent (temp=0.9) ===")
         result = runtime.run(

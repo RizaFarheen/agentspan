@@ -58,16 +58,7 @@ agent = Agent(
 
 
 if __name__ == "__main__":
-    # ── Manual tracing (works even alongside automatic runtime tracing) ──
-
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.26_opentelemetry_tracing
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
-        # Direct run for local development:
         # The runtime automatically creates spans if OTel is configured.
         # You can also create manual spans for custom instrumentation:
         with trace_agent_run("traced_agent", "Who created Python?", model=settings.llm_model) as span:
@@ -79,4 +70,13 @@ if __name__ == "__main__":
 
         if result.token_usage:
             print(f"Tokens: {result.token_usage.total_tokens}")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.26_opentelemetry_tracing
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

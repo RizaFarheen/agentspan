@@ -129,10 +129,6 @@ const pipeline = gitFetchIssues.pipe(codingQA).pipe(gitPushPR);
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(pipeline);
-    // await runtime.serve(pipeline);
     const result = await runtime.run(
     pipeline,
     `Pick the most suitable open issue on ${REPO} and implement a fix.`,
@@ -141,16 +137,14 @@ async function main() {
 
     // Production pattern:
     // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
+    // await runtime.deploy(pipeline);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents git_fetch_issues
     //
     // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
+    // await runtime.serve(pipeline);
 
     // Streaming alternative:
-    // const runtime = new AgentRuntime();
-    // try {
     // console.log('Starting pipeline: gitFetchIssues >> codingQA >> gitPushPR\n');
     // const agentStream = await runtime.stream(
     // pipeline,

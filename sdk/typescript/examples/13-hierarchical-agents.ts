@@ -100,13 +100,6 @@ export const ceo = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(ceo);
-    // await runtime.serve(ceo);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     console.log('--- Technical question (CEO -> Engineering -> Backend) ---');
     const result = await runtime.run(
     ceo,
@@ -114,6 +107,15 @@ async function main() {
     'and then come up with a marketing campaign for the system',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(ceo);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents ceo
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(ceo);
   } finally {
     await runtime.shutdown();
   }

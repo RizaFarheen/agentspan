@@ -38,11 +38,11 @@ if (process.argv[1]?.endsWith('12-long-running.ts') || process.argv[1]?.endsWith
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(agent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents saas_analyst
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(agent);
-    //
+
     // Async handle alternative:
     // const handle = await runtime.start(
     //   agent,

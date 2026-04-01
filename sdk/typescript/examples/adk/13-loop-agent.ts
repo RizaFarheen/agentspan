@@ -55,17 +55,21 @@ export const refinementLoop = new LoopAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(refinementLoop);
-    // await runtime.serve(refinementLoop);
-    // Direct run for local development:
     const result = await runtime.run(
     refinementLoop,
     'Write a haiku about autumn leaves',
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(refinementLoop);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents refinement_loop
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(refinementLoop);
   } finally {
     await runtime.shutdown();
   }

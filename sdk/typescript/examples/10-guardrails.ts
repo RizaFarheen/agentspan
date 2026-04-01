@@ -154,13 +154,6 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(agent);
-    // await runtime.serve(agent);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     // This prompt triggers both tools:
     //   1. get_order_status("ORD-42")   → safe data, passes guardrail
     //   2. get_customer_info("CUST-7")  → contains credit card, trips guardrail
@@ -177,6 +170,15 @@ async function main() {
     } else {
     console.log('[OK] PII was redacted from the final output.');
     }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents support_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

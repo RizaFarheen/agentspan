@@ -90,12 +90,6 @@ team = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.67_router_to_sequential
-        # runtime.deploy(team)
-        # runtime.serve(team)
-
-        # Direct run for local development:
         # ── Scenario 1: Research task (routes to pipeline)
         print("=" * 60)
         print("  Scenario 1: Research task (router → sequential pipeline)")
@@ -125,4 +119,13 @@ if __name__ == "__main__":
             print("[OK] Router → quick answer completed")
         else:
             print(f"[WARN] Unexpected status: {result2.status}")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(team)
+        # CLI alternative:
+        # agentspan deploy --package examples.67_router_to_sequential
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(team)
 

@@ -178,11 +178,6 @@ export const mlPipeline = new SequentialAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(mlPipeline);
-    // await runtime.serve(mlPipeline);
-    // Direct run for local development:
     const result = await runtime.run(
     mlPipeline,
     'Build a model to predict California housing prices. The dataset has 20,640 samples ' +
@@ -192,6 +187,15 @@ async function main() {
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(mlPipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents ml_pipeline
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(mlPipeline);
   } finally {
     await runtime.shutdown();
   }

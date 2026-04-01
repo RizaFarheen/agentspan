@@ -95,12 +95,6 @@ manager = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.openai.08_agent_as_tool
-        # runtime.deploy(manager)
-        # runtime.serve(manager)
-
-        # Direct run for local development:
         result = runtime.run(
         manager,
         "Analyze this review: 'The new laptop is excellent! The display is amazing "
@@ -108,3 +102,12 @@ if __name__ == "__main__":
         "and the trackpad is the worst I've used.'",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(manager)
+        # CLI alternative:
+        # agentspan deploy --package examples.openai.08_agent_as_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(manager)

@@ -85,11 +85,6 @@ export const codingTeam = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(writingPipeline);
-    // await runtime.serve(writingPipeline);
-    // Direct run for local development:
     console.log('=== Sequential Pipeline ===');
     const seqResult = await runtime.run(writingPipeline, 'Quantum computing');
     seqResult.printResult();
@@ -105,7 +100,14 @@ async function main() {
     );
     handoffResult.printResult();
 
-    // await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(writingPipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents writer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(writingPipeline);
   } finally {
     await runtime.shutdown();
   }

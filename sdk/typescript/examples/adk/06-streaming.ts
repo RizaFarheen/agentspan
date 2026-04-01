@@ -64,10 +64,6 @@ export const agent = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(agent);
-    // await runtime.serve(agent);
     const result = await runtime.run(agent, 'How do I authenticate with the API?');
     result.printResult();
 
@@ -75,7 +71,7 @@ async function main() {
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(agent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples/adk --agents docs_assistant
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(agent);

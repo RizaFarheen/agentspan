@@ -27,12 +27,12 @@ async function main() {
 
     // Production pattern:
     // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
+    // await runtime.deploy(pipeline);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples/quickstart --agents researcher
     //
     // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
+    // await runtime.serve(pipeline);
   } finally {
     await runtime.shutdown();
   }

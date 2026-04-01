@@ -97,7 +97,7 @@ async function main() {
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(serverlessCoder);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents serverless_coder
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(serverlessCoder);

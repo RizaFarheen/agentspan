@@ -89,8 +89,6 @@ storyteller = Agent(
 
 creative_pipeline = describer >> storyteller
 
-# ── Run ──────────────────────────────────────────────────────────────
-
 # Sample public-domain images for demonstration
 SAMPLE_IMAGE = "https://orkes.io/Home-Page-Prompt-to-Workflow-1.png"
 SAMPLE_IMAGE_2 = "https://orkes.io/icons/hero-section-workflow_updated.png"
@@ -98,12 +96,6 @@ SAMPLE_IMAGE_2 = "https://orkes.io/icons/hero-section-workflow_updated.png"
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.30_multimodal_agent
-        # runtime.deploy(vision_agent)
-        # runtime.serve(vision_agent)
-
-        # Direct run for local development:
         # --- 1. Single image analysis ---
         print("=== Single Image Analysis ===")
         result = runtime.run(
@@ -139,4 +131,13 @@ if __name__ == "__main__":
             media=[SAMPLE_IMAGE_2],
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(vision_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.30_multimodal_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(vision_agent)
 

@@ -837,7 +837,7 @@ async function main() {
   // 1. Deploy once during CI/CD:
   // await runtime.deploy(fullPipeline);
   // CLI alternative:
-  // agentspan deploy --package sdk/typescript/examples
+  // agentspan deploy --package sdk/typescript/examples --agents content_publishing_platform
   //
   // 2. In a separate long-lived worker process:
   // await runtime.serve(fullPipeline);

@@ -179,12 +179,6 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.60a_github_coding_agent_simple
-        # runtime.deploy(coding_team)
-        # runtime.serve(coding_team)
-
-        # Direct run for local development:
         result = runtime.run(coding_team, prompt)
 
         # Display output
@@ -203,4 +197,13 @@ if __name__ == "__main__":
 
         print(f"\nFinish reason: {result.finish_reason}")
         print(f"Workflow ID: {result.execution_id}")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coding_team)
+        # CLI alternative:
+        # agentspan deploy --package examples.60a_github_coding_agent_simple
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coding_team)
 

@@ -71,12 +71,6 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.21_regex_guardrails
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
-        # Direct run for local development:
         # ── Scenario 1: Guardrail TRIGGERS — PII in tool output ───────────
         print("=" * 60)
         print("  Scenario 1: Request PII — guardrails trigger")
@@ -117,4 +111,13 @@ if __name__ == "__main__":
             print("[OK] Clean response passed guardrails successfully")
         else:
             print(f"[WARN] Unexpected status: {result2.status}")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.21_regex_guardrails
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

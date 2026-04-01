@@ -54,18 +54,20 @@ export const team = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(team);
-    // await runtime.serve(team);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     team,
     'Write a Python function to validate email addresses using regex',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(team);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents dev_team
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(team);
   } finally {
     await runtime.shutdown();
   }

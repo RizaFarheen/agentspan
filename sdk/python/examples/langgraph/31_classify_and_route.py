@@ -122,22 +122,17 @@ for node in ["science", "history", "sports", "technology", "cooking"]:
 graph = builder.compile(name="classify_and_route_agent")
 
 if __name__ == "__main__":
-    questions = [
-        "What is photosynthesis?",
-        "When did World War II end?",
-        "Who has won the most Grand Slam tennis titles?",
-        "What is Kubernetes?",
-        "How do I make a perfect risotto?",
-    ]
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.31_classify_and_route
-        # runtime.deploy(graph)
-        # runtime.serve(graph)
-
-        # Direct run for local development:
         for q in questions:
             print(f"\nQ: {q}")
             result = runtime.run(graph, q)
             result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.31_classify_and_route
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

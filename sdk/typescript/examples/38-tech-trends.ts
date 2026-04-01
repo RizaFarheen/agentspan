@@ -321,15 +321,8 @@ const pipeline = researcher.pipe(analyst).pipe(pdfGenerator);
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(pipeline);
-    // await runtime.serve(pipeline);
-    // Direct run for local development:
     console.log('Starting Tech Trend Analyzer: Python vs Rust');
     console.log('='.repeat(60));
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     pipeline,
     'Compare Python and Rust: which has stronger developer mindshare and ' +
@@ -337,6 +330,15 @@ async function main() {
     'download statistics to support your analysis.',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(pipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents hn_researcher
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(pipeline);
   } finally {
     await runtime.shutdown();
   }

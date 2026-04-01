@@ -56,12 +56,15 @@ analysis = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.07_parallel_agents
-        # runtime.deploy(analysis)
-        # runtime.serve(analysis)
-
-        # Direct run for local development:
         result = runtime.run(analysis, "Launching an AI-powered healthcare diagnostic tool in the US market")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(analysis)
+        # CLI alternative:
+        # agentspan deploy --package examples.07_parallel_agents
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(analysis)
 

@@ -106,14 +106,17 @@ triage.handoffs = [doc_specialist, code_specialist]
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.openai.10_multi_model
-        # runtime.deploy(triage)
-        # runtime.serve(triage)
-
-        # Direct run for local development:
         result = runtime.run(
         triage,
         "I need a Python code example for authenticating with the API.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(triage)
+        # CLI alternative:
+        # agentspan deploy --package examples.openai.10_multi_model
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(triage)

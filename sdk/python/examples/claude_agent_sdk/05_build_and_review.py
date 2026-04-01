@@ -75,12 +75,6 @@ build_review_swarm = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.claude_agent_sdk.05_build_and_review
-        # runtime.deploy(build_review_swarm)
-        # runtime.serve(build_review_swarm)
-
-        # Direct run for local development:
         result = runtime.run(
             build_review_swarm,
             prompt=(
@@ -100,6 +94,15 @@ if __name__ == "__main__":
         print(f"Status: {result.status}")
         print(f"Workflow ID: {result.execution_id}")
         print(f"{'=' * 60}")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(build_review_swarm)
+        # CLI alternative:
+        # agentspan deploy --package examples.claude_agent_sdk.05_build_and_review
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(build_review_swarm)
 
         # Show final file
         try:

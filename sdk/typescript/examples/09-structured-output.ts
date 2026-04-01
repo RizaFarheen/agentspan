@@ -33,11 +33,6 @@ export const analyzerAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(analyzerAgent);
-    // await runtime.serve(analyzerAgent);
-    // Direct run for local development:
     const result = await runtime.run(
     analyzerAgent,
     'Analyze: "Quantum Computing Breakthrough: New Error Correction Method Achieves 99.9% Fidelity"',
@@ -52,7 +47,14 @@ async function main() {
     console.log('  Sentiment:', result.output['sentiment']);
     console.log('  Key Topics:', result.output['keyTopics']);
 
-    // await runtime.shutdown();
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(analyzerAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents article_analyzer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(analyzerAgent);
   } finally {
     await runtime.shutdown();
   }

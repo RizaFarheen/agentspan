@@ -76,13 +76,6 @@ export const analysis = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(analysis);
-    // await runtime.serve(analysis);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     analysis,
     'Check account ACC-200 balance and look up order ORD-300 status.',
@@ -104,6 +97,15 @@ async function main() {
     for (const c of checks) {
     console.log(c);
     }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(analysis);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents parallel_analysis
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(analysis);
   } finally {
     await runtime.shutdown();
   }

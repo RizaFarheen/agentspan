@@ -218,11 +218,6 @@ const agentRunnable = new RunnableLambda({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(agentRunnable);
-    // await runtime.serve(agentRunnable);
-    // Direct run for local development:
     const result = await runtime.run(
     agentRunnable,
     'Generate a complete executive report for TechStartup Inc., ' +
@@ -231,6 +226,15 @@ async function main() {
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agentRunnable);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents advanced_orchestration
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agentRunnable);
   } finally {
     await runtime.shutdown();
   }

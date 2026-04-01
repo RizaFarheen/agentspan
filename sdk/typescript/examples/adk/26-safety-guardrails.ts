@@ -111,11 +111,6 @@ export const safePipeline = new SequentialAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(safePipeline);
-    // await runtime.serve(safePipeline);
-    // Direct run for local development:
     const result = await runtime.run(
     safePipeline,
     'What are the contact details for our support team? ' +
@@ -123,6 +118,15 @@ async function main() {
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(safePipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents safe_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(safePipeline);
   } finally {
     await runtime.shutdown();
   }

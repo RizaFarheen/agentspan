@@ -1,6 +1,51 @@
 # Examples
 
-Runnable examples demonstrating every feature of the Conductor Agents SDK.
+Runnable examples demonstrating every feature of the Agentspan SDK.
+
+---
+
+## Examples vs. Production
+
+> **Every example uses `runtime.run()` for convenience. In production, you should not.**
+
+Examples call `runtime.run()` so you can try them in a single command — no setup, no
+separate processes. But `run()` blocks the caller until the agent finishes, which is fine
+for demos but not how you deploy real agents.
+
+### Production: Deploy → Serve → Run
+
+In production, the three concerns are separated:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  1. DEPLOY (once, during CI/CD)                              │
+│     Registers the agent definition with the Agentspan server │
+│                                                              │
+│     runtime.deploy(agent)                                    │
+│     # or CLI: agentspan deploy --package my_agents           │
+├──────────────────────────────────────────────────────────────┤
+│  2. SERVE (long-running worker process)                      │
+│     Listens for tool-call tasks and executes them            │
+│                                                              │
+│     runtime.serve(agent)                                     │
+│     # typically run as a daemon, container, or systemd unit  │
+├──────────────────────────────────────────────────────────────┤
+│  3. RUN (on-demand, from anywhere)                           │
+│     Triggers an agent execution                              │
+│                                                              │
+│     agentspan run <agent-name> "prompt"                      │
+│     # or SDK: runtime.run("agent_name", "prompt")            │
+│     # or REST API                                            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+Every example includes the deploy/serve pattern as commented code at the bottom of its
+`__main__` block — look for the `# Production pattern:` comment.
+
+See [63_deploy.py](63_deploy.py), [63b_serve.py](63b_serve.py), and
+[63c_run_by_name.py](63c_run_by_name.py) for a complete working example of this pattern.
+
+---
 
 ## Getting Started
 
@@ -217,12 +262,6 @@ python examples/adk/01_basic_agent.py
 |---|---------|---------------------|
 | 30 | [Multimodal Agent](30_multimodal_agent.py) | Image/video analysis with vision models via the `media` parameter | `media=["url"]` |
 
-## Prompt Templates
-
-| # | Example | What it demonstrates |
-|---|---------|---------------------|
-| 34 | [Prompt Templates](34_prompt_templates.py) | Reusable, versioned prompts stored on the server for instructions and user prompts | `PromptTemplate` |
-
 ## Integrations
 
 | # | Example | What it demonstrates |
@@ -307,5 +346,5 @@ Quick lookup — find the right example for any SDK feature:
 | `@tool(external=True)` | 33 |
 | `OnTextMention` / `OnToolResult` | 17 |
 | `media` (multimodal input) | 30 |
-| `PromptTemplate` | 34 |
+| `PromptTemplate` | kitchen_sink |
 | `from __future__ import annotations` | 38 |

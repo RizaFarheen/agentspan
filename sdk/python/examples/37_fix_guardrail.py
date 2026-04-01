@@ -103,12 +103,6 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.37_fix_guardrail
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
-        # Direct run for local development:
         # ── Scenario 1: Guardrail TRIGGERS — contact has phone number ─────
         print("=" * 60)
         print("  Scenario 1: Contact with phone number (guardrail triggers)")
@@ -142,4 +136,13 @@ if __name__ == "__main__":
             print("[WARN] Unexpected redaction in clean response")
         else:
             print("[OK] No redaction needed — guardrail passed cleanly")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.37_fix_guardrail
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

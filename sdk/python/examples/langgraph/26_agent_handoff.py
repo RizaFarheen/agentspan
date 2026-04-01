@@ -111,22 +111,19 @@ builder.add_edge("general", END)
 graph = builder.compile(name="agent_handoff")
 
 if __name__ == "__main__":
-    queries = [
-        "I was charged twice for my subscription this month.",
-        "My application keeps crashing with a segmentation fault.",
-        "Can I change my account email address?",
-    ]
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.26_agent_handoff
-        # runtime.deploy(graph)
-        # runtime.serve(graph)
-
-        # Direct run for local development:
         for query in queries:
             print(f"\nQuery: {query}")
             result = runtime.run(graph, query)
             print(f"Status: {result.status}")
             result.print_result()
             print("-" * 60)
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.26_agent_handoff
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)
