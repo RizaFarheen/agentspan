@@ -50,16 +50,16 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.16j_credentials_openai_sdk
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        # runtime.deploy(agent)
+        # runtime.serve(agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # credentials=["GITHUB_TOKEN"] resolves from server credential store
-        # # and injects into os.environ for the agent's tools
-        # result = runtime.run(
-        #     agent,
-        #     "Is GitHub authentication available?",
-        #     credentials=["GITHUB_TOKEN"],
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        # credentials=["GITHUB_TOKEN"] resolves from server credential store
+        # and injects into os.environ for the agent's tools
+        result = runtime.run(
+            agent,
+            "Is GitHub authentication available?",
+            credentials=["GITHUB_TOKEN"],
+        )
+        result.print_result()
 

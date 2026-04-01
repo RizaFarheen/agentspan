@@ -40,6 +40,14 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
+class TerminalToolError(RuntimeError):
+    """Non-retryable tool failure.
+
+    Causes the Conductor task to be marked FAILED_WITH_TERMINAL_ERROR
+    instead of FAILED (which would trigger retries).
+    """
+
+
 @dataclass
 class CliConfig:
     """Configuration for first-class CLI command execution on an Agent.
@@ -172,35 +180,24 @@ def _make_cli_tool(
             if result.returncode == 0:
                 return {
                     "status": "success",
+                    "exit_code": 0,
                     "stdout": result.stdout,
                     "stderr": result.stderr,
                 }
             else:
                 return {
                     "status": "error",
+                    "exit_code": result.returncode,
                     "stdout": result.stdout,
-                    "stderr": (result.stderr or "")
-                    + f"\nExit code: {result.returncode}",
+                    "stderr": result.stderr,
                 }
 
         except subprocess.TimeoutExpired:
-            return {
-                "status": "error",
-                "stdout": "",
-                "stderr": f"Command timed out after {effective_timeout}s",
-            }
+            raise TerminalToolError(
+                f"Command timed out after {effective_timeout}s"
+            )
         except FileNotFoundError:
-            return {
-                "status": "error",
-                "stdout": "",
-                "stderr": f"Command not found: {command}",
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "stdout": "",
-                "stderr": str(e),
-            }
+            raise TerminalToolError(f"Command not found: {command}")
 
     # Build dynamic description
     desc = (

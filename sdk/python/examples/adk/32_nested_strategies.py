@@ -9,7 +9,7 @@ concurrently, then results flow into a sequential summarizer.
 Requirements:
     - pip install google-adk
     - Conductor server
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -68,12 +68,12 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.adk.32_nested_strategies
-        runtime.deploy(pipeline)
-        runtime.serve(pipeline)
+        # runtime.deploy(pipeline)
+        # runtime.serve(pipeline)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # pipeline,
-        # "Launching an AI-powered healthcare diagnostics tool in the US",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+        pipeline,
+        "Launching an AI-powered healthcare diagnostics tool in the US",
+        )
+        result.print_result()

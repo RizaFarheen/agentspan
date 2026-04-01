@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentspan.agents.cli_config import CliConfig, _make_cli_tool, _validate_cli_command
+from agentspan.agents.cli_config import CliConfig, TerminalToolError, _make_cli_tool, _validate_cli_command
 
 
 class TestCliConfig:
@@ -107,6 +107,7 @@ class TestMakeCliTool:
             result = tool_fn.__wrapped__(command="echo", args=["hello"])
             assert result == {
                 "status": "success",
+                "exit_code": 0,
                 "stdout": "output\n",
                 "stderr": "",
             }
@@ -118,31 +119,48 @@ class TestMakeCliTool:
                 cwd=None,
             )
 
-    def test_nonzero_exit_code(self):
+    def test_nonzero_exit_code_returns_error_with_output(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
-                returncode=1, stdout="", stderr="error msg"
+                returncode=1, stdout="partial output", stderr="error msg"
             )
             result = tool_fn.__wrapped__(command="false")
-            assert result["status"] == "error"
-            assert "Exit code: 1" in result["stderr"]
+            assert result == {
+                "status": "error",
+                "exit_code": 1,
+                "stdout": "partial output",
+                "stderr": "error msg",
+            }
 
-    def test_timeout_handling(self):
+    def test_nonzero_exit_code_preserves_stdout(self):
+        """Verify the LLM sees stdout even when the command fails."""
+        tool_fn = _make_cli_tool(allowed_commands=[])
+        with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=128,
+                stdout="remote: Repository not found.\n",
+                stderr="fatal: repository not found",
+            )
+            result = tool_fn.__wrapped__(command="git", args=["push"])
+            assert result["status"] == "error"
+            assert result["exit_code"] == 128
+            assert "Repository not found" in result["stdout"]
+            assert "fatal" in result["stderr"]
+
+    def test_timeout_raises_terminal_error(self):
         tool_fn = _make_cli_tool(allowed_commands=[], timeout=5)
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired(cmd="sleep", timeout=5)
-            result = tool_fn.__wrapped__(command="sleep", args=["100"])
-            assert result["status"] == "error"
-            assert "timed out" in result["stderr"]
+            with pytest.raises(TerminalToolError, match="timed out"):
+                tool_fn.__wrapped__(command="sleep", args=["100"])
 
-    def test_command_not_found(self):
+    def test_command_not_found_raises_terminal_error(self):
         tool_fn = _make_cli_tool(allowed_commands=[])
         with patch("agentspan.agents.cli_config.subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError()
-            result = tool_fn.__wrapped__(command="nonexistent")
-            assert result["status"] == "error"
-            assert "not found" in result["stderr"]
+            with pytest.raises(TerminalToolError, match="not found"):
+                tool_fn.__wrapped__(command="nonexistent")
 
     def test_cwd_override(self):
         tool_fn = _make_cli_tool(allowed_commands=[], working_dir="/default")

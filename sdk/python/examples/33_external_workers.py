@@ -17,7 +17,7 @@ This is useful when:
 Requirements:
     - Conductor server with LLM support
     - The referenced workers must be running somewhere
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -90,18 +90,18 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.33_external_workers
-        runtime.deploy(support_agent)
-        runtime.serve(support_agent)
+        # runtime.deploy(support_agent)
+        # runtime.serve(support_agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("=== External Worker Tools ===")
-        # print("Agent has 1 local tool + 3 external worker references.\n")
+        # Direct run for local development:
+        print("=== External Worker Tools ===")
+        print("Agent has 1 local tool + 3 external worker references.\n")
 
-        # result = runtime.run(
-        #     support_agent,
-        #     "Customer C-1234 wants to cancel order ORD-5678. "
-        #     "Look up the customer, check if we have the product in stock, "
-        #     "and process the cancellation.",
-        # )
-        # result.print_result()
+        result = runtime.run(
+            support_agent,
+            "Customer C-1234 wants to cancel order ORD-5678. "
+            "Look up the customer, check if we have the product in stock, "
+            "and process the cancellation.",
+        )
+        result.print_result()
 

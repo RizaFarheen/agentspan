@@ -9,7 +9,7 @@ Demonstrates:
     - How the system prompt shapes all LLM responses
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -45,13 +45,13 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.langgraph.07_system_prompt
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        # runtime.deploy(graph)
+        # runtime.serve(graph)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # graph,
-        # "I want to understand why 1 + 1 = 2. Can you just tell me?",
-        # )
-        # print(f"Status: {result.status}")
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+        graph,
+        "I want to understand why 1 + 1 = 2. Can you just tell me?",
+        )
+        print(f"Status: {result.status}")
+        result.print_result()

@@ -61,14 +61,14 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.16i_credentials_langchain
-        runtime.deploy(executor)
-        runtime.serve(executor)
+        # runtime.deploy(executor)
+        # runtime.serve(executor)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        #     executor,
-        #     "Check if the GitHub token is set",
-        #     credentials=["GITHUB_TOKEN"],
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+            executor,
+            "Check if the GitHub token is set",
+            credentials=["GITHUB_TOKEN"],
+        )
+        result.print_result()
 
