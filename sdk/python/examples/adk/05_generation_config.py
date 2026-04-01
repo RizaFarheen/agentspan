@@ -12,7 +12,7 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -53,20 +53,20 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.adk.05_generation_config
-        runtime.deploy(factual_agent)
-        runtime.serve(factual_agent)
+        # runtime.deploy(factual_agent)
+        # runtime.serve(factual_agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("=== Factual Agent (temp=0.1) ===")
-        # result = runtime.run(
-        # factual_agent,
-        # "What is the speed of light in a vacuum?",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        print("=== Factual Agent (temp=0.1) ===")
+        result = runtime.run(
+        factual_agent,
+        "What is the speed of light in a vacuum?",
+        )
+        result.print_result()
 
-        # print("\n=== Creative Agent (temp=0.9) ===")
-        # result = runtime.run(
-        # creative_agent,
-        # "Write a two-sentence story about a cat who discovered a hidden library.",
-        # )
-        # result.print_result()
+        print("\n=== Creative Agent (temp=0.9) ===")
+        result = runtime.run(
+        creative_agent,
+        "Write a two-sentence story about a cat who discovered a hidden library.",
+        )
+        result.print_result()

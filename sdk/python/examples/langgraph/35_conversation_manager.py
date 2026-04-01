@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: long-running chatbot that handles context limits gracefully
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -120,12 +120,12 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.langgraph.35_conversation_manager
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        # runtime.deploy(graph)
+        # runtime.serve(graph)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # for turn in turns:
-        # result = runtime.run(graph, turn, session_id="user-session-001")
-        # print(f"You: {turn}")
-        # result.print_result()
-        # print()
+        # Direct run for local development:
+        for turn in turns:
+            result = runtime.run(graph, turn, session_id="user-session-001")
+            print(f"You: {turn}")
+            result.print_result()
+            print()

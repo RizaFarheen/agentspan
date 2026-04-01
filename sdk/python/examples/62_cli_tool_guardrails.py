@@ -25,7 +25,7 @@ This example uses two guardrails:
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
 """
 
 from agentspan.agents import Agent, AgentRuntime, CliConfig, OnFail, RegexGuardrail
@@ -91,10 +91,10 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.62_cli_tool_guardrails
-        runtime.deploy(ops_agent)
-        runtime.serve(ops_agent)
+        # runtime.deploy(ops_agent)
+        # runtime.serve(ops_agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(ops_agent, prompt)
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(ops_agent, prompt)
+        result.print_result()
 

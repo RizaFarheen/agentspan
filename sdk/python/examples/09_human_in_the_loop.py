@@ -10,7 +10,7 @@ and resumes after the reviewer decides.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -42,38 +42,60 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.09_human_in_the_loop
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        # runtime.deploy(agent)
+        # runtime.serve(agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
+        result = runtime.run(agent, "What's the balance on ACC-789? ")
+
+        result.print_result()
+
+
+        # Production pattern:
+
+        # 1. Deploy once during CI/CD:
+
+        # runtime.deploy(agent)
+
+        # CLI alternative:
+
+        # agentspan deploy --package examples.09_human_in_the_loop
+
+        #
+
+        # 2. In a separate long-lived worker process:
+
+        # runtime.serve(agent)
+
+
+        # Interactive HITL alternative:
         # # start() returns a handle; handle.stream() streams events with HITL support
-        # handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456")
-        # print(f"Workflow started: {handle.execution_id}\n")
+        handle = runtime.start(agent, "Transfer $500 from ACC-789 to ACC-456")
+        print(f"Agent started: {handle.execution_id}\n")
 
-        # for event in handle.stream():
-        #     if event.type == EventType.THINKING:
-        #         print(f"  [thinking] {event.content}")
+        for event in handle.stream():
+            if event.type == EventType.THINKING:
+                print(f"  [thinking] {event.content}")
 
-        #     elif event.type == EventType.TOOL_CALL:
-        #         print(f"  [tool_call] {event.tool_name}({event.args})")
+            elif event.type == EventType.TOOL_CALL:
+                print(f"  [tool_call] {event.tool_name}({event.args})")
 
-        #     elif event.type == EventType.TOOL_RESULT:
-        #         print(f"  [tool_result] {event.tool_name} -> {event.result}")
+            elif event.type == EventType.TOOL_RESULT:
+                print(f"  [tool_result] {event.tool_name} -> {event.result}")
 
-        #     elif event.type == EventType.WAITING:
-        #         print(f"\n--- Human approval required ---")
-        #         choice = input("  Approve? (y/n): ").strip().lower()
-        #         if choice == "y":
-        #             handle.approve()
-        #             print("  Approved!\n")
-        #         else:
-        #             reason = input("  Rejection reason: ").strip()
-        #             handle.reject(reason or "Rejected by user")
-        #             print("  Rejected.\n")
+            elif event.type == EventType.WAITING:
+                print(f"\n--- Human approval required ---")
+                choice = input("  Approve? (y/n): ").strip().lower()
+                if choice == "y":
+                    handle.approve()
+                    print("  Approved!\n")
+                else:
+                    reason = input("  Rejection reason: ").strip()
+                    handle.reject(reason or "Rejected by user")
+                    print("  Rejected.\n")
 
-        #     elif event.type == EventType.ERROR:
-        #         print(f"  [error] {event.content}")
+            elif event.type == EventType.ERROR:
+                print(f"  [error] {event.content}")
 
-        #     elif event.type == EventType.DONE:
-        #         print(f"\nResult: {event.output}")
+            elif event.type == EventType.DONE:
+                print(f"\nResult: {event.output}")
 

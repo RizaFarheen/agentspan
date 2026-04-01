@@ -911,6 +911,39 @@ class AgentRuntime:
                 return True  # fallback: register everything
             return task_name in required_workers
 
+        # Claude-code top-level agents: register the passthrough worker, skip tool registration
+        if getattr(agent, "is_claude_code", False):
+            if _server_needs(agent.name):
+                from agentspan.agents.frameworks.claude_agent_sdk import (
+                    agent_to_claude_code_options,
+                    make_claude_agent_sdk_worker,
+                )
+                from agentspan.agents.frameworks.serializer import WorkerInfo
+
+                cc_opts = agent_to_claude_code_options(agent)
+                worker_fn = make_claude_agent_sdk_worker(
+                    cc_opts,
+                    agent.name,
+                    self._config.server_url,
+                    self._config.auth_key or "",
+                    self._config.auth_secret or "",
+                )
+                worker = WorkerInfo(
+                    name=agent.name,
+                    description=f"Claude Agent SDK passthrough worker for {agent.name}",
+                    input_schema={
+                        "type": "object",
+                        "properties": {
+                            "prompt": {"type": "string"},
+                            "session_id": {"type": "string"},
+                        },
+                    },
+                    func=worker_fn,
+                    _pre_wrapped=True,
+                )
+                self._register_passthrough_worker(worker)
+            return
+
         # 1. Tools (and tool-level guardrails) — always registered
         if agent.tools:
             tc = ToolRegistry()

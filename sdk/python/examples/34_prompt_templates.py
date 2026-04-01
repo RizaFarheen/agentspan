@@ -15,7 +15,7 @@ PromptTemplate supports:
 Requirements:
     - Conductor server with LLM support
     - Prompt templates created on the server (see setup below)
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -128,28 +128,28 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.34_prompt_templates
-        runtime.deploy(support_agent)
-        runtime.serve(support_agent)
+        # runtime.deploy(support_agent)
+        # runtime.serve(support_agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # # Set up templates (idempotent — safe to run multiple times)
-        # setup_templates(runtime)
+        # Direct run for local development:
+        # Set up templates (idempotent — safe to run multiple times)
+        setup_templates(runtime)
 
-        # # --- 1. Template-based instructions ---
-        # print("=== Support Agent (template instructions) ===")
-        # result = runtime.run(support_agent, "What are your return policies?")
-        # result.print_result()
+        # --- 1. Template-based instructions ---
+        print("=== Support Agent (template instructions) ===")
+        result = runtime.run(support_agent, "What are your return policies?")
+        result.print_result()
 
-        # # --- 2. Template with tools ---
-        # print("\n=== Order Agent (template + tools) ===")
-        # result = runtime.run(order_agent, "Can you check order #12345?")
-        # result.print_result()
+        # --- 2. Template with tools ---
+        print("\n=== Order Agent (template + tools) ===")
+        result = runtime.run(order_agent, "Can you check order #12345?")
+        result.print_result()
 
-        # # --- 3. User prompt from a template ---
-        # print("\n=== User Prompt Template ===")
-        # result = runtime.run(
-        #     stable_agent,
-        #     PromptTemplate("analysis-request", variables={"topic": "Q4 2025 earnings trends"}),
-        # )
-        # result.print_result()
+        # --- 3. User prompt from a template ---
+        print("\n=== User Prompt Template ===")
+        result = runtime.run(
+            stable_agent,
+            PromptTemplate("analysis-request", variables={"topic": "Q4 2025 earnings trends"}),
+        )
+        result.print_result()
 

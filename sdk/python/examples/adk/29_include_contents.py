@@ -9,7 +9,7 @@ the parent's conversation history.
 Requirements:
     - pip install google-adk
     - Conductor server with include_contents support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -53,14 +53,14 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.adk.29_include_contents
-        runtime.deploy(coordinator)
-        runtime.serve(coordinator)
+        # runtime.deploy(coordinator)
+        # runtime.serve(coordinator)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # coordinator,
-        # "Please summarize this: 'The quick brown fox jumps over the lazy dog. "
-        # "This sentence contains every letter of the alphabet and is commonly "
-        # "used for typography testing.'",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+        coordinator,
+        "Please summarize this: 'The quick brown fox jumps over the lazy dog. "
+        "This sentence contains every letter of the alphabet and is commonly "
+        "used for typography testing.'",
+        )
+        result.print_result()

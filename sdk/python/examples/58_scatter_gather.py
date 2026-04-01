@@ -14,7 +14,7 @@ dispatches 100 worker agents in parallel, and synthesizes the results.
 
 Requirements:
     - Conductor server running
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
     - AGENT_SECONDARY_LLM_MODEL=openai/gpt-4o in .env or environment
 """
 
@@ -128,11 +128,10 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.58_scatter_gather
-        runtime.deploy(coordinator)
-        runtime.serve(coordinator)
+        # runtime.deploy(coordinator)
+        # runtime.serve(coordinator)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(coordinator, prompt)
-        # print("--- Coordinator Result ---")
-        # print(result.output)
-
+        # Direct run for local development:
+        result = runtime.run(coordinator, prompt)
+        print("--- Coordinator Result ---")
+        result.print_result()

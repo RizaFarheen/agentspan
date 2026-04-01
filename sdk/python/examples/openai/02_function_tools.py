@@ -12,7 +12,7 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -77,13 +77,13 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.openai.02_function_tools
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        # runtime.deploy(agent)
+        # runtime.serve(agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # agent,
-        # "What's the weather in San Francisco? Also, what's the population there "
-        # "and what's the square root of that number (just the digits)?",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+        agent,
+        "What's the weather in San Francisco? Also, what's the population there "
+        "and what's the square root of that number (just the digits)?",
+        )
+        result.print_result()

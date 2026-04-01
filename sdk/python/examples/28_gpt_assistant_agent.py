@@ -15,7 +15,7 @@ Requirements:
     - pip install openai
     - Conductor server with LLM support
     - OPENAI_API_KEY=sk-... as environment variable
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -51,14 +51,14 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.28_gpt_assistant_agent
-        runtime.deploy(data_analyst)
-        runtime.serve(data_analyst)
+        # runtime.deploy(data_analyst)
+        # runtime.serve(data_analyst)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("--- GPT Assistant with Code Interpreter ---")
-        # result = runtime.run(
-        #     data_analyst,
-        #     "Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        print("--- GPT Assistant with Code Interpreter ---")
+        result = runtime.run(
+            data_analyst,
+            "Calculate the standard deviation of these numbers: 4, 8, 15, 16, 23, 42",
+        )
+        result.print_result()
 

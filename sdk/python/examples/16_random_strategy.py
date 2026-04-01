@@ -9,7 +9,7 @@ selection adds variety — useful for brainstorming or diverse perspectives.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -57,13 +57,13 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.16_random_strategy
-        runtime.deploy(brainstorm)
-        runtime.serve(brainstorm)
+        # runtime.deploy(brainstorm)
+        # runtime.serve(brainstorm)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        #     brainstorm,
-        #     "How should we approach building an AI-powered customer service platform?",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+            brainstorm,
+            "How should we approach building an AI-powered customer service platform?",
+        )
+        result.print_result()
 
