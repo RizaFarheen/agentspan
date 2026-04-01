@@ -6,6 +6,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -85,6 +86,7 @@ func logFile() string {
 }
 
 func runServerStart(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	dir := serverDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create server dir: %w", err)
@@ -134,6 +136,12 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 		}
 		// Stale PID file
 		os.Remove(pidFile())
+	}
+
+	// Check if port is already in use before starting the JVM
+	if conn, err := net.DialTimeout("tcp", "127.0.0.1:"+serverPort, time.Second); err == nil {
+		conn.Close()
+		return fmt.Errorf("port %s is already in use. Stop the other process or use --port to choose a different port.", serverPort)
 	}
 
 	checkAIProviderKeys()
