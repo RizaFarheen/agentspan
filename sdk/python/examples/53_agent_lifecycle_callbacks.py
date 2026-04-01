@@ -9,8 +9,8 @@ list order — each one does a single concern (timing, logging, etc.).
 
 Requirements:
     - Conductor server with callback support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api in .env or environment
-    - AGENT_LLM_MODEL=openai/gpt-4o-mini in .env or environment
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api in .env or environment
+    - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini in .env or environment
 """
 
 import time
@@ -82,10 +82,10 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.53_agent_lifecycle_callbacks
-        runtime.deploy(agent)
-        runtime.serve(agent)
+        # runtime.deploy(agent)
+        # runtime.serve(agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(agent, "What's the weather like in Tokyo?")
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(agent, "What's the weather like in Tokyo?")
+        result.print_result()
 

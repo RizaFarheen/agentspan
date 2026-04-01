@@ -10,7 +10,7 @@ Also shows the >> operator shorthand.
 
 Requirements:
     - Conductor server with LLM support
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -55,21 +55,21 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.06_sequential_pipeline
-        runtime.deploy(pipeline)
-        runtime.serve(pipeline)
+        # runtime.deploy(pipeline)
+        # runtime.serve(pipeline)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
+        result.print_result()
 
-        # # ── Option 2: Using strategy parameter (equivalent) ────────────────
+        # ── Option 2: Using strategy parameter (equivalent) ────────────────
 
-        # # pipeline = Agent(
-        # #     name="content_pipeline",
-        # #     model=settings.llm_model,
-        # #     agents=[researcher, writer, editor],
-        # #     strategy=Strategy.SEQUENTIAL,
-        # # )
-        # # with AgentRuntime() as runtime:
-        # #     result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
+        # pipeline = Agent(
+        #     name="content_pipeline",
+        #     model=settings.llm_model,
+        #     agents=[researcher, writer, editor],
+        #     strategy=Strategy.SEQUENTIAL,
+        # )
+        # with AgentRuntime() as runtime:
+        #     result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
 

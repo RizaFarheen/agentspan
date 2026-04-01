@@ -206,10 +206,10 @@ python examples/adk/01_basic_agent.py
 
 | # | Example | What it demonstrates |
 |---|---------|---------------------|
-| 11 | [Streaming](11_streaming.py) | Real-time events via `runtime.stream()` | `AgentEvent`, `EventType` |
-| 12 | [Long-Running](12_long_running.py) | Fire-and-forget with status polling from any process | `runtime.start()`, `handle.get_status()` |
-| 72 | [Client Reconnect](72_client_reconnect.py) | Hard-kill the SDK client, reconnect later, and continue the same agent execution | `runtime.start()`, `runtime.get_status()`, `runtime.respond()` |
-| 73 | [Worker Restart Recovery](73_worker_restart_recovery.py) | Start an agent with workers down, restart the worker service, and watch the same execution finish | `runtime.deploy()`, `runtime.serve()`, `runtime.start()` |
+| 11 | [Streaming](11_streaming.py) | Default `runtime.run()` flow with a commented `runtime.stream()` alternative for real-time events | `runtime.run()`, `AgentEvent`, `EventType` |
+| 12 | [Long-Running](12_long_running.py) | Default `runtime.run()` flow with a commented `runtime.start()` alternative for async polling | `runtime.run()`, `runtime.start()`, `handle.get_status()` |
+| 72 | [Client Reconnect](72_client_reconnect.py) | Default `runtime.run()` flow plus an advanced reconnect demo that resumes the same execution after client death | `runtime.run()`, `runtime.start()`, `runtime.get_status()`, `runtime.respond()` |
+| 73 | [Worker Restart Recovery](73_worker_restart_recovery.py) | Default `runtime.run()` flow plus an advanced deploy/serve/start recovery demo | `runtime.run()`, `runtime.deploy()`, `runtime.serve()`, `runtime.start()` |
 
 ## Multimodal
 
@@ -277,8 +277,9 @@ Quick lookup — find the right example for any SDK feature:
 | `approval_required=True` | 02, 09 |
 | `handle.approve()` / `reject()` | 09 |
 | `handle.respond()` / `send()` | 09b, 27 |
+| `runtime.run()` | 01, 02, 11, 12, 72, 73 |
 | `runtime.stream()` | 09c, 11 |
-| `runtime.start()` | 12, 18, 27 |
+| `runtime.start()` | 12, 18, 27, 72, 73 |
 | `@guardrail` decorator | 10, 35 |
 | `Guardrail` | 10, 32 |
 | `OnFail` / `Position` enums | 10 |

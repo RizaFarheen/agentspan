@@ -9,7 +9,7 @@ Demonstrates:
     - How the agent remembers context from earlier messages
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -37,30 +37,30 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.langgraph.03_memory
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        # runtime.deploy(graph)
+        # runtime.serve(graph)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("=== Turn 1: Introduce a name ===")
-        # result1 = runtime.run(
-        # graph,
-        # "My name is Alice. Please remember that.",
-        # session_id=SESSION_ID,
-        # )
-        # result1.print_result()
+        # Direct run for local development:
+        print("=== Turn 1: Introduce a name ===")
+        result1 = runtime.run(
+        graph,
+        "My name is Alice. Please remember that.",
+        session_id=SESSION_ID,
+        )
+        result1.print_result()
 
-        # print("\n=== Turn 2: Ask the agent to recall ===")
-        # result2 = runtime.run(
-        # graph,
-        # "What is my name?",
-        # session_id=SESSION_ID,
-        # )
-        # result2.print_result()
+        print("\n=== Turn 2: Ask the agent to recall ===")
+        result2 = runtime.run(
+        graph,
+        "What is my name?",
+        session_id=SESSION_ID,
+        )
+        result2.print_result()
 
-        # print("\n=== Turn 3: Continue the conversation ===")
-        # result3 = runtime.run(
-        # graph,
-        # "Give me a fun fact about the name Alice.",
-        # session_id=SESSION_ID,
-        # )
-        # result3.print_result()
+        print("\n=== Turn 3: Continue the conversation ===")
+        result3 = runtime.run(
+        graph,
+        "Give me a fun fact about the name Alice.",
+        session_id=SESSION_ID,
+        )
+        result3.print_result()

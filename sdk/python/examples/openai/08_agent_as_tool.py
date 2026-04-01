@@ -11,7 +11,7 @@ Demonstrates:
 Requirements:
     - pip install openai-agents
     - Conductor server with OpenAI LLM integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -97,14 +97,14 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.openai.08_agent_as_tool
-        runtime.deploy(manager)
-        runtime.serve(manager)
+        # runtime.deploy(manager)
+        # runtime.serve(manager)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # manager,
-        # "Analyze this review: 'The new laptop is excellent! The display is amazing "
-        # "and the battery life is wonderful. However, the keyboard feels terrible "
-        # "and the trackpad is the worst I've used.'",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+        manager,
+        "Analyze this review: 'The new laptop is excellent! The display is amazing "
+        "and the battery life is wonderful. However, the keyboard feels terrible "
+        "and the trackpad is the worst I've used.'",
+        )
+        result.print_result()

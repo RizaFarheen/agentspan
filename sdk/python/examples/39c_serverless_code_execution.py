@@ -18,7 +18,7 @@ then runs an agent that executes code through it.
 
 Requirements:
     - Conductor server with LLM support
-    - export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 """
 
 import json
@@ -93,17 +93,17 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.39c_serverless_code_execution
-        runtime.deploy(serverless_coder)
-        runtime.serve(serverless_coder)
+        # runtime.deploy(serverless_coder)
+        # runtime.serve(serverless_coder)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # print("--- Serverless Code Execution ---")
-        # result = runtime.run(
-        #     serverless_coder,
-        #     "Calculate 2**100 and print the result.",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        print("--- Serverless Code Execution ---")
+        result = runtime.run(
+            serverless_coder,
+            "Calculate 2**100 and print the result.",
+        )
+        result.print_result()
 
 
-        # mock_server.shutdown()
+        mock_server.shutdown()
 
