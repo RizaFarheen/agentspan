@@ -4,8 +4,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -85,6 +87,7 @@ func logFile() string {
 }
 
 func runServerStart(cmd *cobra.Command, args []string) error {
+	cmd.SilenceUsage = true
 	dir := serverDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create server dir: %w", err)
@@ -134,6 +137,12 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 		}
 		// Stale PID file
 		os.Remove(pidFile())
+	}
+
+	// Check if port is already in use before starting the JVM
+	if conn, err := net.DialTimeout("tcp", "127.0.0.1:"+serverPort, time.Second); err == nil {
+		conn.Close()
+		return fmt.Errorf("port %s is already in use. Stop the other process or use --port to choose a different port.", serverPort)
 	}
 
 	checkAIProviderKeys()
@@ -195,11 +204,57 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 	proc.Process.Release()
 	logF.Close()
 
-	color.Green("Server started (PID %d)", pid)
+	fmt.Printf("Server starting (PID %d)...\n", pid)
+
+	if err := waitForHealthy(pid, serverPort); err != nil {
+		return err
+	}
+
+	color.Green("Server is ready!")
+	fmt.Println()
 	fmt.Printf("  Logs: %s\n", logFile())
 	fmt.Printf("  URL:  http://localhost:%s\n", serverPort)
-	fmt.Println("\nUse 'agentspan server logs -f' to follow output.")
+	fmt.Println()
+	fmt.Println("Use 'agentspan server logs -f' to follow output.")
 	return nil
+}
+
+func waitForHealthy(pid int, port string) error {
+	const (
+		timeout      = 5 * time.Minute
+		pollInterval = 2 * time.Second
+	)
+
+	healthURL := fmt.Sprintf("http://localhost:%s/health", port)
+	client := &http.Client{Timeout: 3 * time.Second}
+	deadline := time.Now().Add(timeout)
+
+	spinner := progress.NewSpinner("Waiting for server to be ready...")
+	spinner.Start()
+	defer spinner.Stop()
+
+	for time.Now().Before(deadline) {
+		// Fail fast if the process has died
+		if !processRunning(pid) {
+			return fmt.Errorf("server process exited unexpectedly — check logs: %s", logFile())
+		}
+
+		resp, err := client.Get(healthURL)
+		if err == nil {
+			var result struct {
+				Healthy bool `json:"healthy"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&result) == nil && result.Healthy {
+				resp.Body.Close()
+				return nil
+			}
+			resp.Body.Close()
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	return fmt.Errorf("server did not become healthy within 5 minutes — check logs: %s", logFile())
 }
 
 func runServerStop(cmd *cobra.Command, args []string) error {
