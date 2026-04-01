@@ -90,7 +90,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 }
 
 if (process.argv[1]?.endsWith('15-agent-discussion.ts') || process.argv[1]?.endsWith('15-agent-discussion.js')) {

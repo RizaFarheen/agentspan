@@ -63,7 +63,7 @@ async function main() {
     result.printResult();
   } finally {
     await runtime.shutdown();
-    // }
+  }
 
     // // -- Option 2: Using strategy parameter (equivalent) -------------------------
     // //
