@@ -76,12 +76,22 @@ sandboxed_coder = Agent(
 #     ),
 # )
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Local Code Execution ---")
-    result = runtime.run(
-        coder,
-        "Write a Python function to find the first 10 Fibonacci numbers and print them.",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ─────────────────────────────────────────────────────────────
+
+
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.24_code_execution
+        runtime.deploy(coder)
+        runtime.serve(coder)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Local Code Execution ---")
+        # result = runtime.run(
+        #     coder,
+        #     "Write a Python function to find the first 10 Fibonacci numbers and print them.",
+        # )
+        # result.print_result()
+

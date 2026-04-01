@@ -118,7 +118,7 @@ DOCUMENTS = [
             "completion via WAIT tasks. Configure event handlers with action types: "
             "complete_task, fail_task, or update_variables. Event payloads are matched "
             "by event name and optionally filtered by expression. For real-time updates, "
-            "use the streaming API (SSE) at /api/agent/stream/{workflowId}. Events "
+            "use the streaming API (SSE) at /api/agent/stream/{executionId}. Events "
             "include: tool_start, tool_end, llm_start, llm_end, agent_start, agent_end, "
             "and token events for incremental output."
         ),
@@ -186,36 +186,44 @@ rag_agent = Agent(
 
 # ── Runner ───────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    # ── Phase 1: Index all documents into the vector database ────────
-    print("=" * 60)
-    print("PHASE 1: Indexing documents into vector database")
-    print("=" * 60)
 
-    # Build a single prompt that asks the agent to index all documents
-    index_lines = ["Please index the following documents into the knowledge base:\n"]
-    for doc in DOCUMENTS:
-        index_lines.append(f"DocID: {doc['docId']}")
-        index_lines.append(f"Text: {doc['text']}\n")
-    index_prompt = "\n".join(index_lines)
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.35_rag_agent
+        runtime.deploy(rag_agent)
+        runtime.serve(rag_agent)
 
-    result = runtime.run(rag_agent, index_prompt)
-    print(result.output)
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # # ── Phase 1: Index all documents into the vector database ────────
+        # print("=" * 60)
+        # print("PHASE 1: Indexing documents into vector database")
+        # print("=" * 60)
 
-    # ── Phase 2: Search the indexed documents ────────────────────────
-    print("\n" + "=" * 60)
-    print("PHASE 2: Searching the knowledge base")
-    print("=" * 60)
+        # # Build a single prompt that asks the agent to index all documents
+        # index_lines = ["Please index the following documents into the knowledge base:\n"]
+        # for doc in DOCUMENTS:
+        # index_lines.append(f"DocID: {doc['docId']}")
+        # index_lines.append(f"Text: {doc['text']}\n")
+        # index_prompt = "\n".join(index_lines)
 
-    queries = [
-        "How do I authenticate my API requests? What are the rate limits?",
-        "What retry policies are available for failed tasks?",
-        "How do I set up vector search with PostgreSQL?",
-        "What multi-agent patterns does the framework support?",
-        "How do guardrails work and what happens when validation fails?",
-    ]
+        # result = runtime.run(rag_agent, index_prompt)
+        # print(result.output)
 
-    for i, query in enumerate(queries, 1):
-        print(f"\n--- Query {i}: {query}")
-        result = runtime.run(rag_agent, query)
-        print(result.output)
+        # # ── Phase 2: Search the indexed documents ────────────────────────
+        # print("\n" + "=" * 60)
+        # print("PHASE 2: Searching the knowledge base")
+        # print("=" * 60)
+
+        # queries = [
+        # "How do I authenticate my API requests? What are the rate limits?",
+        # "What retry policies are available for failed tasks?",
+        # "How do I set up vector search with PostgreSQL?",
+        # "What multi-agent patterns does the framework support?",
+        # "How do guardrails work and what happens when validation fails?",
+        # ]
+
+        # for i, query in enumerate(queries, 1):
+        # print(f"\n--- Query {i}: {query}")
+        # result = runtime.run(rag_agent, query)
+        # print(result.output)

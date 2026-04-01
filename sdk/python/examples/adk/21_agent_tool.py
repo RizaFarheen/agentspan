@@ -27,6 +27,8 @@ from google.adk.tools.agent_tool import AgentTool
 
 from agentspan.agents import AgentRuntime
 
+from settings import settings
+
 
 # ── Child agents (each has their own tools) ──────────────────────
 
@@ -79,7 +81,6 @@ def compute(expression: str) -> dict:
     """
     import math
 
-from settings import settings
     safe = {"abs": abs, "round": round, "min": min, "max": max,
             "sqrt": math.sqrt, "pow": pow, "pi": math.pi, "e": math.e}
     try:
@@ -115,10 +116,18 @@ manager = Agent(
     ],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        manager,
-        "Look up information about Python and Rust, then calculate "
-        "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.21_agent_tool
+        runtime.deploy(manager)
+        runtime.serve(manager)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # manager,
+        # "Look up information about Python and Rust, then calculate "
+        # "what percentage of Python's 4 key use cases overlap with Rust's 4 use cases.",
+        # )
+        # result.print_result()

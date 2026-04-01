@@ -4,7 +4,7 @@ This file provides context for AI coding agents (Claude Code, Copilot, Cursor, e
 
 ## Project Overview
 
-The `conductor-agentic` Python SDK compiles Python `Agent` definitions into durable [Conductor](https://github.com/conductor-oss/conductor) workflows. Agents survive process crashes, tools scale as distributed workers, and human-in-the-loop approvals can pause for days.
+The `conductor-agentic` Python SDK compiles Python `Agent` definitions into durable [Conductor](https://github.com/conductor-oss/conductor) executions. Agents survive process crashes, tools scale as distributed workers, and human-in-the-loop approvals can pause for days.
 
 **Package name:** `conductor-agentic`
 **Import path:** `from conductor.agentic import ...`
@@ -30,7 +30,7 @@ Agent(Python) → AgentCompiler.compile() → ConductorWorkflow(JSON) → execut
 When `run(agent, prompt)` is called:
 1. Agent is compiled into a Conductor workflow definition
 2. Worker processes are started for `@tool` functions
-3. Workflow is executed on the Conductor server
+3. Agent is executed on the Conductor server
 4. Result is extracted and returned as `AgentResult`
 
 ### Key Source Files
@@ -215,16 +215,16 @@ The `server/` directory contains the Agent Runtime — a Spring Boot server that
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/agent/start` | POST | Compile, register, and start an agent workflow |
+| `/api/agent/start` | POST | Compile, register, and start an agent execution |
 | `/api/agent/compile` | POST | Compile agent config (inspect only) |
 | `/api/agent/list` | GET | List all registered agents (filtered by `agent_sdk` metadata) |
 | `/api/agent/executions` | GET | Search agent executions (with `start`, `size`, `sort`, `freeText`, `status`, `agentName` params) |
 | `/api/agent/executions/{id}` | GET | Get detailed execution status (agent name, version, status, input, output, current task) |
-| `/api/agent/get/{name}` | GET | Get agent workflow definition (`?version=` optional) |
-| `/api/agent/delete/{name}` | DELETE | Delete agent workflow definition (`?version=` optional) |
-| `/api/agent/stream/{id}` | GET | SSE event stream for a running workflow |
+| `/api/agent/get/{name}` | GET | Get agent definition (`?version=` optional) |
+| `/api/agent/delete/{name}` | DELETE | Delete agent definition (`?version=` optional) |
+| `/api/agent/stream/{id}` | GET | SSE event stream for a running execution |
 | `/api/agent/{id}/respond` | POST | Respond to HITL task |
-| `/api/agent/{id}/status` | GET | Get workflow status (legacy) |
+| `/api/agent/{id}/status` | GET | Get execution status (legacy) |
 
 ### Server Testing Requirements
 
@@ -254,12 +254,12 @@ The `cli/` directory contains the AgentSpan CLI — a Go binary built with Cobra
 | `cli/cmd/run.go` | `agent run` — start agent by `--name` or `--config` |
 | `cli/cmd/list.go` | `agent list` — table display of registered agents |
 | `cli/cmd/get.go` | `agent get` — fetch agent definition as JSON |
-| `cli/cmd/delete.go` | `agent delete` — remove agent workflow definition |
+| `cli/cmd/delete.go` | `agent delete` — remove agent definition |
 | `cli/cmd/execution.go` | `agent execution` — search history with time parsing |
 | `cli/cmd/status.go` | `agent status` — detailed execution status |
 | `cli/cmd/update.go` | `update` — CLI self-update from GitHub releases |
 | `cli/cmd/agent.go` | Agent parent command, SSE event formatting helpers |
-| `cli/cmd/compile.go` | `agent compile` — compile config to workflow def |
+| `cli/cmd/compile.go` | `agent compile` — compile config to agent def |
 | `cli/cmd/init.go` | `agent init` — generate starter config file |
 | `cli/cmd/stream.go` | `agent stream` — stream SSE events from running agent |
 | `cli/cmd/respond.go` | `agent respond` — HITL approval/denial |
@@ -288,7 +288,7 @@ cd cli && VERSION=0.1.0 ./build.sh
 
 - **Language:** Go 1.25+
 - **CLI framework:** Cobra (`github.com/spf13/cobra`)
-- **Module path:** `github.com/agentspan/agentspan/cli`
+- **Module path:** `github.com/agentspan-ai/agentspan/cli`
 - **Binary name:** `agentspan`
 - **Config directory:** `~/.agentspan/`
 - **No third-party HTTP clients** — use stdlib `net/http`
@@ -314,8 +314,8 @@ When modifying CLI commands:
 Published via three channels (triggered by `cli-v*` git tags):
 
 1. **GitHub Releases** — 6 platform binaries (`agentspan_{os}_{arch}`)
-2. **npm** (`@agentspan/agentspan`) — JS wrapper downloads Go binary on `postinstall`
-3. **Homebrew** (`agentspan/homebrew-agentspan` tap) — macOS/Linux formula
+2. **npm** (`@agentspan-ai/agentspan`) — JS wrapper downloads Go binary on `postinstall`
+3. **Homebrew** (`agentspan-ai/homebrew-agentspan` tap) — macOS/Linux formula
 
 Release workflow: `.github/workflows/release-cli.yml`
 
@@ -359,10 +359,10 @@ Environment variables:
 
 | Variable | Description | Default |
 |---|---|---|
-| `AGENTSPAN_SERVER_URL` | AgentSpan server API URL | `http://localhost:8080/api` |
+| `AGENTSPAN_SERVER_URL` | AgentSpan server API URL | `http://localhost:6767/api` |
 | `AGENTSPAN_AUTH_KEY` | Auth key (Orkes Cloud) | None |
 | `AGENTSPAN_AUTH_SECRET` | Auth secret (Orkes Cloud) | None |
-| `AGENTSPAN_AGENT_TIMEOUT` | Default workflow timeout (seconds) | 300 |
+| `AGENTSPAN_AGENT_TIMEOUT` | Default execution timeout (seconds) | 300 |
 | `AGENTSPAN_LLM_RETRY_COUNT` | LLM task retry count | 3 |
 | `AGENTSPAN_WORKER_POLL_INTERVAL` | Worker poll interval (ms) | 100 |
 | `AGENTSPAN_WORKER_THREADS` | Worker threads per tool | 1 |

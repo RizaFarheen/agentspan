@@ -6,53 +6,40 @@ package cmd
 import (
 	"archive/tar"
 	"bufio"
+	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
-// Deploy command flags
-var (
-	deployName       string
-	deployVersion    string
-	deployLanguage   string
-	deployEntryPoint string
-	deployRuntime    string
-	deployAutoStart  bool
-	deployCPU        string
-	deployMemory     string
-	deployReplicas   int
-	deployTimeout    int
-	deployYes        bool
-	deployDir        string
-	deployDryRun     bool
-)
-
-// DeployLock is the structure of .agentspan/deploy.lock
-type DeployLock struct {
-	Name           string    `json:"name"`
-	CurrentVersion string    `json:"current_version"`
-	Language       string    `json:"language"`
-	EntryPoint     string    `json:"entry_point"`
-	RuntimeVersion string    `json:"runtime_version"`
-	LastDeployID   string    `json:"last_deploy_id,omitempty"`
-	LastDeployedAt time.Time `json:"last_deployed_at,omitempty"`
-	ContentHash    string    `json:"content_hash,omitempty"`
+// discoveredAgent represents an agent found by the discover subprocess.
+type discoveredAgent struct {
+	Name      string `json:"name"`
+	Framework string `json:"framework"`
 }
 
-// Manifest is the deployment manifest included in the tar
+// deployResult represents the outcome of deploying a single agent.
+type deployResult struct {
+	AgentName      string  `json:"agent_name"`
+	RegisteredName *string `json:"registered_name"`
+	Success        bool    `json:"success"`
+	Error          *string `json:"error"`
+}
+
+// Manifest is the deployment manifest included in the tar (cloud deploys only).
 type Manifest struct {
 	ManifestVersion string         `json:"manifest_version"`
 	Name            string         `json:"name"`
@@ -65,7 +52,7 @@ type Manifest struct {
 	Metadata        ManifestMeta   `json:"metadata,omitempty"`
 }
 
-// ResourceConfig holds resource allocation settings
+// ResourceConfig holds resource allocation settings for cloud deploys.
 type ResourceConfig struct {
 	CPURequest    string `json:"cpu_request"`
 	CPULimit      string `json:"cpu_limit"`
@@ -75,21 +62,21 @@ type ResourceConfig struct {
 	Timeout       int    `json:"timeout"`
 }
 
-// ManifestMeta holds auto-generated metadata
+// ManifestMeta holds auto-generated metadata for cloud deploys.
 type ManifestMeta struct {
 	CLIVersion string    `json:"cli_version,omitempty"`
 	CreatedAt  time.Time `json:"created_at,omitempty"`
 	GitSHA     string    `json:"git_sha,omitempty"`
 }
 
-// UploadResponse from the ingest service
+// UploadResponse from the ingest service (cloud deploys only).
 type UploadResponse struct {
 	DeployID  string `json:"deploy_id"`
 	StreamURL string `json:"stream_url"`
 	RequestID string `json:"request_id"`
 }
 
-// Hardcoded exclusions for tar creation
+// Hardcoded exclusions for tar creation (cloud deploys only).
 var defaultExclusions = []string{
 	// Version control
 	".git",
@@ -153,140 +140,211 @@ var defaultExclusions = []string{
 
 var deployCmd = &cobra.Command{
 	Use:   "deploy",
-	Short: "Deploy agent code to the AgentSpan runtime",
-	Long: `Package and deploy agent code to the AgentSpan runtime.
+	Short: "Deploy agents from your project to the AgentSpan server",
+	Long: `Discover agents in your project and deploy them to the AgentSpan server.
 
-This command:
-1. Detects the project language (Python, TypeScript, Java)
-2. Creates a deployment manifest
-3. Packages the code into a tar.gz archive
-4. Uploads to the ingest service
-5. Streams deployment progress via SSE
+For a local server, this registers the agent workflow definitions so they can
+be executed with 'agentspan agent run'. Workers still run on your machine.
 
-Example:
-  agentspan deploy                          # Interactive prompts
-  agentspan deploy -n my-agent -y           # Non-interactive with name
-  agentspan deploy --dry-run                # Create tar without uploading
+For a cloud server, this additionally packages and uploads your code so the
+server can run the workers remotely.
+
+Examples:
+  agentspan deploy                        # Deploy all agents
+  agentspan deploy -a my-agent            # Deploy a specific agent
+  agentspan deploy --dry-run              # Package without uploading (cloud only)
 `,
-	RunE: runDeploy,
+	RunE: runDeployCmd,
 }
 
 func init() {
-	deployCmd.Flags().StringVarP(&deployName, "name", "n", "", "Agent name (DNS-compatible)")
-	deployCmd.Flags().StringVarP(&deployVersion, "version", "v", "", "Version (default: auto-bump)")
-	deployCmd.Flags().StringVarP(&deployLanguage, "language", "l", "", "Language: python, typescript, java")
-	deployCmd.Flags().StringVarP(&deployEntryPoint, "entry-point", "e", "", "Entry point file")
-	deployCmd.Flags().StringVarP(&deployRuntime, "runtime", "r", "", "Runtime version (e.g., 3.11 for Python)")
-	deployCmd.Flags().BoolVarP(&deployAutoStart, "auto-start", "a", true, "Auto-start after build")
-	deployCmd.Flags().StringVar(&deployCPU, "cpu", "100m", "CPU request")
-	deployCmd.Flags().StringVar(&deployMemory, "memory", "256Mi", "Memory request")
-	deployCmd.Flags().IntVar(&deployReplicas, "replicas", 1, "Number of replicas")
-	deployCmd.Flags().IntVar(&deployTimeout, "timeout", 300, "Timeout in seconds")
-	deployCmd.Flags().BoolVarP(&deployYes, "yes", "y", false, "Skip all prompts")
-	deployCmd.Flags().StringVarP(&deployDir, "dir", "d", ".", "Source directory")
-	deployCmd.Flags().BoolVar(&deployDryRun, "dry-run", false, "Generate manifest and tar without uploading")
-
-	agentCmd.AddCommand(deployCmd)
+	deployCmd.Flags().StringSliceP("agents", "a", nil, "Comma-separated list of agent names to deploy (default: all)")
+	deployCmd.Flags().StringP("language", "l", "", "Project language: python or typescript")
+	deployCmd.Flags().StringP("package", "p", "", "Package/path to scan for agents")
+	deployCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
+	deployCmd.Flags().Bool("json", false, "Output results as JSON")
+	deployCmd.Flags().Bool("dry-run", false, "Package code without uploading (cloud targets only)")
+	deployCmd.Flags().String("cpu", "100m", "CPU request (cloud targets only)")
+	deployCmd.Flags().String("memory", "256Mi", "Memory request (cloud targets only)")
+	deployCmd.Flags().Int("replicas", 1, "Number of replicas (cloud targets only)")
+	deployCmd.Flags().Int("timeout", 300, "Timeout in seconds (cloud targets only)")
+	rootCmd.AddCommand(deployCmd)
 }
 
-func runDeploy(cmd *cobra.Command, args []string) error {
-	// Resolve source directory
-	srcDir, err := filepath.Abs(deployDir)
+func runDeployCmd(cmd *cobra.Command, args []string) error {
+	// 1. Get working directory
+	wd, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("resolve directory: %w", err)
+		return fmt.Errorf("get working directory: %w", err)
 	}
 
-	// Load existing lock file
-	lock, err := loadDeployLock(srcDir)
+	// 2. Read flags
+	agentNames, _ := cmd.Flags().GetStringSlice("agents")
+	languageFlag, _ := cmd.Flags().GetString("language")
+	packageFlag, _ := cmd.Flags().GetString("package")
+	autoYes, _ := cmd.Flags().GetBool("yes")
+	jsonOutput, _ := cmd.Flags().GetBool("json")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	cpu, _ := cmd.Flags().GetString("cpu")
+	memory, _ := cmd.Flags().GetString("memory")
+	replicas, _ := cmd.Flags().GetInt("replicas")
+	timeout, _ := cmd.Flags().GetInt("timeout")
+
+	// Trim whitespace and filter out empty strings from --agents flag
+	{
+		clean := agentNames[:0]
+		for _, n := range agentNames {
+			n = strings.TrimSpace(n)
+			if n != "" {
+				clean = append(clean, n)
+			}
+		}
+		agentNames = clean
+	}
+
+	// 3. Detect language
+	language, err := detectLanguage(wd, languageFlag)
+	if err != nil {
+		return fmt.Errorf("detect language: %w", err)
+	}
+
+	// 4. Find runtime binary (for Python)
+	pythonBin := ""
+	if language == "python" {
+		pythonBin = findPythonBinary(wd)
+		if pythonBin == "" {
+			return fmt.Errorf("no Python interpreter found; install Python or set the PYTHON environment variable")
+		}
+	}
+
+	// 5. Infer package
+	pkg, err := inferPackage(wd, language, packageFlag)
+	if err != nil {
+		return fmt.Errorf("infer package: %w", err)
+	}
+
+	// 6. Load config, build env
+	cfg := getConfig()
+	if serverURL != "" {
+		cfg.ServerURL = serverURL
+	}
+	env := buildEnv(cfg)
+
+	// 7. Discover agents via subprocess
+	ctx := context.Background()
+	discovered, err := execDiscover(ctx, env, language, pythonBin, wd, pkg)
+	if err != nil {
+		return fmt.Errorf("discover agents: %w", err)
+	}
+
+	if len(discovered) == 0 {
+		hint := "Define agents as module-level variables (e.g., agent = Agent(name=..., ...)).\n" +
+			"  Supported: AgentSpan Agent, OpenAI, LangChain, LangGraph, Google ADK.\n" +
+			"  Agents inside functions or if __name__ blocks are not discoverable.\n" +
+			"  Use --package or --path to point to the right location."
+		return fmt.Errorf("no agents found in %q.\n  %s", pkg.Value, hint)
+	}
+
+	// Keep the full list for JSON output
+	allDiscovered := discovered
+
+	// 8. Filter by --agents
+	discovered, err = filterDiscoveredAgents(discovered, agentNames)
 	if err != nil {
 		return err
 	}
 
-	// Detect language
-	language := deployLanguage
-	if language == "" {
-		if lock != nil && lock.Language != "" {
-			language = lock.Language
-		} else {
-			detected, err := detectLanguage(srcDir)
-			if err != nil {
-				return err
+	// 9. Show discovery table, prompt confirmation
+	if !jsonOutput {
+		fmt.Println(formatDiscoveryTable(discovered, pkg.Value))
+
+		if !autoYes {
+			fmt.Print("Deploy these agents? [y/N] ")
+			var answer string
+			fmt.Scanln(&answer)
+			answer = strings.TrimSpace(strings.ToLower(answer))
+			if answer != "y" && answer != "yes" {
+				fmt.Println("Aborted.")
+				return nil
 			}
-			language = detected
-		}
-	}
-	color.New(color.FgCyan).Printf("Language: %s\n", language)
-
-	// Determine entry point
-	entryPoint := deployEntryPoint
-	if entryPoint == "" {
-		if lock != nil && lock.EntryPoint != "" {
-			entryPoint = lock.EntryPoint
-		} else {
-			entryPoint = defaultEntryPoint(language)
 		}
 	}
 
-	// Validate entry point exists
-	if !fileExists(filepath.Join(srcDir, entryPoint)) {
-		return fmt.Errorf("entry point '%s' not found in %s", entryPoint, srcDir)
+	// 10. Deploy definitions via subprocess (always — local and cloud)
+	names := make([]string, len(discovered))
+	for i, a := range discovered {
+		names[i] = a.Name
 	}
-	color.New(color.FgCyan).Printf("Entry point: %s\n", entryPoint)
 
-	// Determine runtime version
-	runtime := deployRuntime
-	if runtime == "" {
-		if lock != nil && lock.RuntimeVersion != "" {
-			runtime = lock.RuntimeVersion
-		} else {
-			runtime = defaultRuntime(language)
+	results, err := execDeploy(ctx, env, language, pythonBin, wd, pkg, names)
+	if err != nil {
+		return fmt.Errorf("deploy agents: %w", err)
+	}
+
+	// 11. Output definition registration results
+	succeeded := 0
+	for _, r := range results {
+		if r.Success {
+			succeeded++
 		}
 	}
-	color.New(color.FgCyan).Printf("Runtime: %s\n", runtime)
 
-	// Determine agent name
-	name := deployName
-	if name == "" {
-		if lock != nil && lock.Name != "" {
-			name = lock.Name
-		} else if !deployYes {
-			// Prompt for name
-			fmt.Print("Agent name: ")
-			var input string
-			fmt.Scanln(&input)
-			name = strings.TrimSpace(input)
+	if jsonOutput {
+		out := map[string]interface{}{
+			"discovered": allDiscovered,
+			"deployed":   results,
+			"summary": map[string]int{
+				"total":     len(results),
+				"succeeded": succeeded,
+				"failed":    len(results) - succeeded,
+			},
+		}
+		printJSON(out)
+	} else {
+		fmt.Println(formatDeployOutput(results))
+	}
+
+	// 12. Return error if any definition registration failures
+	for _, r := range results {
+		if !r.Success {
+			return fmt.Errorf("one or more agents failed to deploy")
 		}
 	}
-	if name == "" {
-		// Use directory name as default
-		name = filepath.Base(srcDir)
-	}
-	// Validate DNS-compatible name
-	if !isValidDNSName(name) {
-		return fmt.Errorf("agent name '%s' is not DNS-compatible (lowercase, alphanumeric, hyphens only)", name)
-	}
-	color.New(color.FgCyan).Printf("Agent name: %s\n", name)
 
-	// Calculate version
-	version := calculateNextVersion(lock, deployVersion)
-	color.New(color.FgCyan).Printf("Version: %s\n", version)
+	// 13. Cloud only: package and upload code so the server can run workers remotely
+	if isCloudServer(cfg.ServerURL) {
+		if err := uploadAgentCode(wd, language, names, cfg, dryRun, cpu, memory, replicas, timeout); err != nil {
+			return fmt.Errorf("code upload failed: %w", err)
+		}
+	}
 
-	// Build manifest
+	return nil
+}
+
+// isCloudServer returns true if the server URL points to a remote (non-local) instance.
+func isCloudServer(serverURL string) bool {
+	return !strings.Contains(serverURL, "localhost") && !strings.Contains(serverURL, "127.0.0.1")
+}
+
+// uploadAgentCode packages the project into a tar.gz and uploads it to the cloud ingest service.
+func uploadAgentCode(srcDir, language string, agentNames []string, cfg *config.Config, dryRun bool, cpu, memory string, replicas, timeout int) error {
+	ingestURL := strings.TrimRight(cfg.ServerURL, "/")
+
 	manifest := &Manifest{
 		ManifestVersion: "1.0",
-		Name:            name,
-		Version:         version,
+		Name:            strings.Join(agentNames, ","),
+		Version:         "1.0.0",
 		Language:        language,
-		RuntimeVersion:  runtime,
-		EntryPoint:      entryPoint,
-		AutoStart:       deployAutoStart,
+		RuntimeVersion:  defaultRuntimeVersion(language),
+		EntryPoint:      defaultEntryPoint(language),
+		AutoStart:       true,
 		Resources: ResourceConfig{
-			CPURequest:    deployCPU,
-			CPULimit:      deployCPU, // Same as request for now
-			MemoryRequest: deployMemory,
-			MemoryLimit:   deployMemory,
-			Replicas:      deployReplicas,
-			Timeout:       deployTimeout,
+			CPURequest:    cpu,
+			CPULimit:      cpu,
+			MemoryRequest: memory,
+			MemoryLimit:   memory,
+			Replicas:      replicas,
+			Timeout:       timeout,
 		},
 		Metadata: ManifestMeta{
 			CLIVersion: Version,
@@ -295,7 +353,6 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	// Create tar.gz
 	tarPath, err := createTar(srcDir, manifest)
 	if err != nil {
 		return fmt.Errorf("create tar: %w", err)
@@ -305,9 +362,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	tarInfo, _ := os.Stat(tarPath)
 	color.New(color.FgGreen).Printf("Created package: %s (%d bytes)\n", filepath.Base(tarPath), tarInfo.Size())
 
-	if deployDryRun {
-		// Copy tar to current directory for inspection
-		dstPath := fmt.Sprintf("%s-%s.tar.gz", name, version)
+	if dryRun {
+		dstPath := fmt.Sprintf("agentspan-deploy-%s.tar.gz", time.Now().Format("20060102-150405"))
 		if err := copyFile(tarPath, dstPath); err != nil {
 			return err
 		}
@@ -315,98 +371,475 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Upload to ingest service
-	cfg := config.Load()
-	if serverURL != "" {
-		cfg.ServerURL = serverURL
-	}
-
-	// Derive ingest URL from server URL
-	ingestURL := deriveIngestURL(cfg.ServerURL)
-	color.New(color.FgCyan).Printf("Uploading to: %s\n", ingestURL)
+	color.New(color.FgCyan).Printf("Uploading code to: %s\n", ingestURL)
 
 	uploadResp, err := uploadPackage(ingestURL, tarPath, cfg)
 	if err != nil {
-		return fmt.Errorf("upload failed: %w", err)
+		return fmt.Errorf("upload: %w", err)
 	}
 
 	color.New(color.FgGreen).Printf("Deploy ID: %s\n", uploadResp.DeployID)
 
-	// Update lock file
-	newLock := &DeployLock{
-		Name:           name,
-		CurrentVersion: version,
-		Language:       language,
-		EntryPoint:     entryPoint,
-		RuntimeVersion: runtime,
-		LastDeployID:   uploadResp.DeployID,
-		LastDeployedAt: time.Now().UTC(),
-	}
-	if err := saveDeployLock(srcDir, newLock); err != nil {
-		color.New(color.FgYellow).Printf("Warning: failed to save deploy.lock: %v\n", err)
-	}
-
-	// Stream deployment progress
 	streamURL := ingestURL + uploadResp.StreamURL
 	return streamDeployProgress(streamURL, cfg)
 }
 
-func loadDeployLock(srcDir string) (*DeployLock, error) {
-	lockPath := filepath.Join(srcDir, ".agentspan", "deploy.lock")
-	data, err := os.ReadFile(lockPath)
-	if os.IsNotExist(err) {
-		return nil, nil
+// detectLanguage determines the project language from marker files or the --language flag.
+func detectLanguage(dir, override string) (string, error) {
+	if override != "" {
+		switch strings.ToLower(override) {
+		case "python", "py":
+			return "python", nil
+		case "typescript", "ts":
+			return "typescript", nil
+		default:
+			return "", fmt.Errorf("unsupported language %q (supported: python, typescript)", override)
+		}
+	}
+
+	pythonMarkers := []string{"pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"}
+	hasPython := false
+	for _, m := range pythonMarkers {
+		if _, err := os.Stat(filepath.Join(dir, m)); err == nil {
+			hasPython = true
+			break
+		}
+	}
+
+	hasTypeScript := false
+	if _, err := os.Stat(filepath.Join(dir, "tsconfig.json")); err == nil {
+		hasTypeScript = true
+	} else if hasTSDependency(filepath.Join(dir, "package.json")) {
+		hasTypeScript = true
+	}
+
+	if hasPython && hasTypeScript {
+		return "", fmt.Errorf("both Python and TypeScript markers found; use --language to disambiguate")
+	}
+	if !hasPython && !hasTypeScript {
+		return "", fmt.Errorf("no Python or TypeScript project markers found; use --language to specify")
+	}
+	if hasPython {
+		return "python", nil
+	}
+	return "typescript", nil
+}
+
+// hasTSDependency checks if package.json has a typescript-related dependency.
+func hasTSDependency(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var pkg map[string]interface{}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return false
+	}
+
+	tsDeps := []string{"typescript", "tsx", "ts-node"}
+	for _, section := range []string{"dependencies", "devDependencies"} {
+		deps, ok := pkg[section].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for _, dep := range tsDeps {
+			if _, found := deps[dep]; found {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// packageInfo holds the inferred package/path and how to pass it to the subprocess.
+type packageInfo struct {
+	Value  string // dotted module name or directory path
+	IsPath bool   // true = pass as --path; false = pass as --package
+}
+
+// inferPackage determines the package/path to scan for agents.
+func inferPackage(dir, language, override string) (packageInfo, error) {
+	if override != "" {
+		// If override looks like a path (contains / or . prefix), treat as path
+		isPath := strings.Contains(override, "/") || strings.HasPrefix(override, ".")
+		return packageInfo{Value: override, IsPath: isPath}, nil
+	}
+
+	switch language {
+	case "python":
+		// Try package name from pyproject.toml first
+		pkg, err := inferPythonPackage(dir)
+		if err == nil {
+			return packageInfo{Value: pkg, IsPath: false}, nil
+		}
+		// Fall back to scanning current directory
+		return packageInfo{Value: dir, IsPath: true}, nil
+	case "typescript":
+		srcDir := filepath.Join(dir, "src")
+		if info, err := os.Stat(srcDir); err == nil && info.IsDir() {
+			return packageInfo{Value: "./src", IsPath: true}, nil
+		}
+		return packageInfo{Value: ".", IsPath: true}, nil
+	default:
+		return packageInfo{}, fmt.Errorf("cannot infer package for language %q", language)
+	}
+}
+
+// inferPythonPackage reads pyproject.toml to find the project name.
+func inferPythonPackage(dir string) (string, error) {
+	path := filepath.Join(dir, "pyproject.toml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("cannot infer Python package: pyproject.toml not found; use --package")
+	}
+
+	// Simple TOML parsing for [project] name = "..."
+	name := parsePyprojectName(string(data))
+	if name == "" {
+		return "", fmt.Errorf("cannot infer Python package: no [project] name in pyproject.toml; use --package")
+	}
+
+	// PEP 503: replace hyphens with underscores for import name
+	return strings.ReplaceAll(name, "-", "_"), nil
+}
+
+// parsePyprojectName extracts the name from the [project] section of a pyproject.toml file.
+// This uses simple line-based parsing to avoid a TOML library dependency.
+func parsePyprojectName(content string) string {
+	inProject := false
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "[project]" {
+			inProject = true
+			continue
+		}
+		if inProject {
+			// Another section starts
+			if strings.HasPrefix(trimmed, "[") {
+				return ""
+			}
+			if strings.HasPrefix(trimmed, "name") {
+				parts := strings.SplitN(trimmed, "=", 2)
+				if len(parts) == 2 {
+					val := strings.TrimSpace(parts[1])
+					val = strings.Trim(val, `"'`)
+					return val
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// findPythonBinary locates a Python interpreter for the project.
+func findPythonBinary(dir string) string {
+	// Check PYTHON env var first
+	if p := os.Getenv("PYTHON"); p != "" {
+		return p
+	}
+
+	// Check local virtualenvs
+	for _, venv := range []string{".venv", "venv"} {
+		candidate := filepath.Join(dir, venv, "bin", "python")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	// Fall back to PATH
+	for _, name := range []string{"python3", "python"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+
+	return ""
+}
+
+// runSubprocess executes a command with a 120-second timeout, capturing stdout.
+// Stderr is forwarded to os.Stderr. Returns stdout bytes even on non-zero exit if content was produced.
+func runSubprocess(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = env
+	cmd.Stderr = os.Stderr
+
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	err := cmd.Run()
+	if err != nil && stdout.Len() > 0 {
+		// Return partial output on failure — subprocess may have written results before erroring
+		return stdout.Bytes(), err
 	}
 	if err != nil {
+		return nil, fmt.Errorf("run %s: %w", name, err)
+	}
+	return stdout.Bytes(), nil
+}
+
+// buildEnv constructs the environment variables for subprocess calls.
+func buildEnv(cfg *config.Config) []string {
+	env := os.Environ()
+	// Remove existing AGENTSPAN_ vars to avoid duplication
+	filtered := make([]string, 0, len(env))
+	for _, e := range env {
+		if !strings.HasPrefix(e, "AGENTSPAN_") {
+			filtered = append(filtered, e)
+		}
+	}
+	filtered = append(filtered, "AGENTSPAN_SERVER_URL="+cfg.ServerURL)
+	// Prevent the SDK from auto-starting an embedded server during deploy
+	filtered = append(filtered, "AGENTSPAN_AUTO_START_SERVER=false")
+	if cfg.APIKey != "" {
+		filtered = append(filtered, "AGENTSPAN_API_KEY="+cfg.APIKey)
+	}
+	if cfg.AuthKey != "" {
+		filtered = append(filtered, "AGENTSPAN_AUTH_KEY="+cfg.AuthKey)
+	}
+	if cfg.AuthSecret != "" {
+		filtered = append(filtered, "AGENTSPAN_AUTH_SECRET="+cfg.AuthSecret)
+	}
+	return filtered
+}
+
+// findTSBinScript locates a cli-bin script by walking up from dir
+// to find the project root (where node_modules or cli-bin lives).
+func findTSBinScript(dir, name string) (string, error) {
+	absDir, _ := filepath.Abs(dir)
+	var searched []string
+
+	cur := absDir
+	for {
+		candidates := []string{
+			filepath.Join(cur, "node_modules", "@agentspan", "sdk", "cli-bin", name),
+			filepath.Join(cur, "node_modules", "agentspan", "cli-bin", name),
+			filepath.Join(cur, "cli-bin", name),
+		}
+		for _, p := range candidates {
+			if _, err := os.Stat(p); err == nil {
+				return p, nil
+			}
+			searched = append(searched, p)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			break // reached filesystem root
+		}
+		cur = parent
+	}
+	return "", fmt.Errorf("cannot find %s; looked in:\n  %s", name, strings.Join(searched, "\n  "))
+}
+
+// execDiscover runs the language-specific discover subprocess.
+func execDiscover(ctx context.Context, env []string, language, pythonBin, projectDir string, pkg packageInfo) ([]discoveredAgent, error) {
+	var data []byte
+	var err error
+
+	switch language {
+	case "python":
+		flag := "--package"
+		if pkg.IsPath {
+			flag = "--path"
+		}
+		data, err = runSubprocess(ctx, env, pythonBin, "-m", "agentspan.cli.discover", flag, pkg.Value)
+	case "typescript":
+		script, findErr := findTSBinScript(projectDir, "discover.ts")
+		if findErr != nil {
+			return nil, findErr
+		}
+		data, err = runSubprocess(ctx, env, "npx", "tsx", script, "--path", pkg.Value)
+	default:
+		return nil, fmt.Errorf("unsupported language for discover: %s", language)
+	}
+
+	if err != nil && len(data) == 0 {
 		return nil, err
 	}
 
-	var lock DeployLock
-	if err := json.Unmarshal(data, &lock); err != nil {
-		// Corrupted lock - treat as first deploy
-		color.New(color.FgYellow).Println("Warning: deploy.lock is corrupted, treating as first deploy")
-		return nil, nil
-	}
-	return &lock, nil
+	return parseDiscoveryResult(data)
 }
 
-func saveDeployLock(srcDir string, lock *DeployLock) error {
-	lockDir := filepath.Join(srcDir, ".agentspan")
-	if err := os.MkdirAll(lockDir, 0755); err != nil {
-		return err
+// execDeploy runs the language-specific deploy subprocess.
+func execDeploy(ctx context.Context, env []string, language, pythonBin, projectDir string, pkg packageInfo, agentNames []string) ([]deployResult, error) {
+	var data []byte
+	var err error
+
+	switch language {
+	case "python":
+		flag := "--package"
+		if pkg.IsPath {
+			flag = "--path"
+		}
+		args := []string{"-m", "agentspan.cli.deploy", flag, pkg.Value}
+		if len(agentNames) > 0 {
+			args = append(args, "--agents", strings.Join(agentNames, ","))
+		}
+		data, err = runSubprocess(ctx, env, pythonBin, args...)
+	case "typescript":
+		script, findErr := findTSBinScript(projectDir, "deploy.ts")
+		if findErr != nil {
+			return nil, findErr
+		}
+		args := []string{"tsx", script, "--path", pkg.Value}
+		if len(agentNames) > 0 {
+			args = append(args, "--agents", strings.Join(agentNames, ","))
+		}
+		data, err = runSubprocess(ctx, env, "npx", args...)
+	default:
+		return nil, fmt.Errorf("unsupported language for deploy: %s", language)
 	}
 
-	data, err := json.MarshalIndent(lock, "", "  ")
-	if err != nil {
-		return err
+	if err != nil && len(data) == 0 {
+		return nil, err
 	}
 
-	return os.WriteFile(filepath.Join(lockDir, "deploy.lock"), data, 0644)
+	return parseDeployResult(data)
 }
 
-func detectLanguage(dir string) (string, error) {
-	var found []string
+// parseDiscoveryResult parses JSON output from the discover subprocess.
+func parseDiscoveryResult(data []byte) ([]discoveredAgent, error) {
+	var agents []discoveredAgent
+	if err := json.Unmarshal(data, &agents); err != nil {
+		return nil, fmt.Errorf("parse discovery result: %w", err)
+	}
+	return agents, nil
+}
 
-	if fileExists(filepath.Join(dir, "requirements.txt")) ||
-		fileExists(filepath.Join(dir, "pyproject.toml")) {
-		found = append(found, "python")
+// parseDeployResult parses JSON output from the deploy subprocess.
+func parseDeployResult(data []byte) ([]deployResult, error) {
+	var results []deployResult
+	if err := json.Unmarshal(data, &results); err != nil {
+		return nil, fmt.Errorf("parse deploy result: %w", err)
 	}
-	if fileExists(filepath.Join(dir, "package.json")) {
-		found = append(found, "typescript")
-	}
-	if fileExists(filepath.Join(dir, "pom.xml")) ||
-		fileExists(filepath.Join(dir, "build.gradle")) ||
-		fileExists(filepath.Join(dir, "build.gradle.kts")) {
-		found = append(found, "java")
+	return results, nil
+}
+
+// filterDiscoveredAgents filters agents by the given names, or returns all if names is empty.
+func filterDiscoveredAgents(agents []discoveredAgent, names []string) ([]discoveredAgent, error) {
+	if len(names) == 0 {
+		return agents, nil
 	}
 
-	if len(found) == 0 {
-		return "", fmt.Errorf("no supported language detected (need requirements.txt, pyproject.toml, package.json, pom.xml, or build.gradle)")
+	// Deduplicate names while preserving order
+	seen := make(map[string]bool, len(names))
+	deduped := make([]string, 0, len(names))
+	for _, n := range names {
+		if !seen[n] {
+			seen[n] = true
+			deduped = append(deduped, n)
+		}
 	}
-	if len(found) > 1 {
-		return "", fmt.Errorf("multiple languages detected (%s), use --language flag", strings.Join(found, ", "))
+	names = deduped
+
+	agentMap := make(map[string]discoveredAgent)
+	for _, a := range agents {
+		agentMap[a.Name] = a
 	}
-	return found[0], nil
+
+	var filtered []discoveredAgent
+	var notFound []string
+	for _, name := range names {
+		if a, ok := agentMap[name]; ok {
+			filtered = append(filtered, a)
+		} else {
+			notFound = append(notFound, name)
+		}
+	}
+
+	if len(notFound) > 0 {
+		available := make([]string, 0, len(agents))
+		for _, a := range agents {
+			available = append(available, a.Name)
+		}
+		availStr := strings.Join(available, ", ")
+		if len(available) > 10 {
+			availStr = strings.Join(available[:10], ", ") + fmt.Sprintf(", ... and %d more", len(available)-10)
+		}
+		return nil, fmt.Errorf("agent(s) not found: %s (available: %s)", strings.Join(notFound, ", "), availStr)
+	}
+
+	return filtered, nil
+}
+
+// formatDiscoveryTable formats discovered agents as a table for display.
+func formatDiscoveryTable(agents []discoveredAgent, pkg string) string {
+	var buf bytes.Buffer
+
+	fmt.Fprintf(&buf, "\nDiscovered %d agent(s) in %s:\n\n", len(agents), pkg)
+
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tFRAMEWORK")
+	fmt.Fprintln(w, "----\t---------")
+	for _, a := range agents {
+		fmt.Fprintf(w, "%s\t%s\n", a.Name, a.Framework)
+	}
+	w.Flush()
+
+	return buf.String()
+}
+
+// formatDeployOutput formats deploy results as a colored summary.
+func formatDeployOutput(results []deployResult) string {
+	var buf bytes.Buffer
+
+	green := color.New(color.FgGreen)
+	red := color.New(color.FgRed)
+
+	successes := 0
+	failures := 0
+
+	fmt.Fprintln(&buf)
+	for _, r := range results {
+		if r.Success {
+			successes++
+			green.Fprintf(&buf, "  ✓ %s", r.AgentName)
+			if r.RegisteredName != nil && *r.RegisteredName != "" && *r.RegisteredName != r.AgentName {
+				fmt.Fprintf(&buf, " (registered as %s)", *r.RegisteredName)
+			}
+			fmt.Fprintln(&buf)
+		} else {
+			failures++
+			errMsg := "unknown error"
+			if r.Error != nil {
+				errMsg = *r.Error
+			}
+			red.Fprintf(&buf, "  ✗ %s: %s\n", r.AgentName, errMsg)
+		}
+	}
+
+	fmt.Fprintln(&buf)
+	if failures == 0 {
+		green.Fprintf(&buf, "All %d agent(s) deployed successfully.\n", successes)
+	} else if successes == 0 {
+		red.Fprintf(&buf, "All %d agent(s) failed to deploy.\n", failures)
+		fmt.Fprintln(&buf)
+		fmt.Fprintln(&buf, "Check server status with: agentspan doctor")
+	} else {
+		fmt.Fprintf(&buf, "%d deployed, %d failed.\n", successes, failures)
+	}
+
+	if successes > 0 {
+		fmt.Fprintln(&buf)
+		fmt.Fprintln(&buf, "Run with: agentspan agent run --name <agent> \"your prompt\"")
+	}
+
+	return buf.String()
+}
+
+// --- Cloud upload helpers ---
+
+func defaultRuntimeVersion(language string) string {
+	switch language {
+	case "python":
+		return "3.11"
+	case "typescript":
+		return "20"
+	default:
+		return "3.11"
+	}
 }
 
 func defaultEntryPoint(language string) string {
@@ -415,55 +848,9 @@ func defaultEntryPoint(language string) string {
 		return "agent.py"
 	case "typescript":
 		return "src/agent.ts"
-	case "java":
-		return "src/main/java/Agent.java"
 	default:
 		return "agent.py"
 	}
-}
-
-func defaultRuntime(language string) string {
-	switch language {
-	case "python":
-		return "3.11"
-	case "typescript":
-		return "20"
-	case "java":
-		return "21"
-	default:
-		return "3.11"
-	}
-}
-
-func calculateNextVersion(lock *DeployLock, userVersion string) string {
-	if userVersion != "" {
-		return userVersion
-	}
-	if lock == nil || lock.CurrentVersion == "" {
-		return "1.0.0"
-	}
-	return bumpPatch(lock.CurrentVersion)
-}
-
-func bumpPatch(version string) string {
-	parts := strings.Split(version, ".")
-	if len(parts) != 3 {
-		return "1.0.0"
-	}
-	patch, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return "1.0.0"
-	}
-	return fmt.Sprintf("%s.%s.%d", parts[0], parts[1], patch+1)
-}
-
-func isValidDNSName(name string) bool {
-	// DNS-compatible: lowercase, alphanumeric, hyphens, max 63 chars
-	if len(name) == 0 || len(name) > 63 {
-		return false
-	}
-	matched, _ := regexp.MatchString("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", name)
-	return matched
 }
 
 func getGitSHA(dir string) string {
@@ -591,18 +978,15 @@ func shouldExclude(path string, isDir bool) bool {
 	base := filepath.Base(path)
 
 	for _, pattern := range defaultExclusions {
-		// Check if pattern has glob
 		if strings.Contains(pattern, "*") {
 			matched, _ := filepath.Match(pattern, base)
 			if matched {
 				return true
 			}
 		} else {
-			// Exact match
 			if base == pattern {
 				return true
 			}
-			// Check if any path component matches
 			parts := strings.Split(path, string(filepath.Separator))
 			for _, part := range parts {
 				if part == pattern {
@@ -612,11 +996,6 @@ func shouldExclude(path string, isDir bool) bool {
 		}
 	}
 	return false
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }
 
 func copyFile(src, dst string) error {
@@ -634,15 +1013,6 @@ func copyFile(src, dst string) error {
 
 	_, err = io.Copy(out, in)
 	return err
-}
-
-func deriveIngestURL(serverURL string) string {
-	// For local development, use port 8081
-	if strings.Contains(serverURL, "localhost") || strings.Contains(serverURL, "127.0.0.1") {
-		return "http://localhost:8081"
-	}
-	// For production, use same host with /v1/ingest path
-	return strings.TrimRight(serverURL, "/")
 }
 
 func uploadPackage(ingestURL, tarPath string, cfg *config.Config) (*UploadResponse, error) {
@@ -719,7 +1089,6 @@ func streamDeployProgress(streamURL string, cfg *config.Config) error {
 		line := scanner.Text()
 
 		if line == "" {
-			// End of event, process it
 			if eventData != "" {
 				printDeployEvent(eventType, eventData)
 				eventType, eventData = "", ""
@@ -728,7 +1097,6 @@ func streamDeployProgress(streamURL string, cfg *config.Config) error {
 		}
 
 		if strings.HasPrefix(line, ":") {
-			// Comment/keepalive, ignore
 			continue
 		}
 
@@ -745,7 +1113,6 @@ func streamDeployProgress(streamURL string, cfg *config.Config) error {
 func printDeployEvent(eventType, data string) {
 	var evt map[string]interface{}
 	if err := json.Unmarshal([]byte(data), &evt); err != nil {
-		// Not JSON
 		fmt.Printf("[%s] %s\n", eventType, data)
 		return
 	}

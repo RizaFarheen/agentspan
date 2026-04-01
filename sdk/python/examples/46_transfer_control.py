@@ -97,9 +97,18 @@ coordinator = Agent(
     },
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        coordinator,
-        "Collect data from the sales database, analyze trends, and write a summary.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.46_transfer_control
+        runtime.deploy(coordinator)
+        runtime.serve(coordinator)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     coordinator,
+        #     "Collect data from the sales database, analyze trends, and write a summary.",
+        # )
+        # result.print_result()
+

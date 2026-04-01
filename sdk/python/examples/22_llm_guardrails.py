@@ -54,9 +54,18 @@ agent = Agent(
     guardrails=[safety_guard],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "What should I do about persistent headaches?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.22_llm_guardrails
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     agent,
+        #     "What should I do about persistent headaches?",
+        # )
+        # result.print_result()
+

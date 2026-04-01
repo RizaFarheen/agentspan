@@ -54,13 +54,24 @@ class TestRunFunction:
         assert call_kwargs.kwargs["media"] == ["img.png"]
         assert call_kwargs.kwargs["session_id"] == "s1"
 
+    def test_run_passes_credentials(self):
+        mock_runtime = MagicMock()
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        from agentspan.agents.run import run
+
+        run(agent, "Hi", credentials=["OPENAI_API_KEY"], runtime=mock_runtime)
+
+        call_kwargs = mock_runtime.run.call_args
+        assert call_kwargs.kwargs["credentials"] == ["OPENAI_API_KEY"]
+
 
 class TestStartFunction:
     """Test the top-level start() function."""
 
     def test_start_delegates_to_runtime(self):
         mock_runtime = MagicMock()
-        mock_runtime.start.return_value = MagicMock(workflow_id="wf-1")
+        mock_runtime.start.return_value = MagicMock(execution_id="wf-1")
         agent = Agent(name="test", model="openai/gpt-4o")
 
         from agentspan.agents.run import start
@@ -68,7 +79,7 @@ class TestStartFunction:
         handle = start(agent, "Go", runtime=mock_runtime)
 
         mock_runtime.start.assert_called_once()
-        assert handle.workflow_id == "wf-1"
+        assert handle.execution_id == "wf-1"
 
 
 class TestStreamFunction:
@@ -139,6 +150,19 @@ class TestRunAsyncFunction:
         mock_runtime.run_async.assert_called_once()
         assert result.output == "Async result"
 
+    @pytest.mark.asyncio
+    async def test_run_async_passes_credentials(self):
+        mock_runtime = MagicMock()
+        mock_runtime.run_async = AsyncMock(return_value=MagicMock(output="Async result"))
+        agent = Agent(name="test", model="openai/gpt-4o")
+
+        from agentspan.agents.run import run_async
+
+        await run_async(agent, "Hi", credentials=["OPENAI_API_KEY"], runtime=mock_runtime)
+
+        call_kwargs = mock_runtime.run_async.call_args
+        assert call_kwargs.kwargs["credentials"] == ["OPENAI_API_KEY"]
+
 
 class TestConfigure:
     """Test the configure() function."""
@@ -199,7 +223,7 @@ class TestDeployFunction:
         from agentspan.agents.run import deploy
 
         mock_runtime = MagicMock()
-        mock_runtime.deploy.return_value = [DeploymentInfo(workflow_name="wf", agent_name="a")]
+        mock_runtime.deploy.return_value = [DeploymentInfo(registered_name="wf", agent_name="a")]
         agent = Agent(name="a", model="openai/gpt-4o")
         result = deploy(agent, runtime=mock_runtime)
         mock_runtime.deploy.assert_called_once_with(agent, packages=None)

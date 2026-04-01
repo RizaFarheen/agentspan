@@ -73,13 +73,21 @@ if __name__ == "__main__":
     print("Media Generation Agent")
     print("=" * 60)
 
+
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            media_agent,
-            (
-                "Create an image of a serene Japanese garden with a koi pond "
-                "at sunset, cherry blossoms falling gently. Use vivid style."
-                "use that image to generate a video with audio narration describing the image"
-            ),
-        )
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.40_media_generation_agent
+        runtime.deploy(media_agent)
+        runtime.serve(media_agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     media_agent,
+        #     (
+        #         "Create an image of a serene Japanese garden with a koi pond "
+        #         "at sunset, cherry blossoms falling gently. Use vivid style."
+        #         "use that image to generate a video with audio narration describing the image"
+        #     ),
+        # )
+        # result.print_result()
+

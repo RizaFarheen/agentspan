@@ -24,6 +24,12 @@ graph = create_agent(llm, tools=[], name="hello_world_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(graph, "Say hello and tell me a fun fact about Python programming.")
-        print(f"Status: {result.status}")
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.01_hello_world
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(graph, "Say hello and tell me a fun fact about Python programming.")
+        # print(f"Status: {result.status}")
+        # result.print_result()

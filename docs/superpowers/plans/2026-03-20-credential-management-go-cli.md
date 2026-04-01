@@ -47,7 +47,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 func TestIsLocalhost(t *testing.T) {
@@ -56,9 +56,9 @@ func TestIsLocalhost(t *testing.T) {
 		url      string
 		expected bool
 	}{
-		{"localhost with port", "http://localhost:8080", true},
+		{"localhost with port", "http://localhost:6767", true},
 		{"localhost no port", "http://localhost", true},
-		{"127.0.0.1 with port", "http://127.0.0.1:8080", true},
+		{"127.0.0.1 with port", "http://127.0.0.1:6767", true},
 		{"127.0.0.1 no port", "http://127.0.0.1", true},
 		{"remote http", "http://team.agentspan.io", false},
 		{"remote https", "https://team.agentspan.io", false},
@@ -295,7 +295,7 @@ package cmd
 import (
     "testing"
 
-    "github.com/agentspan/agentspan/cli/config"
+    "github.com/agentspan-ai/agentspan/cli/config"
 )
 
 // newTempHome points HOME at a temp dir so config reads/writes are isolated.
@@ -336,7 +336,7 @@ import (
     "net/http/httptest"
     "testing"
 
-    "github.com/agentspan/agentspan/cli/config"
+    "github.com/agentspan-ai/agentspan/cli/config"
 )
 
 func TestLogoutClearsAPIKey(t *testing.T) {
@@ -457,8 +457,8 @@ import (
     "strings"
     "syscall"
 
-    "github.com/agentspan/agentspan/cli/client"
-    "github.com/agentspan/agentspan/cli/config"
+    "github.com/agentspan-ai/agentspan/cli/client"
+    "github.com/agentspan-ai/agentspan/cli/config"
     "github.com/fatih/color"
     "github.com/spf13/cobra"
     "golang.org/x/term"
@@ -892,8 +892,8 @@ import (
     "fmt"
     "text/tabwriter"
 
-    "github.com/agentspan/agentspan/cli/client"
-    "github.com/agentspan/agentspan/cli/config"
+    "github.com/agentspan-ai/agentspan/cli/client"
+    "github.com/agentspan-ai/agentspan/cli/config"
     "github.com/fatih/color"
     "github.com/spf13/cobra"
 )

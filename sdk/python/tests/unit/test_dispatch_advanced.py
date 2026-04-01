@@ -113,7 +113,7 @@ class TestToolContext:
         def tool_with_context(context: ToolContext, query: str) -> str:
             received_ctx["agent"] = context.agent_name
             received_ctx["session"] = context.session_id
-            received_ctx["workflow_id"] = context.workflow_id
+            received_ctx["execution_id"] = context.execution_id
             return f"result for {query}"
 
         _current_context.update(
@@ -131,7 +131,7 @@ class TestToolContext:
         assert result.output_data == {"result": "result for test"}
         assert received_ctx["agent"] == "test_agent"
         assert received_ctx["session"] == "session_123"
-        assert received_ctx["workflow_id"] == "wf-ctx-test"
+        assert received_ctx["execution_id"] == "wf-ctx-test"
 
     def test_no_context_param_via_make_tool_worker(self):
         def plain_tool(x: str) -> str:
@@ -245,6 +245,57 @@ class TestMakeToolWorker:
 
         wrapper = make_tool_worker(get_weather, "get_weather")
         assert wrapper.__name__ == "get_weather"
+
+
+class TestFrameworkCallableCompatibility:
+    """Framework-extracted callables should match OpenAI SDK expectations."""
+
+    def test_framework_callable_gets_object_like_ctx_and_agent(self):
+        def dynamic_instructions(ctx, agent) -> str:
+            return f"{agent.metadata.role}:{ctx.metadata.user.name}:{ctx.prompt}"
+
+        dynamic_instructions._agentspan_framework_callable = True
+
+        wrapper = make_tool_worker(dynamic_instructions, "dynamic_instructions")
+        task = _make_task(
+            input_data={
+                "ctx": {
+                    "prompt": "hello",
+                    "metadata": {"user": {"name": "viren"}},
+                },
+                "agent": {
+                    "name": "helper",
+                    "metadata": {"role": "assistant"},
+                },
+            }
+        )
+
+        result = wrapper(task)
+
+        assert result.status == "COMPLETED"
+        assert result.output_data == {"result": "assistant:viren:hello"}
+
+    def test_framework_callable_normalizes_model_like_results(self):
+        class GuardrailOutput:
+            def model_dump(self):
+                return {
+                    "tripwire_triggered": True,
+                    "output_info": {"reason": "unsafe output"},
+                }
+
+        def check_output_safety(output):
+            return GuardrailOutput()
+
+        check_output_safety._agentspan_framework_callable = True
+
+        wrapper = make_tool_worker(check_output_safety, "check_output_safety")
+        result = wrapper(_make_task(input_data={"output": "bad"}))
+
+        assert result.status == "COMPLETED"
+        assert result.output_data == {
+            "tripwire_triggered": True,
+            "output_info": {"reason": "unsafe output"},
+        }
 
 
 # ── Guardrail integration with make_tool_worker ────────────────────────

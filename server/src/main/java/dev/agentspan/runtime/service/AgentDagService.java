@@ -5,6 +5,13 @@
 
 package dev.agentspan.runtime.service;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.stereotype.Service;
+
 import com.netflix.conductor.common.metadata.workflow.SubWorkflowParams;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
 import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
@@ -12,14 +19,10 @@ import com.netflix.conductor.core.exception.NotFoundException;
 import com.netflix.conductor.dao.ExecutionDAO;
 import com.netflix.conductor.model.TaskModel;
 import com.netflix.conductor.model.WorkflowModel;
-import dev.agentspan.runtime.model.*;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import dev.agentspan.runtime.model.*;
+
+import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
@@ -27,11 +30,11 @@ public class AgentDagService {
 
     private final ExecutionDAO executionDAO;
 
-    public InjectTaskResponse injectTask(String workflowId, InjectTaskRequest req) {
-        WorkflowModel workflow = executionDAO.getWorkflow(workflowId, true);
+    public InjectTaskResponse injectTask(String executionId, InjectTaskRequest req) {
+        WorkflowModel workflow = executionDAO.getWorkflow(executionId, true);
         if (workflow == null) {
             // NotFoundException is mapped to HTTP 404 by Conductor's ApplicationExceptionMapper
-            throw new NotFoundException("Workflow not found: " + workflowId);
+            throw new NotFoundException("Execution not found: " + executionId);
         }
 
         TaskModel task = new TaskModel();
@@ -40,7 +43,7 @@ public class AgentDagService {
         task.setReferenceTaskName(req.getReferenceTaskName());
         task.setTaskType(req.getType());
         task.setStatus(TaskModel.Status.IN_PROGRESS);
-        task.setWorkflowInstanceId(workflowId);
+        task.setWorkflowInstanceId(executionId);
         task.setWorkflowType(workflow.getWorkflowName());
         task.setInputData(req.getInputData() != null ? req.getInputData() : Collections.emptyMap());
         task.setSeq(workflow.getTasks().size() + 1);
@@ -49,7 +52,7 @@ public class AgentDagService {
         task.setStartTime(now);
 
         if (req.getSubWorkflowParam() != null) {
-            task.setSubWorkflowId(req.getSubWorkflowParam().getWorkflowId());
+            task.setSubWorkflowId(req.getSubWorkflowParam().getExecutionId());
         }
 
         executionDAO.createTasks(List.of(task));

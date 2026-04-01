@@ -76,10 +76,16 @@ graph = create_react_agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "I'm flying from the US to Japan with $800. "
-            "How many yen will I get? The flight is 9,540 km — how far is that in miles?",
-        )
-        print(f"Status: {result.status}")
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.42_react_agent_system_prompt
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "I'm flying from the US to Japan with $800. "
+        # "How many yen will I get? The flight is 9,540 km — how far is that in miles?",
+        # )
+        # print(f"Status: {result.status}")
+        # result.print_result()

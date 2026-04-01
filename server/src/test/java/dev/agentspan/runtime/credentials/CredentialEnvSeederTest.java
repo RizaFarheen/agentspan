@@ -4,7 +4,12 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import org.conductoross.conductor.AgentRuntime;
+import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
+import static org.assertj.core.api.Assertions.*;
+
+import java.util.Map;
+import java.util.function.Function;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,11 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.util.Map;
-import java.util.function.Function;
-
-import static dev.agentspan.runtime.credentials.CredentialEnvSeeder.ANONYMOUS_USER_ID;
-import static org.assertj.core.api.Assertions.*;
+import dev.agentspan.runtime.AgentRuntime;
 
 /**
  * Integration test for CredentialEnvSeeder — uses real DB, no mocks.
@@ -37,15 +38,17 @@ class CredentialEnvSeederTest {
     @BeforeEach
     void cleanUp() {
         // Remove test credentials from previous runs
-        jdbc.update("DELETE FROM credentials_store WHERE user_id = :uid AND name LIKE '_TEST_%'",
-            Map.of("uid", ANONYMOUS_USER_ID));
+        jdbc.update(
+                "DELETE FROM credentials_store WHERE user_id = :uid AND name LIKE '_TEST_%'",
+                Map.of("uid", ANONYMOUS_USER_ID));
+        storeProvider.delete(ANONYMOUS_USER_ID, "GH_TOKEN");
+        storeProvider.delete(ANONYMOUS_USER_ID, "GITHUB_TOKEN");
     }
 
     @Test
     void seeder_storesCredentialFromEnv_inRealDb() throws Exception {
         // Simulate env with a test key
-        Function<String, String> fakeEnv = name ->
-            "_TEST_ANTHROPIC_KEY".equals(name) ? "sk-test-value" : null;
+        Function<String, String> fakeEnv = name -> "_TEST_ANTHROPIC_KEY".equals(name) ? "sk-test-value" : null;
 
         CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, fakeEnv);
         // Override known vars for this test
@@ -55,8 +58,8 @@ class CredentialEnvSeederTest {
 
         // The seeder won't find _TEST_ANTHROPIC_KEY in KNOWN_ENV_VARS,
         // so let's test with a real known var by injecting via the env lookup
-        Function<String, String> envWithAnthropicKey = name ->
-            "ANTHROPIC_API_KEY".equals(name) ? "sk-test-seeded-value" : null;
+        Function<String, String> envWithAnthropicKey =
+                name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-test-seeded-value" : null;
 
         CredentialEnvSeeder realSeeder = new CredentialEnvSeeder(storeProvider, envWithAnthropicKey);
         field.set(realSeeder, "built-in");
@@ -77,8 +80,8 @@ class CredentialEnvSeederTest {
         storeProvider.set(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY", "original-value");
 
         // Try to seed with a different value
-        Function<String, String> envLookup = name ->
-            "ANTHROPIC_API_KEY".equals(name) ? "new-value-should-not-overwrite" : null;
+        Function<String, String> envLookup =
+                name -> "ANTHROPIC_API_KEY".equals(name) ? "new-value-should-not-overwrite" : null;
 
         CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
         var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
@@ -97,8 +100,7 @@ class CredentialEnvSeederTest {
         // Delete so we can detect if seeder creates it
         storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
 
-        Function<String, String> envLookup = name ->
-            "ANTHROPIC_API_KEY".equals(name) ? "   " : null;
+        Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "   " : null;
 
         CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
         var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
@@ -116,8 +118,7 @@ class CredentialEnvSeederTest {
     void seeder_skipsWhenStoreIsNotBuiltIn() throws Exception {
         storeProvider.delete(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
 
-        Function<String, String> envLookup = name ->
-            "ANTHROPIC_API_KEY".equals(name) ? "sk-should-not-store" : null;
+        Function<String, String> envLookup = name -> "ANTHROPIC_API_KEY".equals(name) ? "sk-should-not-store" : null;
 
         CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
         var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
@@ -128,5 +129,24 @@ class CredentialEnvSeederTest {
 
         String value = storeProvider.get(ANONYMOUS_USER_ID, "ANTHROPIC_API_KEY");
         assertThat(value).isNull();
+    }
+
+    @Test
+    void seeder_storesGitHubCredentials_inRealDb() throws Exception {
+        Function<String, String> envLookup = name -> switch (name) {
+            case "GH_TOKEN" -> "ghp-test-gh-token";
+            case "GITHUB_TOKEN" -> "ghp-test-github-token";
+            default -> null;
+        };
+
+        CredentialEnvSeeder seeder = new CredentialEnvSeeder(storeProvider, envLookup);
+        var field = CredentialEnvSeeder.class.getDeclaredField("credentialsStore");
+        field.setAccessible(true);
+        field.set(seeder, "built-in");
+
+        seeder.run(new org.springframework.boot.DefaultApplicationArguments());
+
+        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "GH_TOKEN")).isEqualTo("ghp-test-gh-token");
+        assertThat(storeProvider.get(ANONYMOUS_USER_ID, "GITHUB_TOKEN")).isEqualTo("ghp-test-github-token");
     }
 }

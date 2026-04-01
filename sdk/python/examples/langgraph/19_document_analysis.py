@@ -163,9 +163,15 @@ graph = create_agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "Please provide a full analysis of the 'quarterly_report' document.",
-        )
-        print(f"Status: {result.status}")
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.19_document_analysis
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "Please provide a full analysis of the 'quarterly_report' document.",
+        # )
+        # print(f"Status: {result.status}")
+        # result.print_result()

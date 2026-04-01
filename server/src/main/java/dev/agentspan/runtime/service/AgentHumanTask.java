@@ -5,18 +5,20 @@
 
 package dev.agentspan.runtime.service;
 
-import com.netflix.conductor.core.execution.WorkflowExecutor;
-import com.netflix.conductor.core.execution.tasks.WorkflowSystemTask;
-import com.netflix.conductor.model.TaskModel;
-import com.netflix.conductor.model.WorkflowModel;
-import dev.agentspan.runtime.model.AgentSSEEvent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HUMAN;
 
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.netflix.conductor.common.metadata.tasks.TaskType.TASK_TYPE_HUMAN;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.netflix.conductor.core.execution.WorkflowExecutor;
+import com.netflix.conductor.core.execution.tasks.WorkflowSystemTask;
+import com.netflix.conductor.model.TaskModel;
+import com.netflix.conductor.model.WorkflowModel;
+
+import dev.agentspan.runtime.model.AgentSSEEvent;
 
 /**
  * Custom HUMAN task that emits a WAITING SSE event immediately when started.
@@ -37,7 +39,7 @@ public class AgentHumanTask extends WorkflowSystemTask {
     public AgentHumanTask(AgentStreamRegistry streamRegistry) {
         super(TASK_TYPE_HUMAN);
         this.streamRegistry = streamRegistry;
-        logger.info("AgentHumanTask registered (overrides default HUMAN with SSE support)");
+        logger.debug("AgentHumanTask registered (overrides default HUMAN with SSE support)");
     }
 
     @Override

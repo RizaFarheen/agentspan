@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"github.com/agentspan-ai/agentspan/cli/config"
 )
 
 // newTempHome points HOME at a temp dir so config reads/writes are isolated.
@@ -29,5 +29,13 @@ func saveTestConfig(t *testing.T, serverURL string) *config.Config {
 	if err := config.Save(cfg); err != nil {
 		t.Fatalf("saveTestConfig: %v", err)
 	}
+	return cfg
+}
+
+// newTestConfig returns a config pointing at the given server URL without writing to disk.
+func newTestConfig(t *testing.T, serverURL string) *config.Config {
+	t.Helper()
+	cfg := config.DefaultConfig()
+	cfg.ServerURL = serverURL
 	return cfg
 }

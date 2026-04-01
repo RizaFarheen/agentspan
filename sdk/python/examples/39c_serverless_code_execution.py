@@ -85,14 +85,25 @@ serverless_coder = Agent(
     ),
 )
 
-# ── Run ───────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    print("--- Serverless Code Execution ---")
-    result = runtime.run(
-        serverless_coder,
-        "Calculate 2**100 and print the result.",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ───────────────────────────────────────────────────────────────
 
-mock_server.shutdown()
+
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.39c_serverless_code_execution
+        runtime.deploy(serverless_coder)
+        runtime.serve(serverless_coder)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # print("--- Serverless Code Execution ---")
+        # result = runtime.run(
+        #     serverless_coder,
+        #     "Calculate 2**100 and print the result.",
+        # )
+        # result.print_result()
+
+
+        # mock_server.shutdown()
+

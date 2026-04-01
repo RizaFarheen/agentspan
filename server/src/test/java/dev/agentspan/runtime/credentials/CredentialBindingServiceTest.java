@@ -4,6 +4,11 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.Map;
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,12 +16,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.conductoross.conductor.AgentRuntime;
 
-import java.util.Map;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import dev.agentspan.runtime.AgentRuntime;
 
 @SpringBootTest(classes = AgentRuntime.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
@@ -34,9 +35,10 @@ class CredentialBindingServiceTest {
     @BeforeEach
     void setUp() {
         jdbc.update("DELETE FROM credentials_binding WHERE user_id = :uid", Map.of("uid", USER_ID));
-        jdbc.update("INSERT OR IGNORE INTO users (id, name, email, username, password_hash, created_at) " +
-            "VALUES (:id, 'Binding Test', '', 'binding_test_user', '', datetime('now'))",
-            Map.of("id", USER_ID));
+        jdbc.update(
+                "INSERT OR IGNORE INTO users (id, name, email, username, password_hash, created_at) "
+                        + "VALUES (:id, 'Binding Test', '', 'binding_test_user', '', datetime('now'))",
+                Map.of("id", USER_ID));
     }
 
     @Test
@@ -76,7 +78,6 @@ class CredentialBindingServiceTest {
 
         var bindings = bindingService.listBindings(USER_ID);
 
-        assertThat(bindings).containsEntry("KEY_A", "store-a")
-                             .containsEntry("KEY_B", "store-b");
+        assertThat(bindings).containsEntry("KEY_A", "store-a").containsEntry("KEY_B", "store-b");
     }
 }

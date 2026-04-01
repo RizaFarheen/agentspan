@@ -5,14 +5,16 @@
 
 package dev.agentspan.runtime.compiler;
 
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import dev.agentspan.runtime.model.TerminationConfig;
-import dev.agentspan.runtime.util.JavaScriptBuilder;
-import org.springframework.stereotype.Component;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.model.TerminationConfig;
+import dev.agentspan.runtime.util.JavaScriptBuilder;
 
 /**
  * Compiles {@link TerminationConfig} into server-side InlineTask JavaScript.
@@ -108,35 +110,28 @@ public class TerminationCompiler {
         String textJs = JavaScriptBuilder.toJson(config.getText());
         boolean caseSensitive = config.getCaseSensitive() != null ? config.getCaseSensitive() : true;
 
-        return JavaScriptBuilder.iife(
-            "  var content = String($.result || '');" +
-            "  var text = " + textJs + ";" +
-            "  var caseSensitive = " + caseSensitive + ";" +
-            "  var found = caseSensitive ? content.indexOf(text) >= 0 : content.toLowerCase().indexOf(text.toLowerCase()) >= 0;" +
-            "  return {should_continue: !found, reason: found ? 'Text mention detected: ' + text : ''};"
-        );
+        return JavaScriptBuilder.iife("  var content = String($.result || '');" + "  var text = "
+                + textJs + ";" + "  var caseSensitive = "
+                + caseSensitive + ";"
+                + "  var found = caseSensitive ? content.indexOf(text) >= 0 : content.toLowerCase().indexOf(text.toLowerCase()) >= 0;"
+                + "  return {should_continue: !found, reason: found ? 'Text mention detected: ' + text : ''};");
     }
 
     private static String buildStopMessageScript(TerminationConfig config) {
         String stopMessageJs = JavaScriptBuilder.toJson(config.getStopMessage());
 
-        return JavaScriptBuilder.iife(
-            "  var content = String($.result || '').trim();" +
-            "  var stopMessage = " + stopMessageJs + ";" +
-            "  var match = content === stopMessage;" +
-            "  return {should_continue: !match, reason: match ? 'Stop message received' : ''};"
-        );
+        return JavaScriptBuilder.iife("  var content = String($.result || '').trim();" + "  var stopMessage = "
+                + stopMessageJs + ";" + "  var match = content === stopMessage;"
+                + "  return {should_continue: !match, reason: match ? 'Stop message received' : ''};");
     }
 
     private static String buildMaxMessageScript(TerminationConfig config) {
         int maxMessages = config.getMaxMessages() != null ? config.getMaxMessages() : 10;
 
         return JavaScriptBuilder.iife(
-            "  var iteration = $.iteration || 0;" +
-            "  var maxMessages = " + maxMessages + ";" +
-            "  var exceeded = iteration >= maxMessages;" +
-            "  return {should_continue: !exceeded, reason: exceeded ? 'Max messages reached: ' + maxMessages : ''};"
-        );
+                "  var iteration = $.iteration || 0;" + "  var maxMessages = "
+                        + maxMessages + ";" + "  var exceeded = iteration >= maxMessages;"
+                        + "  return {should_continue: !exceeded, reason: exceeded ? 'Max messages reached: ' + maxMessages : ''};");
     }
 
     private static String buildTokenUsageScript(TerminationConfig config) {
@@ -144,16 +139,17 @@ public class TerminationCompiler {
         int maxPrompt = config.getMaxPromptTokens() != null ? config.getMaxPromptTokens() : 0;
         int maxCompletion = config.getMaxCompletionTokens() != null ? config.getMaxCompletionTokens() : 0;
 
-        return JavaScriptBuilder.iife(
-            "  var result = $.result || {};" +
-            "  var tokenUsed = result.tokenUsed || {};" +
-            "  var exceeded = false;" +
-            "  var reason = '';" +
-            "  if (" + maxTotal + " > 0 && (tokenUsed.total_tokens || 0) > " + maxTotal + ") { exceeded = true; reason = 'Total token limit exceeded'; }" +
-            "  if (" + maxPrompt + " > 0 && (tokenUsed.prompt_tokens || 0) > " + maxPrompt + ") { exceeded = true; reason = 'Prompt token limit exceeded'; }" +
-            "  if (" + maxCompletion + " > 0 && (tokenUsed.completion_tokens || 0) > " + maxCompletion + ") { exceeded = true; reason = 'Completion token limit exceeded'; }" +
-            "  return {should_continue: !exceeded, reason: reason};"
-        );
+        return JavaScriptBuilder.iife("  var result = $.result || {};" + "  var tokenUsed = result.tokenUsed || {};"
+                + "  var exceeded = false;"
+                + "  var reason = '';"
+                + "  if ("
+                + maxTotal + " > 0 && (tokenUsed.total_tokens || 0) > " + maxTotal
+                + ") { exceeded = true; reason = 'Total token limit exceeded'; }" + "  if ("
+                + maxPrompt + " > 0 && (tokenUsed.prompt_tokens || 0) > " + maxPrompt
+                + ") { exceeded = true; reason = 'Prompt token limit exceeded'; }" + "  if ("
+                + maxCompletion + " > 0 && (tokenUsed.completion_tokens || 0) > " + maxCompletion
+                + ") { exceeded = true; reason = 'Completion token limit exceeded'; }"
+                + "  return {should_continue: !exceeded, reason: reason};");
     }
 
     /**
@@ -170,7 +166,8 @@ public class TerminationCompiler {
     private static String buildCompositeScript(TerminationConfig config, boolean isAnd) {
         List<TerminationConfig> conditions = config.getConditions();
         if (conditions == null || conditions.isEmpty()) {
-            throw new IllegalArgumentException("Composite termination (" + (isAnd ? "and" : "or") + ") must have at least one sub-condition");
+            throw new IllegalArgumentException(
+                    "Composite termination (" + (isAnd ? "and" : "or") + ") must have at least one sub-condition");
         }
 
         StringBuilder body = new StringBuilder();
@@ -230,35 +227,33 @@ public class TerminationCompiler {
         String textJs = JavaScriptBuilder.toJson(config.getText());
         boolean caseSensitive = config.getCaseSensitive() != null ? config.getCaseSensitive() : true;
 
-        return "  var " + varName + " = (function() {" +
-               "    var content = String($.result || '');" +
-               "    var text = " + textJs + ";" +
-               "    var caseSensitive = " + caseSensitive + ";" +
-               "    var found = caseSensitive ? content.indexOf(text) >= 0 : content.toLowerCase().indexOf(text.toLowerCase()) >= 0;" +
-               "    return {should_continue: !found, reason: found ? 'Text mention detected: ' + text : ''};" +
-               "  })();";
+        return "  var " + varName + " = (function() {" + "    var content = String($.result || '');"
+                + "    var text = "
+                + textJs + ";" + "    var caseSensitive = "
+                + caseSensitive + ";"
+                + "    var found = caseSensitive ? content.indexOf(text) >= 0 : content.toLowerCase().indexOf(text.toLowerCase()) >= 0;"
+                + "    return {should_continue: !found, reason: found ? 'Text mention detected: ' + text : ''};"
+                + "  })();";
     }
 
     private static String buildInlineStopMessage(TerminationConfig config, String varName) {
         String stopMessageJs = JavaScriptBuilder.toJson(config.getStopMessage());
 
-        return "  var " + varName + " = (function() {" +
-               "    var content = String($.result || '').trim();" +
-               "    var stopMessage = " + stopMessageJs + ";" +
-               "    var match = content === stopMessage;" +
-               "    return {should_continue: !match, reason: match ? 'Stop message received' : ''};" +
-               "  })();";
+        return "  var " + varName + " = (function() {" + "    var content = String($.result || '').trim();"
+                + "    var stopMessage = "
+                + stopMessageJs + ";" + "    var match = content === stopMessage;"
+                + "    return {should_continue: !match, reason: match ? 'Stop message received' : ''};"
+                + "  })();";
     }
 
     private static String buildInlineMaxMessage(TerminationConfig config, String varName) {
         int maxMessages = config.getMaxMessages() != null ? config.getMaxMessages() : 10;
 
-        return "  var " + varName + " = (function() {" +
-               "    var iteration = $.iteration || 0;" +
-               "    var maxMessages = " + maxMessages + ";" +
-               "    var exceeded = iteration >= maxMessages;" +
-               "    return {should_continue: !exceeded, reason: exceeded ? 'Max messages reached: ' + maxMessages : ''};" +
-               "  })();";
+        return "  var " + varName + " = (function() {" + "    var iteration = $.iteration || 0;"
+                + "    var maxMessages = "
+                + maxMessages + ";" + "    var exceeded = iteration >= maxMessages;"
+                + "    return {should_continue: !exceeded, reason: exceeded ? 'Max messages reached: ' + maxMessages : ''};"
+                + "  })();";
     }
 
     private static String buildInlineTokenUsage(TerminationConfig config, String varName) {
@@ -266,23 +261,27 @@ public class TerminationCompiler {
         int maxPrompt = config.getMaxPromptTokens() != null ? config.getMaxPromptTokens() : 0;
         int maxCompletion = config.getMaxCompletionTokens() != null ? config.getMaxCompletionTokens() : 0;
 
-        return "  var " + varName + " = (function() {" +
-               "    var result = $.result || {};" +
-               "    var tokenUsed = result.tokenUsed || {};" +
-               "    var exceeded = false;" +
-               "    var reason = '';" +
-               "    if (" + maxTotal + " > 0 && (tokenUsed.total_tokens || 0) > " + maxTotal + ") { exceeded = true; reason = 'Total token limit exceeded'; }" +
-               "    if (" + maxPrompt + " > 0 && (tokenUsed.prompt_tokens || 0) > " + maxPrompt + ") { exceeded = true; reason = 'Prompt token limit exceeded'; }" +
-               "    if (" + maxCompletion + " > 0 && (tokenUsed.completion_tokens || 0) > " + maxCompletion + ") { exceeded = true; reason = 'Completion token limit exceeded'; }" +
-               "    return {should_continue: !exceeded, reason: reason};" +
-               "  })();";
+        return "  var " + varName + " = (function() {" + "    var result = $.result || {};"
+                + "    var tokenUsed = result.tokenUsed || {};"
+                + "    var exceeded = false;"
+                + "    var reason = '';"
+                + "    if ("
+                + maxTotal + " > 0 && (tokenUsed.total_tokens || 0) > " + maxTotal
+                + ") { exceeded = true; reason = 'Total token limit exceeded'; }" + "    if ("
+                + maxPrompt + " > 0 && (tokenUsed.prompt_tokens || 0) > " + maxPrompt
+                + ") { exceeded = true; reason = 'Prompt token limit exceeded'; }" + "    if ("
+                + maxCompletion + " > 0 && (tokenUsed.completion_tokens || 0) > " + maxCompletion
+                + ") { exceeded = true; reason = 'Completion token limit exceeded'; }"
+                + "    return {should_continue: !exceeded, reason: reason};"
+                + "  })();";
     }
 
     /**
      * Build an inline composite sub-condition. Recursively resolves nested composites.
      * Uses a unique prefix to avoid variable name collisions in deeply nested composites.
      */
-    private static String buildInlineComposite(TerminationConfig config, String varName, boolean isAnd, int parentIndex) {
+    private static String buildInlineComposite(
+            TerminationConfig config, String varName, boolean isAnd, int parentIndex) {
         List<TerminationConfig> conditions = config.getConditions();
         if (conditions == null || conditions.isEmpty()) {
             throw new IllegalArgumentException("Composite termination must have at least one sub-condition");
@@ -326,7 +325,8 @@ public class TerminationCompiler {
      * Build an inline sub-condition body for use inside a nested composite.
      * Variable names are prefixed to avoid collisions.
      */
-    private static String buildNestedSubConditionBody(TerminationConfig sub, String varName, int parentIndex, int childIndex) {
+    private static String buildNestedSubConditionBody(
+            TerminationConfig sub, String varName, int parentIndex, int childIndex) {
         String type = sub.getType();
         return switch (type) {
             case "text_mention" -> buildInlineTextMention(sub, varName);

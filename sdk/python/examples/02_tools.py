@@ -59,39 +59,48 @@ agent = Agent(
     instructions="You are a helpful assistant with access to weather, calculator, and email tools.",
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.stream(
-        agent, "send email to developer@orkes.io with current weather details in SF"
-    )
-    print(f"Workflow started: {result.workflow_id}\n")
 
-    for event in result:
-        if event.type == EventType.THINKING:
-            print(f"  [thinking] {event.content}")
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.02_tools
+        runtime.deploy(agent)
+        runtime.serve(agent)
 
-        elif event.type == EventType.TOOL_CALL:
-            print(f"  [tool_call] {event.tool_name}({event.args})")
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.stream(
+        #     agent, "send email to developer@orkes.io with current weather details in SF"
+        # )
+        # print(f"Workflow started: {result.execution_id}\n")
 
-        elif event.type == EventType.TOOL_RESULT:
-            print(f"  [tool_result] {event.tool_name} -> {event.result}")
+        # for event in result:
+        #     if event.type == EventType.THINKING:
+        #         print(f"  [thinking] {event.content}")
 
-        elif event.type == EventType.WAITING:
-            print(f"\n--- Human approval required for send_email ---")
-            choice = input("  Approve? (y/n): ").strip().lower()
-            if choice == "y":
-                result.approve()
-                print("  Approved!\n")
-            else:
-                reason = input("  Rejection reason: ").strip()
-                result.reject(reason or "Rejected by user")
-                print("  Rejected.\n")
+        #     elif event.type == EventType.TOOL_CALL:
+        #         print(f"  [tool_call] {event.tool_name}({event.args})")
 
-        elif event.type == EventType.ERROR:
-            print(f"  [error] {event.content}")
+        #     elif event.type == EventType.TOOL_RESULT:
+        #         print(f"  [tool_result] {event.tool_name} -> {event.result}")
 
-        elif event.type == EventType.DONE:
-            print(f"\nResult: {event.output}")
+        #     elif event.type == EventType.WAITING:
+        #         print(f"\n--- Human approval required for send_email ---")
+        #         choice = input("  Approve? (y/n): ").strip().lower()
+        #         if choice == "y":
+        #             result.approve()
+        #             print("  Approved!\n")
+        #         else:
+        #             reason = input("  Rejection reason: ").strip()
+        #             result.reject(reason or "Rejected by user")
+        #             print("  Rejected.\n")
 
-    final = result.get_result()
-    print(f"\nTool calls: {len(final.tool_calls)}")
-    print(f"Status: {final.status}")
+        #     elif event.type == EventType.ERROR:
+        #         print(f"  [error] {event.content}")
+
+        #     elif event.type == EventType.DONE:
+        #         print(f"\nResult: {event.output}")
+
+        # final = result.get_result()
+        # print(f"\nTool calls: {len(final.tool_calls)}")
+        # print(f"Status: {final.status}")
+

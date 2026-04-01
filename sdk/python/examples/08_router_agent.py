@@ -50,6 +50,15 @@ team = Agent(
     router=planner,  # Required for router strategy
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(team, "Write a Python function to validate email addresses using regex")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.08_router_agent
+        runtime.deploy(team)
+        runtime.serve(team)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(team, "Write a Python function to validate email addresses using regex")
+        # result.print_result()
+

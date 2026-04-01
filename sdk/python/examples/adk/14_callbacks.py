@@ -67,13 +67,20 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            agent,
-            "Look up customer C001 and check if order ORD-1001 has shipped. "
-            "If the customer is gold tier, apply a 10% discount.",
-        )
-        print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.14_callbacks
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # agent,
+        # "Look up customer C001 and check if order ORD-1001 has shipped. "
+        # "If the customer is gold tier, apply a 10% discount.",
+        # )
+        # print(f"Status: {result.status}")
+        # print(f"Output: {result.output}")
+
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "pytest-cov>=4.0",
+    "pytest-xdist>=3.0",
     "ruff>=0.4",
     "mypy>=1.10",
 ]
@@ -66,6 +67,7 @@ timeout = 120
 timeout_method = "thread"
 markers = [
     "integration: marks tests requiring a live Agentspan server (deselect with '-m \"not integration\"')",
+    "e2e: marks end-to-end tests requiring a live Agentspan server and AGENTSPAN_SERVER_URL env var",
     "sse: marks tests requiring SSE streaming support (requires AGENTSPAN_STREAMING_ENABLED=true)",
     "agent_correctness: marks tests as agent correctness tests",
     "semantic: marks tests that use LLM judge for semantic assertions (requires litellm)",
@@ -94,6 +96,7 @@ no_strict_optional = true
 
 [dependency-groups]
 dev = [
+    "claude-code-sdk>=0.0.20",
     "langchain>=0.3.28",
     "langchain-core>=0.3.83",
     "langchain-openai>=0.3.35",

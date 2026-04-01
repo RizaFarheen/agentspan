@@ -238,7 +238,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	// Port availability
-	port := "8080"
+	port := "6767"
 	if serverPort != "" {
 		port = serverPort
 	}
@@ -330,10 +330,8 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	bold.Println("Server")
 	fmt.Println()
 
-	serverAddr := fmt.Sprintf("http://localhost:%s", port)
-	if serverURL != "" {
-		serverAddr = serverURL
-	}
+	cfg := getConfig()
+	serverAddr := cfg.ServerURL
 	serverOk := checkServer(serverAddr)
 	if serverOk {
 		green.Printf("  ✓ Server reachable at %s\n", serverAddr)

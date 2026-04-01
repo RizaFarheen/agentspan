@@ -5,12 +5,13 @@
 
 package dev.agentspan.runtime.service;
 
+import static org.assertj.core.api.Assertions.*;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import dev.agentspan.runtime.model.AgentSSEEvent;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import static org.assertj.core.api.Assertions.*;
+import dev.agentspan.runtime.model.AgentSSEEvent;
 
 class AgentStreamRegistryTest {
 

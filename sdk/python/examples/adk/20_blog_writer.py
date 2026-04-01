@@ -105,14 +105,21 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            coordinator,
-            "Write a blog post about the conductor oss workflow and how its the best workflow engine for the agentic era."
-            "Make sure to write at-least 5000 word and use markdown to format the content",
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.adk.20_blog_writer
+        runtime.deploy(coordinator)
+        runtime.serve(coordinator)
 
-        )
-        print(f"Status: {result.status}")
-        print(f"Output: {result.output}")
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # coordinator,
+        # "Write a blog post about the conductor oss workflow and how its the best workflow engine for the agentic era."
+        # "Make sure to write at-least 5000 word and use markdown to format the content",
+
+        # )
+        # print(f"Status: {result.status}")
+        # print(f"Output: {result.output}")
+
 
 
 if __name__ == "__main__":

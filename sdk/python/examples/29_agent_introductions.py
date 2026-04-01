@@ -74,10 +74,19 @@ design_review = Agent(
     max_turns=6,
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        design_review,
-        "We need to design a new user authentication system for our SaaS platform. "
-        "Should we use OAuth 2.0, SAML, or build our own JWT-based system?",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.29_agent_introductions
+        runtime.deploy(design_review)
+        runtime.serve(design_review)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     design_review,
+        #     "We need to design a new user authentication system for our SaaS platform. "
+        #     "Should we use OAuth 2.0, SAML, or build our own JWT-based system?",
+        # )
+        # result.print_result()
+

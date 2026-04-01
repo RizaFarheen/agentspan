@@ -4,17 +4,18 @@
  */
 package dev.agentspan.runtime.credentials;
 
-import org.conductoross.conductor.AgentRuntime;
+import static org.assertj.core.api.Assertions.*;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.*;
+import dev.agentspan.runtime.AgentRuntime;
 
 /**
  * Integration test for CredentialAwareHttpTask — real DB, real credential store.

@@ -4,9 +4,9 @@
  */
 package dev.agentspan.runtime.ai;
 
-import dev.agentspan.runtime.auth.RequestContextHolder;
-import dev.agentspan.runtime.credentials.CredentialResolutionService;
-import dev.agentspan.runtime.credentials.ExecutionTokenService;
+import java.util.List;
+import java.util.Map;
+
 import org.conductoross.conductor.ai.AIModel;
 import org.conductoross.conductor.ai.AIModelProvider;
 import org.conductoross.conductor.ai.ModelConfiguration;
@@ -14,6 +14,7 @@ import org.conductoross.conductor.ai.models.LLMWorkerInput;
 import org.conductoross.conductor.ai.providers.anthropic.AnthropicConfiguration;
 import org.conductoross.conductor.ai.providers.azureopenai.AzureOpenAIConfiguration;
 import org.conductoross.conductor.ai.providers.cohere.CohereAIConfiguration;
+import org.conductoross.conductor.ai.providers.gemini.GeminiVertexConfiguration;
 import org.conductoross.conductor.ai.providers.grok.GrokAIConfiguration;
 import org.conductoross.conductor.ai.providers.huggingface.HuggingFaceConfiguration;
 import org.conductoross.conductor.ai.providers.mistral.MistralAIConfiguration;
@@ -25,8 +26,11 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-import java.util.Map;
+import com.netflix.conductor.sdk.workflow.executor.task.TaskContext;
+
+import dev.agentspan.runtime.auth.RequestContextHolder;
+import dev.agentspan.runtime.credentials.CredentialResolutionService;
+import dev.agentspan.runtime.credentials.ExecutionTokenService;
 
 /**
  * Per-user LLM model provider that creates fresh AIModel instances with
@@ -48,16 +52,16 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
     /** Maps Conductor provider names to credential env var names. */
     private static final Map<String, String> PROVIDER_TO_ENV_VAR = Map.ofEntries(
-        Map.entry("openai",      "OPENAI_API_KEY"),
-        Map.entry("anthropic",   "ANTHROPIC_API_KEY"),
-        Map.entry("mistral",     "MISTRAL_API_KEY"),
-        Map.entry("cohere",      "COHERE_API_KEY"),
-        Map.entry("grok",        "XAI_API_KEY"),
-        Map.entry("perplexity",  "PERPLEXITY_API_KEY"),
-        Map.entry("huggingface", "HUGGINGFACE_API_KEY"),
-        Map.entry("azureopenai", "AZURE_OPENAI_API_KEY"),
-        Map.entry("gemini",      "GEMINI_API_KEY")
-    );
+            Map.entry("openai", "OPENAI_API_KEY"),
+            Map.entry("anthropic", "ANTHROPIC_API_KEY"),
+            Map.entry("mistral", "MISTRAL_API_KEY"),
+            Map.entry("cohere", "COHERE_API_KEY"),
+            Map.entry("grok", "XAI_API_KEY"),
+            Map.entry("perplexity", "PERPLEXITY_API_KEY"),
+            Map.entry("huggingface", "HUGGINGFACE_API_KEY"),
+            Map.entry("azureopenai", "AZURE_OPENAI_API_KEY"),
+            Map.entry("gemini", "GEMINI_API_KEY"),
+            Map.entry("google_gemini", "GEMINI_API_KEY"));
 
     private final CredentialResolutionService resolutionService;
     private final ExecutionTokenService tokenService;
@@ -81,16 +85,20 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         }
 
         // Try per-user credential resolution
+        log.info("getModel called for provider='{}' model='{}'", provider, input.getModel());
         String userApiKey = resolveUserApiKey(provider);
+        log.info("resolveUserApiKey('{}') returned: {}", provider, userApiKey != null ? "key found" : "null");
         if (userApiKey != null) {
             try {
                 AIModel model = createModelWithKey(provider, userApiKey);
                 if (model != null) {
-                    log.debug("Per-user AIModel created for provider '{}'", provider);
+                    log.info("Per-user AIModel created for provider '{}'", provider);
+                    // Register in provider map so Conductor's executor can find it
+                    getProviderToLLM().put(provider.toLowerCase(), model);
                     return model;
                 }
             } catch (Exception e) {
-                log.warn("Failed to create per-user AIModel for '{}': {}", provider, e.getMessage());
+                log.warn("Failed to create per-user AIModel for '{}': {}", provider, e.getMessage(), e);
             }
         }
 
@@ -117,17 +125,19 @@ public class AgentspanAIModelProvider extends AIModelProvider {
 
         // Fall back to RequestContextHolder (works during HTTP request, e.g. compile)
         if (userId == null) {
-            userId = RequestContextHolder.get()
-                .map(ctx -> ctx.getUser().getId())
-                .orElse(null);
+            userId =
+                    RequestContextHolder.get().map(ctx -> ctx.getUser().getId()).orElse(null);
         }
 
-        if (userId == null) return null;
+        // Fall back to anonymous user (OSS / no-auth mode)
+        if (userId == null) {
+            userId = "00000000-0000-0000-0000-000000000000";
+        }
 
         try {
             return resolutionService.resolve(userId, envVarName);
         } catch (Exception e) {
-            log.debug("Per-user key not found for provider '{}': {}", provider, e.getMessage());
+            log.debug("Credential not found for provider '{}': {}", provider, e.getMessage());
             return null;
         }
     }
@@ -138,13 +148,12 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     @SuppressWarnings("unchecked")
     private String extractUserIdFromTaskContext() {
         try {
-            com.netflix.conductor.sdk.workflow.executor.task.TaskContext ctx =
-                com.netflix.conductor.sdk.workflow.executor.task.TaskContext.get();
+            TaskContext ctx = TaskContext.get();
             if (ctx == null || ctx.getTask() == null) return null;
 
             Object agentspanCtx = ctx.getTask().getInputData().get("__agentspan_ctx__");
             String token = null;
-            if (agentspanCtx instanceof Map<?,?> ctxMap) {
+            if (agentspanCtx instanceof Map<?, ?> ctxMap) {
                 token = (String) ctxMap.get("execution_token");
             } else if (agentspanCtx instanceof String s) {
                 token = s;
@@ -158,9 +167,24 @@ public class AgentspanAIModelProvider extends AIModelProvider {
     }
 
     /**
-     * Create a fresh AIModel instance with a per-user API key.
-     * Follows the Orkes ModelConfigurationProvider pattern.
+     * Resolve any named credential for the current user.
      */
+    private String resolveUserCredential(String credentialName) {
+        String userId = extractUserIdFromTaskContext();
+        if (userId == null) {
+            userId =
+                    RequestContextHolder.get().map(ctx -> ctx.getUser().getId()).orElse(null);
+        }
+        if (userId == null) {
+            userId = "00000000-0000-0000-0000-000000000000";
+        }
+        try {
+            return resolutionService.resolve(userId, credentialName);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /**
      * Create a fresh AIModel instance with a per-user API key.
      * Uses the server-wide model's base URL/endpoint config as defaults,
@@ -171,30 +195,56 @@ public class AgentspanAIModelProvider extends AIModelProvider {
         AIModel serverModel = getProviderToLLM().get(provider.toLowerCase());
         String baseUrl = null;
 
-        ModelConfiguration<? extends AIModel> config = switch (provider.toLowerCase()) {
-            case "openai" -> {
-                var c = new OpenAIConfiguration(apiKey, null, null);
-                yield c;
-            }
-            case "anthropic" -> {
-                var c = new AnthropicConfiguration(apiKey, null, null, null, null);
-                yield c;
-            }
-            case "azureopenai" -> {
-                var c = new AzureOpenAIConfiguration(apiKey, null, null, null);
-                yield c;
-            }
-            case "mistral" -> new MistralAIConfiguration(apiKey, null);
-            case "cohere" -> new CohereAIConfiguration(apiKey, null);
-            case "grok" -> new GrokAIConfiguration(apiKey, null);
-            case "huggingface" -> {
-                var c = new HuggingFaceConfiguration();
-                c.setApiKey(apiKey);
-                yield c;
-            }
-            case "perplexity" -> new PerplexityAIConfiguration(apiKey, null);
-            default -> null;
-        };
-        return config != null ? config.get() : null;
+        ModelConfiguration<? extends AIModel> config =
+                switch (provider.toLowerCase()) {
+                    case "openai" -> {
+                        var c = new OpenAIConfiguration(apiKey, null, null);
+                        yield c;
+                    }
+                    case "anthropic" -> {
+                        var c = new AnthropicConfiguration(apiKey, null, null, null, null);
+                        yield c;
+                    }
+                    case "azureopenai" -> {
+                        var c = new AzureOpenAIConfiguration(apiKey, null, null, null);
+                        yield c;
+                    }
+                    case "mistral" -> new MistralAIConfiguration(apiKey, null);
+                    case "cohere" -> new CohereAIConfiguration(apiKey, null);
+                    case "grok" -> new GrokAIConfiguration(apiKey, null);
+                    case "huggingface" -> {
+                        var c = new HuggingFaceConfiguration();
+                        c.setApiKey(apiKey);
+                        yield c;
+                    }
+                    case "perplexity" -> new PerplexityAIConfiguration(apiKey, null);
+                    case "gemini", "google_gemini" -> null; // Handled below
+                    default -> null;
+                };
+
+        if (config != null) {
+            return config.get();
+        }
+
+        // Gemini with API key: use REST transport (AI Studio), not gRPC (Vertex AI)
+        String providerLower = provider.toLowerCase();
+        if (providerLower.equals("gemini") || providerLower.equals("google_gemini")) {
+            return createGeminiApiKeyModel(apiKey);
+        }
+
+        return null;
+    }
+
+    /**
+     * Create a Gemini model using API key auth via REST transport.
+     * This avoids the Vertex AI gRPC path which requires IAM credentials.
+     */
+    private AIModel createGeminiApiKeyModel(String apiKey) {
+        String projectId = resolveUserCredential("GOOGLE_CLOUD_PROJECT");
+        var config = new GeminiVertexConfiguration();
+        config.setApiKey(apiKey);
+        config.setProjectId(projectId != null ? projectId : "google-ai-studio");
+        config.setLocation("us-central1");
+        return new GeminiApiKeyModel(config, apiKey);
     }
 }

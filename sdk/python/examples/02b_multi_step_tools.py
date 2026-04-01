@@ -76,10 +76,19 @@ agent = Agent(
     ),
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        agent,
-        "How much has alice@example.com spent recently? "
-        "Get her last 3 transactions and give me the total.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.02b_multi_step_tools
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     agent,
+        #     "How much has alice@example.com spent recently? "
+        #     "Get her last 3 transactions and give me the total.",
+        # )
+        # result.print_result()
+

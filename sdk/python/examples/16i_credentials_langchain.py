@@ -57,10 +57,18 @@ def create_langchain_agent():
 if __name__ == "__main__":
     executor = create_langchain_agent()
 
+
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            executor,
-            "Check if the GitHub token is set",
-            credentials=["GITHUB_TOKEN"],
-        )
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.16i_credentials_langchain
+        runtime.deploy(executor)
+        runtime.serve(executor)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     executor,
+        #     "Check if the GitHub token is set",
+        #     credentials=["GITHUB_TOKEN"],
+        # )
+        # result.print_result()
+

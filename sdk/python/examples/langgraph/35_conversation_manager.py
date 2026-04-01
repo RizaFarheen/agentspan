@@ -118,8 +118,14 @@ if __name__ == "__main__":
     ]
 
     with AgentRuntime() as runtime:
-        for turn in turns:
-            result = runtime.run(graph, turn, session_id="user-session-001")
-            print(f"You: {turn}")
-            result.print_result()
-            print()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.35_conversation_manager
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # for turn in turns:
+        # result = runtime.run(graph, turn, session_id="user-session-001")
+        # print(f"You: {turn}")
+        # result.print_result()
+        # print()

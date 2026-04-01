@@ -5,7 +5,7 @@
 
 Demonstrates:
     - runtime.deploy() to compile and register multiple agents
-    - DeploymentInfo result with workflow name and agent name
+    - DeploymentInfo result with registered name and agent name
     - CI/CD use case: push agent definitions without executing them
 
 deploy() sends agent configs to the server, which compiles them into
@@ -67,13 +67,14 @@ ops_bot = Agent(
     instructions="Monitor service health. Use check_status to inspect services.",
 )
 
-# ── Deploy: compile + register on server ─────────────────────────────
+if __name__ == "__main__":
+    # ── Deploy: compile + register on server ─────────────────────────────
 
-with AgentRuntime() as runtime:
-    results = runtime.deploy(doc_assistant, ops_bot)
+    with AgentRuntime() as runtime:
+        results = runtime.deploy(doc_assistant, ops_bot)
 
-    for info in results:
-        print(f"Deployed: {info.agent_name} -> {info.workflow_name}")
+        for info in results:
+            print(f"Deployed: {info.agent_name} -> {info.registered_name}")
 
-    print(f"\n{len(results)} agent(s) registered on server.")
-    print("Now run 63b_serve.py to start workers, then 63c_run_by_name.py to execute.")
+        print(f"\n{len(results)} agent(s) registered on server.")
+        print("Now run 63b_serve.py to start workers, then 63c_run_by_name.py to execute.")

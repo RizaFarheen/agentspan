@@ -11,7 +11,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/agentspan/agentspan/cli/config"
+	"strings"
+
+	"github.com/agentspan-ai/agentspan/cli/config"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -49,7 +51,7 @@ func runDeployGet(cmd *cobra.Command, args []string) error {
 	}
 
 	// Derive ingest URL
-	ingestURL := deriveIngestURL(cfg.ServerURL)
+	ingestURL := strings.TrimRight(cfg.ServerURL, "/")
 
 	// Make request
 	reqURL := ingestURL + "/v1/deployments/" + deployID

@@ -4,6 +4,9 @@
  */
 package dev.agentspan.runtime.credentials;
 
+import java.util.List;
+import java.util.function.Function;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,9 +14,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
-import java.util.function.Function;
 
 /**
  * On startup, seeds the credential store from well-known LLM provider environment variables.
@@ -84,14 +84,16 @@ public class CredentialEnvSeeder implements ApplicationRunner {
             "TOGETHER_API_KEY",
             // Replicate
             "REPLICATE_API_TOKEN",
+            // GitHub CLI / API
+            "GH_TOKEN",
+            "GITHUB_TOKEN",
             // AWS Bedrock
             "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY",
             "AWS_REGION",
             "BEDROCK_API_KEY",
             // Ollama (local inference)
-            "OLLAMA_HOST"
-    );
+            "OLLAMA_HOST");
 
     private final CredentialStoreProvider storeProvider;
     private final Function<String, String> envLookup;
@@ -129,8 +131,10 @@ public class CredentialEnvSeeder implements ApplicationRunner {
 
             String existing = storeProvider.get(ANONYMOUS_USER_ID, name);
             if (existing != null) {
-                log.warn("Credential '{}' already exists in store — skipping env import. " +
-                         "To update the value, use the Credentials UI.", name);
+                log.warn(
+                        "Credential '{}' already exists in store — skipping env import. "
+                                + "To update the value, use the Credentials UI.",
+                        name);
                 skipped++;
                 continue;
             }
@@ -141,8 +145,7 @@ public class CredentialEnvSeeder implements ApplicationRunner {
         }
 
         if (created > 0 || skipped > 0) {
-            log.info("Credential env seeding complete: {} created, {} already existed (skipped)",
-                     created, skipped);
+            log.info("Credential env seeding complete: {} created, {} already existed (skipped)", created, skipped);
         }
     }
 }

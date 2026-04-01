@@ -75,11 +75,21 @@ discussion = Agent(
 # Pipe discussion transcript to summarizer
 pipeline = discussion >> summarizer
 
-# ── Run ─────────────────────────────────────────────────────────────
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        pipeline,
-        "Should AI agents be allowed to autonomously make financial decisions for individuals?",
-    )
-    result.print_result()
+if __name__ == "__main__":
+    # ── Run ─────────────────────────────────────────────────────────────
+
+
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.15_agent_discussion
+        runtime.deploy(pipeline)
+        runtime.serve(pipeline)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     pipeline,
+        #     "Should AI agents be allowed to autonomously make financial decisions for individuals?",
+        # )
+        # result.print_result()
+

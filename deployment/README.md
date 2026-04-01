@@ -10,11 +10,11 @@ The root `Dockerfile` builds a single image containing both the server and the U
                      ┌──────────────────────────────────────────┐
                      │         Kubernetes Cluster               │
                      │         namespace: agentspan             │
-Internet ──► DNS ──► LoadBalancer ──► Ingress (nginx) ──► agentspan-server:8080
+Internet ──► DNS ──► LoadBalancer ──► Ingress (nginx) ──► agentspan-server:6767
                      │                                          │
                      │   agentspan-server (3 replicas, HPA 3–10)│
                      │   ┌──────────────────────────────────┐   │
-                     │   │  Spring Boot (port 8080)         │   │
+                     │   │  Spring Boot (port 6767)         │   │
                      │   │  /api/**   → REST API            │   │
                      │   │  /**       → React UI (static)   │   │
                      │   └──────────────────────────────────┘   │
@@ -106,6 +106,20 @@ kubectl get ingress -n agentspan
 ```
 
 Point your DNS A record to the ingress load balancer IP and open `http://your-domain`.
+
+---
+
+## Docker Compose (Single VM / Local)
+
+For a turn-key single-node deployment (Agentspan + Postgres), use:
+
+```bash
+cd deployment/docker-compose
+cp .env.example .env
+docker compose up -d
+```
+
+See `deployment/docker-compose/README.md` for full usage.
 
 ---
 
@@ -239,7 +253,7 @@ kubectl logs -f deployment/agentspan-server -n agentspan
 kubectl rollout restart deployment/agentspan-server -n agentspan
 
 # Port-forward for local debugging
-kubectl port-forward svc/agentspan-server 8080:8080 -n agentspan
+kubectl port-forward svc/agentspan-server 6767:6767 -n agentspan
 
 # Scale manually
 kubectl scale deployment/agentspan-server --replicas=5 -n agentspan
@@ -257,12 +271,19 @@ server/Dockerfile               Builds UI + server into one image (build context
 deployment/
 ├── README.md                   This file
 ├── deploy.sh                   One-shot deployment script
+├── docker-compose/
+│   ├── compose.yaml             Turn-key Compose stack (server + postgres)
+│   ├── .env.example             Environment template
+│   └── README.md                Compose deployment guide
+├── helm/
+│   ├── README.md                Helm usage guide
+│   └── agentspan/               Deployable Helm chart
 └── k8s/
     ├── namespace.yaml           Namespace: agentspan
     ├── configmap.yaml           Non-secret runtime config
     ├── secret.yaml              Secrets template (edit before applying)
     ├── postgres.yaml            PostgreSQL StatefulSet + Service + 20Gi PVC
     ├── server.yaml              Server Deployment (3 replicas) + Service + PDB
-    ├── ingress.yaml             nginx Ingress: all traffic → server:8080
+    ├── ingress.yaml             nginx Ingress: all traffic → server:6767
     └── hpa.yaml                 HPA: auto-scale 3–10 replicas on CPU/memory
 ```

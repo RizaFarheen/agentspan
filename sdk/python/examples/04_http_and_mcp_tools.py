@@ -89,6 +89,15 @@ agent = Agent(
     instructions="You have access to weather data, GitHub, and report formatting.",
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(agent, "Get the weather in London and format it as a report.")
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.04_http_and_mcp_tools
+        runtime.deploy(agent)
+        runtime.serve(agent)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(agent, "Get the weather in London and format it as a report.")
+        # result.print_result()
+

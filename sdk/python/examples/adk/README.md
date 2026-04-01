@@ -2,7 +2,7 @@
 
 These examples demonstrate running agents written with [Google's Agent Development Kit (ADK)](https://github.com/google/adk-python) (`google-adk`) on the Conductor agent runtime.
 
-The agents are defined using standard ADK classes — the Conductor runtime auto-detects the framework, serializes the agent generically, and the server normalizes the config into a Conductor workflow. **Zero translation code in the SDK.**
+The agents are defined using standard ADK classes — the Conductor runtime auto-detects the framework, serializes the agent generically, and the server normalizes the config into a Conductor agent execution. **Zero translation code in the SDK.**
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ Export environment variables:
 
 ```bash
 export AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini
-export AGENTSPAN_SERVER_URL=http://localhost:8080/api
+export AGENTSPAN_SERVER_URL=http://localhost:6767/api
 export GOOGLE_GEMINI_API_KEY=your-key
 ```
 
@@ -66,7 +66,7 @@ Generic serializer → JSON dict + callable extraction
 Server GoogleADKNormalizer → AgentConfig → Conductor WorkflowDef
   │
   ▼
-Conductor runtime executes the workflow
+Conductor runtime executes the agent
 ```
 
 ## Key ADK Differences from OpenAI

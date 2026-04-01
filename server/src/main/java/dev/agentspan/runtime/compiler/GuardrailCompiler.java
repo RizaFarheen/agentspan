@@ -5,17 +5,19 @@
 
 package dev.agentspan.runtime.compiler;
 
-import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import dev.agentspan.runtime.model.GuardrailConfig;
-import dev.agentspan.runtime.util.JavaScriptBuilder;
-import dev.agentspan.runtime.util.ModelParser;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+
+import dev.agentspan.runtime.model.GuardrailConfig;
+import dev.agentspan.runtime.util.JavaScriptBuilder;
+import dev.agentspan.runtime.util.ModelParser;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 /**
  * Compiles guardrail configurations into Conductor workflow tasks.
@@ -151,8 +153,8 @@ public class GuardrailCompiler {
         int maxRetries = guard.getMaxRetries();
         String guardrailName = guard.getName();
 
-        String script = JavaScriptBuilder.regexGuardrailScript(
-                patternsJson, mode, onFail, message, maxRetries, guardrailName);
+        String script =
+                JavaScriptBuilder.regexGuardrailScript(patternsJson, mode, onFail, message, maxRetries, guardrailName);
 
         WorkflowTask task = new WorkflowTask();
         task.setTaskReferenceName(refName);
@@ -193,10 +195,11 @@ public class GuardrailCompiler {
         Map<String, Object> llmInputs = new LinkedHashMap<>();
         llmInputs.put("llmProvider", parsed.getProvider());
         llmInputs.put("model", parsed.getModel());
-        llmInputs.put("messages", List.of(
-                Map.of("role", "system", "message", policyPrompt),
-                Map.of("role", "user", "message", contentRef)
-        ));
+        llmInputs.put(
+                "messages",
+                List.of(
+                        Map.of("role", "system", "message", policyPrompt),
+                        Map.of("role", "user", "message", contentRef)));
         llmInputs.put("temperature", 0);
         llmInputs.put("maxTokens", guard.getMaxTokens() != null ? guard.getMaxTokens() : 256);
         llmInputs.put("jsonOutput", true);
@@ -229,19 +232,37 @@ public class GuardrailCompiler {
     private GuardrailTaskResult compileCustomGuardrail(
             GuardrailConfig guard, String agentName, String contentRef, String iterationRef) {
 
-        String refName = agentName + "_output_guardrail";
+        String refName = agentName + "_output_guardrail_" + guard.getName();
+        String workerRef = refName + "_worker";
 
         WorkflowTask task = new WorkflowTask();
         task.setName(guard.getTaskName());
-        task.setTaskReferenceName(refName);
+        task.setTaskReferenceName(workerRef);
         task.setType("SIMPLE");
 
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("content", contentRef);
+        inputs.put("input", contentRef);
+        inputs.put("input_text", contentRef);
+        inputs.put("output", contentRef);
+        inputs.put("agentOutput", contentRef);
+        inputs.put("agent_output", contentRef);
         inputs.put("iteration", iterationRef);
         task.setInputParameters(inputs);
 
-        return new GuardrailTaskResult(List.of(task), refName, false);
+        WorkflowTask normalizeTask = new WorkflowTask();
+        normalizeTask.setTaskReferenceName(refName);
+        normalizeTask.setType("INLINE");
+
+        Map<String, Object> normalizeInputs = new LinkedHashMap<>();
+        normalizeInputs.put("evaluatorType", "graaljs");
+        normalizeInputs.put("expression", JavaScriptBuilder.customGuardrailNormalizeScript());
+        normalizeInputs.put("worker_output", "${" + workerRef + ".output}");
+        normalizeInputs.put("guardrail_name", guard.getName());
+        normalizeInputs.put("default_on_fail", guard.getOnFail());
+        normalizeTask.setInputParameters(normalizeInputs);
+
+        return new GuardrailTaskResult(List.of(task, normalizeTask), refName, true);
     }
 
     /**
@@ -259,6 +280,11 @@ public class GuardrailCompiler {
 
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("content", contentRef);
+        inputs.put("input", contentRef);
+        inputs.put("input_text", contentRef);
+        inputs.put("output", contentRef);
+        inputs.put("agentOutput", contentRef);
+        inputs.put("agent_output", contentRef);
         inputs.put("iteration", iterationRef);
         task.setInputParameters(inputs);
 
@@ -287,19 +313,26 @@ public class GuardrailCompiler {
      * @return A {@link GuardrailRoutingResult} containing the switch task and retry ref.
      */
     public GuardrailRoutingResult compileGuardrailRouting(
-            GuardrailConfig guard, String guardrailRef, String contentRef,
-            String agentName, String suffix, boolean isInline) {
+            GuardrailConfig guard,
+            String guardrailRef,
+            String contentRef,
+            String agentName,
+            String suffix,
+            boolean isInline) {
         return compileGuardrailRouting(guard, guardrailRef, contentRef, agentName, suffix, isInline, null);
     }
 
     public GuardrailRoutingResult compileGuardrailRouting(
-            GuardrailConfig guard, String guardrailRef, String contentRef,
-            String agentName, String suffix, boolean isInline, String agentModel) {
+            GuardrailConfig guard,
+            String guardrailRef,
+            String contentRef,
+            String agentName,
+            String suffix,
+            boolean isInline,
+            String agentModel) {
 
         // InlineTask outputs live under output.result.*; worker outputs at output.*
-        String outPath = isInline
-                ? guardrailRef + ".output.result"
-                : guardrailRef + ".output";
+        String outPath = isInline ? guardrailRef + ".output.result" : guardrailRef + ".output";
 
         String s = suffix;
 
@@ -397,15 +430,14 @@ public class GuardrailCompiler {
         String humanRef = agentName + "_guardrail_human" + s;
         String modelToUse = guard.getModel() != null ? guard.getModel() : agentModel;
 
-        HumanTaskBuilder.Pipeline pipeline = HumanTaskBuilder
-            .create(humanRef, agentName + " Guardrail Review")
-            .responseSchema(HumanTaskBuilder.guardrailResponseSchema())
-            .responseUiSchema(HumanTaskBuilder.guardrailResponseUiSchema())
-            .contextInput("guardrail_message", "${" + outPath + ".message}")
-            .contextInput("guardrail_name", "${" + outPath + ".guardrail_name}")
-            .contextInput("llm_output", contentRef)
-            .guardrailValidation(modelToUse, contentRef)
-            .build();
+        HumanTaskBuilder.Pipeline pipeline = HumanTaskBuilder.create(humanRef, agentName + " Guardrail Review")
+                .responseSchema(HumanTaskBuilder.guardrailResponseSchema())
+                .responseUiSchema(HumanTaskBuilder.guardrailResponseUiSchema())
+                .contextInput("guardrail_message", "${" + outPath + ".message}")
+                .contextInput("guardrail_name", "${" + outPath + ".guardrail_name}")
+                .contextInput("llm_output", contentRef)
+                .guardrailValidation(modelToUse, contentRef)
+                .build();
 
         List<WorkflowTask> humanCaseTasks = new ArrayList<>(pipeline.getTasks());
         String outputRef = pipeline.getOutputRef();
@@ -416,8 +448,7 @@ public class GuardrailCompiler {
         innerSwitch.setTaskReferenceName(agentName + "_guardrail_human_action" + s);
         innerSwitch.setEvaluatorType("value-param");
         innerSwitch.setExpression("switchCaseValue");
-        innerSwitch.setInputParameters(Map.of("switchCaseValue",
-                "${" + outputRef + ".action}"));
+        innerSwitch.setInputParameters(Map.of("switchCaseValue", "${" + outputRef + ".action}"));
 
         Map<String, List<WorkflowTask>> innerCases = new LinkedHashMap<>();
 
@@ -432,8 +463,7 @@ public class GuardrailCompiler {
         WorkflowTask editNoop = new WorkflowTask();
         editNoop.setType("SET_VARIABLE");
         editNoop.setTaskReferenceName(agentName + "_guardrail_human_edit" + s);
-        editNoop.setInputParameters(Map.of("_human_edited_output",
-                "${" + outputRef + ".result}"));
+        editNoop.setInputParameters(Map.of("_human_edited_output", "${" + outputRef + ".result}"));
         innerCases.put("edit", List.of(editNoop));
 
         innerSwitch.setDecisionCases(innerCases);
@@ -442,9 +472,8 @@ public class GuardrailCompiler {
         WorkflowTask rejectTerminate = new WorkflowTask();
         rejectTerminate.setType("TERMINATE");
         rejectTerminate.setTaskReferenceName(agentName + "_guardrail_human_reject" + s);
-        rejectTerminate.setInputParameters(Map.of(
-            "terminationStatus", "FAILED",
-            "terminationReason", "${" + outputRef + ".reason}"));
+        rejectTerminate.setInputParameters(
+                Map.of("terminationStatus", "FAILED", "terminationReason", "${" + outputRef + ".reason}"));
         innerSwitch.setDefaultCase(List.of(rejectTerminate));
         humanCaseTasks.add(innerSwitch);
 

@@ -124,7 +124,15 @@ if __name__ == "__main__":
     print(f"Countries: {len(COUNTRIES)}")
     print(f"Dispatching {len(COUNTRIES)} parallel researcher agents...\n")
 
+
     with AgentRuntime() as runtime:
-        result = runtime.run(coordinator, prompt)
-        print("--- Coordinator Result ---")
-        print(result.output)
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.58_scatter_gather
+        runtime.deploy(coordinator)
+        runtime.serve(coordinator)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(coordinator, prompt)
+        # print("--- Coordinator Result ---")
+        # print(result.output)
+

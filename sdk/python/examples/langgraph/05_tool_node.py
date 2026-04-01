@@ -87,9 +87,15 @@ graph = builder.compile(name="tool_node_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(
-            graph,
-            "What is the capital and population of Japan and Brazil?",
-        )
-        print(f"Status: {result.status}")
-        result.print_result()
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.langgraph.05_tool_node
+        runtime.deploy(graph)
+        runtime.serve(graph)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        # graph,
+        # "What is the capital and population of Japan and Brazil?",
+        # )
+        # print(f"Status: {result.status}")
+        # result.print_result()

@@ -5,21 +5,35 @@
 
 package dev.agentspan.runtime.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.*;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.netflix.conductor.common.metadata.tasks.Task;
 import com.netflix.conductor.common.metadata.tasks.TaskDef;
+import com.netflix.conductor.common.metadata.tasks.TaskExecLog;
+import com.netflix.conductor.common.metadata.tasks.TaskResult;
+import com.netflix.conductor.common.metadata.workflow.RerunWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.StartWorkflowRequest;
 import com.netflix.conductor.common.metadata.workflow.WorkflowDef;
-import com.netflix.conductor.common.metadata.tasks.Task;
-import com.netflix.conductor.common.metadata.tasks.TaskResult;
+import com.netflix.conductor.common.metadata.workflow.WorkflowTask;
+import com.netflix.conductor.common.run.SearchResult;
 import com.netflix.conductor.common.run.Workflow;
+import com.netflix.conductor.common.run.WorkflowSummary;
 import com.netflix.conductor.core.execution.StartWorkflowInput;
 import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.dao.MetadataDAO;
 import com.netflix.conductor.service.ExecutionService;
 import com.netflix.conductor.service.WorkflowService;
-
-import com.netflix.conductor.common.run.SearchResult;
-import com.netflix.conductor.common.run.WorkflowSummary;
 
 import dev.agentspan.runtime.auth.RequestContextHolder;
 import dev.agentspan.runtime.auth.User;
@@ -29,22 +43,8 @@ import dev.agentspan.runtime.model.*;
 import dev.agentspan.runtime.normalizer.NormalizerRegistry;
 import dev.agentspan.runtime.util.ModelParser;
 import dev.agentspan.runtime.util.ProviderValidator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import java.util.*;
 
 import lombok.RequiredArgsConstructor;
-
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.*;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor(onConstructor_ = {@Autowired})
@@ -66,11 +66,16 @@ public class AgentService {
     private ExecutionTokenService executionTokenService;
 
     /** Package-private constructor for testing with ExecutionTokenService */
-    AgentService(AgentCompiler agentCompiler, NormalizerRegistry normalizerRegistry,
-                 MetadataDAO metadataDAO, WorkflowExecutor workflowExecutor,
-                 WorkflowService workflowService, AgentStreamRegistry streamRegistry,
-                 ExecutionService executionService, ProviderValidator providerValidator,
-                 ExecutionTokenService executionTokenService) {
+    AgentService(
+            AgentCompiler agentCompiler,
+            NormalizerRegistry normalizerRegistry,
+            MetadataDAO metadataDAO,
+            WorkflowExecutor workflowExecutor,
+            WorkflowService workflowService,
+            AgentStreamRegistry streamRegistry,
+            ExecutionService executionService,
+            ProviderValidator providerValidator,
+            ExecutionTokenService executionTokenService) {
         this.agentCompiler = agentCompiler;
         this.normalizerRegistry = normalizerRegistry;
         this.metadataDAO = metadataDAO;
@@ -99,14 +104,18 @@ public class AgentService {
         // Stamp agentDef into the compiled WorkflowDef so it is persisted when
         // the SDK passes the def inline to Conductor's start_workflow.
         String sdk = request.getFramework() != null ? request.getFramework() : "conductor";
-        Map<String, Object> metadata = def.getMetadata() != null
-                ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
+        Map<String, Object> metadata =
+                def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
         def.setMetadata(metadata);
 
+        List<String> requiredWorkers = new ArrayList<>(collectSimpleTaskNames(def));
         Map<String, Object> defMap = MAPPER.convertValue(def, Map.class);
-        return CompileResponse.builder().workflowDef(defMap).build();
+        return CompileResponse.builder()
+                .workflowDef(defMap)
+                .requiredWorkers(requiredWorkers)
+                .build();
     }
 
     /**
@@ -125,8 +134,8 @@ public class AgentService {
 
         // 1b. Stamp SDK metadata on the workflow definition
         String sdk = request.getFramework() != null ? request.getFramework() : "conductor";
-        Map<String, Object> metadata = def.getMetadata() != null
-                ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
+        Map<String, Object> metadata =
+                def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
         def.setMetadata(metadata);
@@ -138,12 +147,13 @@ public class AgentService {
         registerTaskDefinitions(config);
 
         // Validate provider (warn only, don't terminate)
-        validateModelProvider(config).ifPresent(err ->
-            log.warn("Provider not configured for agent '{}': {}", config.getName(), err));
+        validateModelProvider(config)
+                .ifPresent(err -> log.warn("Provider not configured for agent '{}': {}", config.getName(), err));
 
         return StartResponse.builder()
-            .workflowName(def.getName())
-            .build();
+                .agentName(def.getName())
+                .requiredWorkers(new ArrayList<>(collectSimpleTaskNames(def)))
+                .build();
     }
 
     /**
@@ -169,8 +179,8 @@ public class AgentService {
 
         // 1b. Stamp SDK metadata on the workflow definition
         String sdk = request.getFramework() != null ? request.getFramework() : "conductor";
-        Map<String, Object> metadata = def.getMetadata() != null
-                ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
+        Map<String, Object> metadata =
+                def.getMetadata() != null ? new LinkedHashMap<>(def.getMetadata()) : new LinkedHashMap<>();
         metadata.put("agent_sdk", sdk);
         stampAgentDef(metadata, request);
         def.setMetadata(metadata);
@@ -191,6 +201,9 @@ public class AgentService {
         input.put("prompt", request.getPrompt());
         input.put("media", request.getMedia() != null ? request.getMedia() : List.of());
         input.put("session_id", request.getSessionId() != null ? request.getSessionId() : "");
+        if (request.getCredentials() != null && !request.getCredentials().isEmpty()) {
+            input.put("credentials", request.getCredentials());
+        }
         // Extract cwd from rawConfig for frameworks that pass it
         String cwd = ".";
         if (request.getRawConfig() != null && request.getRawConfig().get("cwd") instanceof String rawCwd) {
@@ -213,12 +226,11 @@ public class AgentService {
                         }
                     }
                 }
-                User currentUser = RequestContextHolder.get()
-                    .map(ctx -> ctx.getUser())
-                    .orElse(null);
+                User currentUser =
+                        RequestContextHolder.get().map(ctx -> ctx.getUser()).orElse(null);
                 if (currentUser != null) {
                     String token = executionTokenService.mint(
-                        currentUser.getId(), null /* workflowId not known yet */, declaredNames, timeoutSeconds);
+                            currentUser.getId(), null /* executionId not known yet */, declaredNames, timeoutSeconds);
                     Map<String, Object> agentCtx = new LinkedHashMap<>();
                     agentCtx.put("execution_token", token);
                     input.put("__agentspan_ctx__", agentCtx);
@@ -230,34 +242,40 @@ public class AgentService {
 
         startReq.setInput(input);
 
+        List<String> requiredWorkers = new ArrayList<>(collectSimpleTaskNames(def));
+
         // Idempotency: use the key as correlationId and check for existing executions
         if (request.getIdempotencyKey() != null && !request.getIdempotencyKey().isEmpty()) {
             startReq.setCorrelationId(request.getIdempotencyKey());
             String existing = findExistingExecution(def.getName(), request.getIdempotencyKey());
             if (existing != null) {
-                log.info("Idempotent hit: returning existing workflow {} for key '{}'",
-                        existing, request.getIdempotencyKey());
+                log.info(
+                        "Idempotent hit: returning existing workflow {} for key '{}'",
+                        existing,
+                        request.getIdempotencyKey());
                 return StartResponse.builder()
-                    .workflowId(existing)
-                    .workflowName(def.getName())
-                    .build();
+                        .executionId(existing)
+                        .agentName(def.getName())
+                        .requiredWorkers(requiredWorkers)
+                        .build();
             }
         }
 
-        String workflowId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
-        log.info("Started workflow: {} (id={})", def.getName(), workflowId);
+        String executionId = workflowExecutor.startWorkflow(new StartWorkflowInput(startReq));
+        log.info("Started workflow: {} (id={})", def.getName(), executionId);
 
         // Validate provider AFTER start — workflow is captured for replay
         Optional<String> validationError = validateModelProvider(config);
         if (validationError.isPresent()) {
             log.warn("Provider not configured for agent '{}': {}", config.getName(), validationError.get());
-            workflowService.terminateWorkflow(workflowId, validationError.get());
+            workflowService.terminateWorkflow(executionId, validationError.get());
         }
 
         return StartResponse.builder()
-            .workflowId(workflowId)
-            .workflowName(def.getName())
-            .build();
+                .executionId(executionId)
+                .agentName(def.getName())
+                .requiredWorkers(requiredWorkers)
+                .build();
     }
 
     // ── Agent discovery ─────────────────────────────────────────────
@@ -315,17 +333,14 @@ public class AgentService {
     /**
      * Search agent executions with optional filters.
      */
-    public Map<String, Object> searchAgentExecutions(int start, int size, String sort,
-                                                      String freeText, String status,
-                                                      String agentName, String sessionId) {
+    public Map<String, Object> searchAgentExecutions(
+            int start, int size, String sort, String freeText, String status, String agentName, String sessionId) {
         // Determine which workflow types to query
         List<String> workflowNames;
         if (agentName != null && !agentName.isEmpty()) {
             workflowNames = List.of(agentName);
         } else {
-            workflowNames = listAgents().stream()
-                    .map(AgentSummary::getName)
-                    .collect(Collectors.toList());
+            workflowNames = listAgents().stream().map(AgentSummary::getName).collect(Collectors.toList());
         }
 
         if (workflowNames.isEmpty()) {
@@ -336,10 +351,9 @@ public class AgentService {
         }
 
         // Build query string
-        String nameList = workflowNames.stream()
-                .map(n -> "'" + n + "'")
-                .collect(Collectors.joining(","));
-        StringBuilder query = new StringBuilder("workflowType IN (").append(nameList).append(")");
+        String nameList = workflowNames.stream().map(n -> "'" + n + "'").collect(Collectors.joining(","));
+        StringBuilder query =
+                new StringBuilder("workflowType IN (").append(nameList).append(")");
         if (status != null && !status.isEmpty()) {
             query.append(" AND status = '").append(status).append("'");
         }
@@ -350,12 +364,12 @@ public class AgentService {
             searchText = sessionId;
         }
 
-        SearchResult<WorkflowSummary> searchResult = workflowService.searchWorkflows(
-                start, size, sort, searchText, query.toString());
+        SearchResult<WorkflowSummary> searchResult =
+                workflowService.searchWorkflows(start, size, sort, searchText, query.toString());
 
         List<AgentExecutionSummary> results = searchResult.getResults().stream()
                 .map(ws -> AgentExecutionSummary.builder()
-                        .workflowId(ws.getWorkflowId())
+                        .executionId(ws.getWorkflowId())
                         .agentName(ws.getWorkflowType())
                         .version(ws.getVersion())
                         .status(ws.getStatus() != null ? ws.getStatus().name() : null)
@@ -399,7 +413,7 @@ public class AgentService {
         }
 
         return AgentExecutionDetail.builder()
-                .workflowId(executionId)
+                .executionId(executionId)
                 .agentName(workflow.getWorkflowName())
                 .version(workflow.getWorkflowVersion())
                 .status(workflow.getStatus().name())
@@ -409,20 +423,35 @@ public class AgentService {
                 .build();
     }
 
+    /** Pause a running agent execution. */
+    public void pauseAgent(String executionId) {
+        workflowService.pauseWorkflow(executionId);
+    }
+
+    /** Resume a paused agent execution. */
+    public void resumeAgent(String executionId) {
+        workflowService.resumeWorkflow(executionId);
+    }
+
+    /** Cancel a running agent execution. */
+    public void cancelAgent(String executionId, String reason) {
+        workflowService.terminateWorkflow(executionId, reason != null ? reason : "Cancelled by user");
+    }
+
     /**
-     * Get a workflow execution with its full task list and token usage.
+     * Get an agent execution with its full task list and token usage.
      *
-     * <p>Exposed via {@code GET /api/agent/{id}}.  Returns workflow metadata,
+     * <p>Exposed via {@code GET /api/agent/{id}}.  Returns execution metadata,
      * all tasks (for SDK recursive token collection via {@code subWorkflowId}),
-     * and pre-computed token usage for LLM tasks in this workflow only.</p>
+     * and pre-computed token usage for LLM tasks in this execution only.</p>
      */
-    public AgentRun getWorkflow(String workflowId) {
-        Workflow workflow = executionService.getExecutionStatus(workflowId, true);
+    public AgentRun getExecution(String executionId) {
+        Workflow workflow = executionService.getExecutionStatus(executionId, true);
 
         int promptTokens = 0, completionTokens = 0, totalTokens = 0;
         boolean hasTokens = false;
 
-        List<AgentRun.TaskDetail> tasks = new java.util.ArrayList<>();
+        List<AgentRun.TaskDetail> tasks = new ArrayList<>();
         for (Task task : workflow.getTasks()) {
             AgentRun.TaskDetail.TaskDetailBuilder tb = AgentRun.TaskDetail.builder()
                     .taskType(task.getTaskType())
@@ -433,11 +462,11 @@ public class AgentService {
             tasks.add(tb.build());
 
             if ("LLM_CHAT_COMPLETE".equalsIgnoreCase(task.getTaskType())) {
-                java.util.Map<String, Object> out = task.getOutputData();
+                Map<String, Object> out = task.getOutputData();
                 if (out != null) {
-                    promptTokens     += toInt(out.get("promptTokens"));
+                    promptTokens += toInt(out.get("promptTokens"));
                     completionTokens += toInt(out.get("completionTokens"));
-                    totalTokens      += toInt(out.get("tokenUsed"));
+                    totalTokens += toInt(out.get("tokenUsed"));
                     hasTokens = true;
                 }
             }
@@ -452,7 +481,7 @@ public class AgentService {
                 : null;
 
         return AgentRun.builder()
-                .workflowId(workflowId)
+                .executionId(executionId)
                 .agentName(workflow.getWorkflowName())
                 .version(workflow.getWorkflowVersion())
                 .status(workflow.getStatus().name())
@@ -474,9 +503,7 @@ public class AgentService {
     private void stampAgentDef(Map<String, Object> metadata, StartRequest request) {
         Map<String, Object> agentDef = request.getRawConfig() != null
                 ? request.getRawConfig()
-                : (request.getAgentConfig() != null
-                        ? MAPPER.convertValue(request.getAgentConfig(), Map.class)
-                        : null);
+                : (request.getAgentConfig() != null ? MAPPER.convertValue(request.getAgentConfig(), Map.class) : null);
         if (agentDef != null) {
             metadata.put("agentDef", agentDef);
         }
@@ -485,7 +512,10 @@ public class AgentService {
     private static int toInt(Object value) {
         if (value instanceof Number) return ((Number) value).intValue();
         if (value instanceof String) {
-            try { return Integer.parseInt((String) value); } catch (NumberFormatException ignored) {}
+            try {
+                return Integer.parseInt((String) value);
+            } catch (NumberFormatException ignored) {
+            }
         }
         return 0;
     }
@@ -494,10 +524,12 @@ public class AgentService {
     public Map<String, Object> getAgentDef(String name, Integer version) {
         WorkflowDef def;
         if (version != null) {
-            def = metadataDAO.getWorkflowDef(name, version)
+            def = metadataDAO
+                    .getWorkflowDef(name, version)
                     .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name + " v" + version));
         } else {
-            def = metadataDAO.getLatestWorkflowDef(name)
+            def = metadataDAO
+                    .getLatestWorkflowDef(name)
                     .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name));
         }
         Map<String, Object> metadata = def.getMetadata();
@@ -512,7 +544,8 @@ public class AgentService {
             metadataDAO.removeWorkflowDef(name, version);
         } else {
             // Remove latest version
-            WorkflowDef def = metadataDAO.getLatestWorkflowDef(name)
+            WorkflowDef def = metadataDAO
+                    .getLatestWorkflowDef(name)
                     .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + name));
             metadataDAO.removeWorkflowDef(name, def.getVersion());
         }
@@ -520,13 +553,13 @@ public class AgentService {
 
     /**
      * Search for an existing workflow with the given correlationId (idempotency key).
-     * Returns the workflow ID if a RUNNING or COMPLETED execution exists, null otherwise.
+     * Returns the execution ID if a RUNNING or COMPLETED execution exists, null otherwise.
      */
     private String findExistingExecution(String workflowName, String idempotencyKey) {
         try {
             String query = "workflowType = '" + workflowName + "' AND status IN ('RUNNING', 'COMPLETED')";
-            SearchResult<WorkflowSummary> results = workflowService.searchWorkflows(
-                    0, 1, "startTime:DESC", idempotencyKey, query);
+            SearchResult<WorkflowSummary> results =
+                    workflowService.searchWorkflows(0, 1, "startTime:DESC", idempotencyKey, query);
             if (results.getTotalHits() > 0) {
                 WorkflowSummary match = results.getResults().get(0);
                 if (idempotencyKey.equals(match.getCorrelationId())) {
@@ -566,8 +599,7 @@ public class AgentService {
                     Object nested = tool.getConfig().get("agentConfig");
                     if (nested instanceof Map<?, ?> nestedMap) {
                         try {
-                            AgentConfig nestedConfig = new com.fasterxml.jackson.databind.ObjectMapper()
-                                .convertValue(nestedMap, AgentConfig.class);
+                            AgentConfig nestedConfig = new ObjectMapper().convertValue(nestedMap, AgentConfig.class);
                             collectCredentialsRecursive(nestedConfig, names);
                         } catch (Exception e) {
                             // Skip if can't parse nested config
@@ -592,6 +624,7 @@ public class AgentService {
         collectAndRegisterTasks(config, registered);
     }
 
+    @SuppressWarnings("unchecked")
     private void collectAndRegisterTasks(AgentConfig config, Set<String> registered) {
         // Register dispatch task for this agent's tools
         if (config.getTools() != null) {
@@ -606,6 +639,15 @@ public class AgentService {
         // Register stop_when worker
         if (config.getStopWhen() != null && config.getStopWhen().getTaskName() != null) {
             String taskName = config.getStopWhen().getTaskName();
+            if (!registered.contains(taskName)) {
+                registerTaskDef(taskName);
+                registered.add(taskName);
+            }
+        }
+
+        // Register termination worker (compiled as SIMPLE task by TerminationCompiler)
+        if (config.getTermination() != null) {
+            String taskName = config.getName() + "_termination";
             if (!registered.contains(taskName)) {
                 registerTaskDef(taskName);
                 registered.add(taskName);
@@ -634,6 +676,38 @@ public class AgentService {
             }
         }
 
+        // Register callable gate workers (text_contains gates are INLINE, no registration needed)
+        if (config.getGate() != null && config.getGate().get("taskName") instanceof String gateTaskName) {
+            if (!registered.contains(gateTaskName)) {
+                registerTaskDef(gateTaskName);
+                registered.add(gateTaskName);
+            }
+        }
+
+        // Register callable instructions worker (_worker_ref in instructions map)
+        if (config.getInstructions() instanceof Map<?, ?> instrMap
+                && instrMap.get("_worker_ref") instanceof String instrTaskName
+                && !instrTaskName.isBlank()) {
+            if (!registered.contains(instrTaskName)) {
+                registerTaskDef(instrTaskName);
+                registered.add(instrTaskName);
+            }
+        }
+
+        // Register worker-based router (WorkerRef with taskName)
+        if (config.getRouter() instanceof Map<?, ?> routerMap
+                && routerMap.get("taskName") instanceof String routerTaskName) {
+            if (!registered.contains(routerTaskName)) {
+                registerTaskDef(routerTaskName);
+                registered.add(routerTaskName);
+            }
+        } else if (config.getRouter() instanceof WorkerRef workerRef && workerRef.getTaskName() != null) {
+            if (!registered.contains(workerRef.getTaskName())) {
+                registerTaskDef(workerRef.getTaskName());
+                registered.add(workerRef.getTaskName());
+            }
+        }
+
         // Register handoff check worker for swarm
         if (config.getHandoffs() != null && !config.getHandoffs().isEmpty()) {
             String taskName = config.getName() + "_handoff_check";
@@ -652,13 +726,88 @@ public class AgentService {
             }
         }
 
-        // Register check_transfer worker for hybrid
-        if (config.getAgents() != null && !config.getAgents().isEmpty() &&
-            config.getTools() != null && !config.getTools().isEmpty()) {
+        // Register check_transfer worker for hybrid (has both agents AND tools)
+        if (config.getAgents() != null
+                && !config.getAgents().isEmpty()
+                && config.getTools() != null
+                && !config.getTools().isEmpty()) {
             String taskName = config.getName() + "_check_transfer";
             if (!registered.contains(taskName)) {
                 registerTaskDef(taskName);
                 registered.add(taskName);
+            }
+        }
+
+        // Register check_transfer workers for swarm sub-agents
+        // In swarm mode, each sub-agent gets a {name}_check_transfer SIMPLE task
+        if ("swarm".equals(config.getStrategy()) && config.getAgents() != null) {
+            for (AgentConfig sub : config.getAgents()) {
+                String taskName = sub.getName() + "_check_transfer";
+                if (!registered.contains(taskName)) {
+                    registerTaskDef(taskName);
+                    registered.add(taskName);
+                }
+            }
+        }
+
+        // Register transfer_to_ workers for swarm agents
+        // Each agent gets {source}_transfer_to_{peer} — matching MultiAgentCompiler
+        if ("swarm".equals(config.getStrategy()) && config.getAgents() != null) {
+            List<String> allNames = new ArrayList<>();
+            allNames.add(config.getName());
+            for (AgentConfig sub : config.getAgents()) {
+                allNames.add(sub.getName());
+            }
+            for (String source : allNames) {
+                for (String peer : allNames) {
+                    if (!source.equals(peer)) {
+                        String taskName = source + "_transfer_to_" + peer;
+                        if (!registered.contains(taskName)) {
+                            registerTaskDef(taskName);
+                            registered.add(taskName);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Register transfer_to_ workers for hybrid agents (has both tools and sub-agents)
+        if (config.getAgents() != null
+                && !config.getAgents().isEmpty()
+                && config.getTools() != null
+                && !config.getTools().isEmpty()) {
+            for (AgentConfig sub : config.getAgents()) {
+                String taskName = config.getName() + "_transfer_to_" + sub.getName();
+                if (!registered.contains(taskName)) {
+                    registerTaskDef(taskName);
+                    registered.add(taskName);
+                }
+            }
+        }
+
+        // Register graph-structure node workers and router workers
+        if (config.getMetadata() != null && config.getMetadata().get("_graph_structure") instanceof Map<?, ?> graph) {
+            // Node workers
+            if (graph.get("nodes") instanceof List<?> nodes) {
+                for (Object nodeObj : nodes) {
+                    if (nodeObj instanceof Map<?, ?> node && node.get("_worker_ref") instanceof String workerRef) {
+                        if (!registered.contains(workerRef)) {
+                            registerTaskDef(workerRef);
+                            registered.add(workerRef);
+                        }
+                    }
+                }
+            }
+            // Conditional edge router workers
+            if (graph.get("conditional_edges") instanceof List<?> condEdges) {
+                for (Object ceObj : condEdges) {
+                    if (ceObj instanceof Map<?, ?> ce && ce.get("_router_ref") instanceof String routerRef) {
+                        if (!registered.contains(routerRef)) {
+                            registerTaskDef(routerRef);
+                            registered.add(routerRef);
+                        }
+                    }
+                }
             }
         }
 
@@ -697,8 +846,8 @@ public class AgentService {
                 } else if (agentConfigObj instanceof Map) {
                     childConfig = MAPPER.convertValue(agentConfigObj, AgentConfig.class);
                 } else {
-                    log.warn("Unexpected agentConfig type for tool '{}': {}",
-                            tool.getName(), agentConfigObj.getClass());
+                    log.warn(
+                            "Unexpected agentConfig type for tool '{}': {}", tool.getName(), agentConfigObj.getClass());
                     continue;
                 }
 
@@ -708,8 +857,7 @@ public class AgentService {
                 // Compile and register the child agent workflow
                 WorkflowDef childDef = agentCompiler.compile(childConfig);
                 metadataDAO.updateWorkflowDef(childDef);
-                log.info("Registered agent_tool child workflow: {} for tool '{}'",
-                        childDef.getName(), tool.getName());
+                log.info("Registered agent_tool child workflow: {} for tool '{}'", childDef.getName(), tool.getName());
 
                 // Register task definitions for the child's worker tools
                 registerTaskDefinitions(childConfig);
@@ -733,9 +881,13 @@ public class AgentService {
 
     private Optional<String> validateModelProvider(AgentConfig config) {
         if (config.getModel() != null && !config.getModel().isBlank()) {
-            ModelParser.ParsedModel parsed = ModelParser.parse(config.getModel());
-            Optional<String> error = providerValidator.validateProvider(parsed.getProvider());
-            if (error.isPresent()) return error;
+            // Skip validation for Claude Code agents — they use a passthrough
+            // worker, not a server-side LLM provider.
+            if (!config.getModel().startsWith("claude-code")) {
+                ModelParser.ParsedModel parsed = ModelParser.parse(config.getModel());
+                Optional<String> error = providerValidator.validateProvider(parsed.getProvider());
+                if (error.isPresent()) return error;
+            }
         }
         if (config.getAgents() != null) {
             for (AgentConfig sub : config.getAgents()) {
@@ -766,55 +918,53 @@ public class AgentService {
     // ── SSE Streaming ──────────────────────────────────────────────
 
     /**
-     * Open an SSE stream for a workflow. Replays missed events on reconnect.
+     * Open an SSE stream for an agent execution. Replays missed events on reconnect.
      */
-    public SseEmitter openStream(String workflowId, Long lastEventId) {
-        log.info("Opening SSE stream for workflow {} (lastEventId={})", workflowId, lastEventId);
-        return streamRegistry.register(workflowId, lastEventId);
+    public SseEmitter openStream(String executionId, Long lastEventId) {
+        log.info("Opening SSE stream for execution {} (lastEventId={})", executionId, lastEventId);
+        return streamRegistry.register(executionId, lastEventId);
     }
 
     /**
-     * Respond to a pending HITL task in a workflow.
+     * Respond to a pending HITL task in an agent execution.
      */
-    public void respond(String workflowId, Map<String, Object> output) {
-        log.info("Responding to workflow {}: {}", workflowId, output);
+    public void respond(String executionId, Map<String, Object> output) {
+        log.info("Responding to execution {}: {}", executionId, output);
 
         // Find the pending task (HUMAN type, IN_PROGRESS status)
-        Workflow workflow = executionService.getExecutionStatus(workflowId, true);
+        Workflow workflow = executionService.getExecutionStatus(executionId, true);
         Task pendingTask = null;
         for (Task task : workflow.getTasks()) {
-            if ("HUMAN".equals(task.getTaskType())
-                    && task.getStatus() == Task.Status.IN_PROGRESS) {
+            if ("HUMAN".equals(task.getTaskType()) && task.getStatus() == Task.Status.IN_PROGRESS) {
                 pendingTask = task;
                 break;
             }
         }
 
         if (pendingTask == null) {
-            throw new IllegalStateException(
-                    "No pending HUMAN task found in workflow " + workflowId);
+            throw new IllegalStateException("No pending HUMAN task found in execution " + executionId);
         }
 
         // Update the task with the human's response
         TaskResult taskResult = new TaskResult();
         taskResult.setTaskId(pendingTask.getTaskId());
-        taskResult.setWorkflowInstanceId(workflowId);
+        taskResult.setWorkflowInstanceId(executionId);
         taskResult.setStatus(TaskResult.Status.COMPLETED);
-        Map<String, Object> outputData = new LinkedHashMap<>(
-                pendingTask.getOutputData() != null ? pendingTask.getOutputData() : Map.of());
+        Map<String, Object> outputData =
+                new LinkedHashMap<>(pendingTask.getOutputData() != null ? pendingTask.getOutputData() : Map.of());
         outputData.putAll(output);
         taskResult.setOutputData(outputData);
         executionService.updateTask(taskResult);
-        log.info("Completed HUMAN task {} in workflow {}", pendingTask.getReferenceTaskName(), workflowId);
+        log.info("Completed HUMAN task {} in execution {}", pendingTask.getReferenceTaskName(), executionId);
     }
 
     /**
-     * Get the current status of a workflow.
+     * Get the current status of an agent execution.
      */
-    public Map<String, Object> getStatus(String workflowId) {
-        Workflow workflow = executionService.getExecutionStatus(workflowId, true);
+    public Map<String, Object> getStatus(String executionId) {
+        Workflow workflow = executionService.getExecutionStatus(executionId, true);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("workflowId", workflowId);
+        result.put("executionId", executionId);
         result.put("status", workflow.getStatus().name());
 
         boolean isComplete = workflow.getStatus().isTerminal();
@@ -832,8 +982,7 @@ public class AgentService {
 
         // Find pending HUMAN task
         for (Task task : workflow.getTasks()) {
-            if ("HUMAN".equals(task.getTaskType())
-                    && task.getStatus() == Task.Status.IN_PROGRESS) {
+            if ("HUMAN".equals(task.getTaskType()) && task.getStatus() == Task.Status.IN_PROGRESS) {
                 Map<String, Object> pendingTool = new LinkedHashMap<>();
                 pendingTool.put("taskRefName", task.getReferenceTaskName());
                 if (task.getInputData() != null) {
@@ -856,37 +1005,39 @@ public class AgentService {
      * AgentSSEEvent and fan it out to all registered SSE emitters.
      * Silently ignored if no clients are connected.
      */
-    public void pushFrameworkEvent(String workflowId, Map<String, Object> event) {
+    public void pushFrameworkEvent(String executionId, Map<String, Object> event) {
         String type = event.getOrDefault("type", "").toString();
-        AgentSSEEvent sseEvent = switch (type) {
-            case "thinking" -> AgentSSEEvent.thinking(workflowId,
-                event.getOrDefault("content", "").toString());
-            case "tool_call" -> AgentSSEEvent.toolCall(workflowId,
-                event.getOrDefault("toolName", "").toString(),
-                event.get("args"));
-            case "tool_result" -> AgentSSEEvent.toolResult(workflowId,
-                event.getOrDefault("toolName", "").toString(),
-                event.getOrDefault("result", ""));
-            case "context_condensed" -> AgentSSEEvent.contextCondensed(workflowId,
-                event.getOrDefault("trigger", "").toString(),
-                event.get("messagesBefore") instanceof Number n ? n.intValue() : 0,
-                event.get("messagesAfter") instanceof Number n ? n.intValue() : 0,
-                event.get("exchangesCondensed") instanceof Number n ? n.intValue() : 0);
-            case "subagent_start" -> AgentSSEEvent.subagentStart(
-                workflowId,
-                extractSubagentIdentifier(event),
-                event.getOrDefault("prompt", "").toString());
-            case "subagent_stop" -> AgentSSEEvent.subagentStop(
-                workflowId,
-                extractSubagentIdentifier(event),
-                event.getOrDefault("result", "").toString());
-            default -> {
-                log.debug("Unknown framework event type '{}' for workflow {}", type, workflowId);
-                yield null;
-            }
-        };
+        AgentSSEEvent sseEvent =
+                switch (type) {
+                    case "thinking" -> AgentSSEEvent.thinking(
+                            executionId, event.getOrDefault("content", "").toString());
+                    case "tool_call" -> AgentSSEEvent.toolCall(
+                            executionId, event.getOrDefault("toolName", "").toString(), event.get("args"));
+                    case "tool_result" -> AgentSSEEvent.toolResult(
+                            executionId,
+                            event.getOrDefault("toolName", "").toString(),
+                            event.getOrDefault("result", ""));
+                    case "context_condensed" -> AgentSSEEvent.contextCondensed(
+                            executionId,
+                            event.getOrDefault("trigger", "").toString(),
+                            event.get("messagesBefore") instanceof Number n ? n.intValue() : 0,
+                            event.get("messagesAfter") instanceof Number n ? n.intValue() : 0,
+                            event.get("exchangesCondensed") instanceof Number n ? n.intValue() : 0);
+                    case "subagent_start" -> AgentSSEEvent.subagentStart(
+                            executionId,
+                            extractSubagentIdentifier(event),
+                            event.getOrDefault("prompt", "").toString());
+                    case "subagent_stop" -> AgentSSEEvent.subagentStop(
+                            executionId,
+                            extractSubagentIdentifier(event),
+                            event.getOrDefault("result", "").toString());
+                    default -> {
+                        log.debug("Unknown framework event type '{}' for execution {}", type, executionId);
+                        yield null;
+                    }
+                };
         if (sseEvent != null) {
-            streamRegistry.send(workflowId, sseEvent);
+            streamRegistry.send(executionId, sseEvent);
         }
     }
 
@@ -908,8 +1059,8 @@ public class AgentService {
         taskDef.setRetryCount(2);
         taskDef.setRetryDelaySeconds(2);
         taskDef.setRetryLogic(TaskDef.RetryLogic.LINEAR_BACKOFF);
-        taskDef.setTimeoutSeconds(120);
-        taskDef.setResponseTimeoutSeconds(120);
+        taskDef.setTimeoutSeconds(0);
+        taskDef.setResponseTimeoutSeconds(3600);
         taskDef.setTimeoutPolicy(TaskDef.TimeoutPolicy.RETRY);
 
         try {
@@ -925,5 +1076,108 @@ public class AgentService {
 
         metadataDAO.createTaskDef(taskDef);
         log.info("Registered task definition: {}", taskName);
+    }
+
+    // ── Utility: collect SIMPLE task names from workflow tree ────────
+
+    /**
+     * Walk a compiled WorkflowDef tree and return the names of every SIMPLE task.
+     * SDKs use this list to know exactly which workers to register.
+     */
+    private Set<String> collectSimpleTaskNames(WorkflowDef workflowDef) {
+        Set<String> names = new LinkedHashSet<>();
+        collectSimpleTaskNamesFromTasks(workflowDef.getTasks(), names);
+        return names;
+    }
+
+    private void collectSimpleTaskNamesFromTasks(List<WorkflowTask> tasks, Set<String> names) {
+        if (tasks == null) return;
+        for (WorkflowTask task : tasks) {
+            if ("SIMPLE".equals(task.getType())) {
+                names.add(task.getName());
+            }
+            // DO_WHILE loop body
+            if (task.getLoopOver() != null) {
+                collectSimpleTaskNamesFromTasks(task.getLoopOver(), names);
+            }
+            // SWITCH / DECISION default case
+            if (task.getDefaultCase() != null) {
+                collectSimpleTaskNamesFromTasks(task.getDefaultCase(), names);
+            }
+            // SWITCH / DECISION named cases
+            if (task.getDecisionCases() != null) {
+                for (List<WorkflowTask> caseTasks : task.getDecisionCases().values()) {
+                    collectSimpleTaskNamesFromTasks(caseTasks, names);
+                }
+            }
+            // FORK branches
+            if (task.getForkTasks() != null) {
+                for (List<WorkflowTask> branch : task.getForkTasks()) {
+                    collectSimpleTaskNamesFromTasks(branch, names);
+                }
+            }
+            // Inline sub-workflows
+            if (task.getSubWorkflowParam() != null && task.getSubWorkflowParam().getWorkflowDef() != null) {
+                collectSimpleTaskNamesFromTasks(
+                        task.getSubWorkflowParam().getWorkflowDef().getTasks(), names);
+            }
+        }
+    }
+
+    // ── Execution lifecycle (UI delegation) ─────────────────────────
+
+    public Workflow getFullExecution(String executionId) {
+        return executionService.getExecutionStatus(executionId, true);
+    }
+
+    public void restartExecution(String executionId, boolean useLatestDefinitions) {
+        workflowService.restartWorkflow(executionId, useLatestDefinitions);
+    }
+
+    public void retryExecution(String executionId, boolean resumeSubworkflowTasks) {
+        workflowService.retryWorkflow(executionId, resumeSubworkflowTasks);
+    }
+
+    public String rerunExecution(String executionId, RerunWorkflowRequest request) {
+        return workflowService.rerunWorkflow(executionId, request);
+    }
+
+    public List<Task> getExecutionTasks(String executionId, String status, int count, int start) {
+        Workflow wf = executionService.getExecutionStatus(executionId, true);
+        List<Task> tasks = wf.getTasks();
+        if (status != null && !status.isEmpty()) {
+            tasks = tasks.stream()
+                    .filter(t -> status.equals(t.getStatus().name()))
+                    .collect(Collectors.toList());
+        }
+        int end = Math.min(start + count, tasks.size());
+        if (start >= tasks.size()) return List.of();
+        return tasks.subList(start, end);
+    }
+
+    public SearchResult<WorkflowSummary> searchExecutionsRaw(
+            int start, int size, String sort, String freeText, String query) {
+        return workflowService.searchWorkflows(start, size, sort, freeText, query);
+    }
+
+    public WorkflowDef getAgentDefinition(String name, Integer version) {
+        if (version != null) {
+            return metadataDAO
+                    .getWorkflowDef(name, version)
+                    .orElseThrow(() -> new com.netflix.conductor.core.exception.NotFoundException(
+                            "Definition not found: " + name));
+        }
+        return metadataDAO
+                .getLatestWorkflowDef(name)
+                .orElseThrow(() ->
+                        new com.netflix.conductor.core.exception.NotFoundException("Definition not found: " + name));
+    }
+
+    public void updateTaskResult(TaskResult taskResult) {
+        executionService.updateTask(taskResult);
+    }
+
+    public List<TaskExecLog> getTaskLogs(String taskId) {
+        return executionService.getTaskLogs(taskId);
     }
 }

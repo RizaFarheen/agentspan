@@ -17,7 +17,7 @@ import MinusIcon from "components/flow/components/graphs/PanAndZoomWrapper/icons
 import PlusIcon from "components/flow/components/graphs/PanAndZoomWrapper/icons/Plus";
 import FitToFrame from "shared/icons/FitToFrame";
 import { colors } from "theme/tokens/variables";
-import { Canvas, CanvasPosition, Edge, Node, NodeData, EdgeData } from "reaflow";
+import { Canvas, CanvasPosition, Edge, Node, NodeData, EdgeData, PortData, PortSide } from "reaflow";
 import { getCardVariant } from "components/flow/components/shapes/styles";
 import { ArrowRight, Check, Prohibit } from "@phosphor-icons/react";
 import CardIcon from "components/flow/components/shapes/TaskCard/CardIcon";
@@ -34,7 +34,7 @@ const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 2.5;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Kind = "start" | "llm" | "tool" | "handoff" | "subagent" | "output" | "error" | "next" | "back" | "group";
+type Kind = "start" | "llm" | "tool" | "handoff" | "subagent" | "output" | "error" | "next" | "back" | "group" | "junction" | "ellipsis";
 
 const KIND_TYPE: Record<Kind, TaskType> = {
   start:    TaskType.SUB_WORKFLOW,
@@ -47,6 +47,8 @@ const KIND_TYPE: Record<Kind, TaskType> = {
   next:     TaskType.SIMPLE,
   back:     TaskType.SIMPLE,
   group:    TaskType.SIMPLE,
+  junction: TaskType.SIMPLE,
+  ellipsis: TaskType.SIMPLE,
 };
 
 const KIND_LABEL: Record<Kind, string> = {
@@ -60,6 +62,8 @@ const KIND_LABEL: Record<Kind, string> = {
   next:     "",
   back:     "",
   group:    "",
+  junction: "",
+  ellipsis: "",
 };
 
 
@@ -162,14 +166,52 @@ function NodeStatusBadge({ status }: { status: TaskStatus }) {
 }
 
 // ─── Node card — all nodes use white TaskCard styling ─────────────────────────
-function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack }: {
+function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack, onToggleGroup }: {
   data: DiagramNodeData;
   width: number; height: number;
   selected: boolean;
   onSelect: () => void;
   onDrillIn?: (r: AgentRunData) => void;
   onBack?: () => void;
+  onToggleGroup?: () => void;
 }) {
+  // ── Fork/join junction node — thin bar spanning full node width ───────────────
+  if (data.kind === "junction") {
+    return (
+      <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{
+          width: width - 16, height: 4,
+          borderRadius: 2,
+          backgroundColor: "#c0c0c0",
+        }} />
+      </div>
+    );
+  }
+
+  // ── Ellipsis node ("... N more") ────────────────────────────────────────────
+  if (data.kind === "ellipsis") {
+    return (
+      <div
+        onClick={(e) => { e.stopPropagation(); onSelect(); }}
+        style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center" }}
+      >
+        <div style={{
+          padding: "8px 16px",
+          borderRadius: 8,
+          border: "2px dashed #d1d5db",
+          backgroundColor: "#f9fafb",
+          color: "#6b7280",
+          fontSize: "0.78rem",
+          fontWeight: 500,
+          textAlign: "center",
+          cursor: "pointer",
+        }}>
+          {data.label}
+        </div>
+      </div>
+    );
+  }
+
   // ── "Back to parent" node ─────────────────────────────────────────────────────
   if (data.kind === "back") {
     return (
@@ -255,6 +297,22 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack }
               </div>
               <TypeBadge label={data.strategy ? STRATEGY_BADGE[data.strategy] : "PARALLEL"} />
             </div>
+            {/* Expand button for collapsed groups (tools or agents) */}
+            {total >= COLLAPSE_THRESHOLD && onToggleGroup && (
+              <div
+                onClick={(e) => { e.stopPropagation(); onToggleGroup?.(); }}
+                style={{
+                  marginTop: 6,
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "3px 10px",
+                  borderRadius: "5px", backgroundColor: "#4969e4",
+                  cursor: "pointer",
+                  fontSize: "0.72em", color: "white",
+                }}
+              >
+                Expand ({Math.min(total, MAX_EXPANDED)} of {total})
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -383,7 +441,7 @@ function NodeCard({ data, width, height, selected, onSelect, onDrillIn, onBack }
 
 // ─── Reaflow node wrapper ─────────────────────────────────────────────────────
 const DiagramNode = (nodeProps: any) => {
-  const { selectedId, onSelect, onDrillIn, onBack, properties } = nodeProps;
+  const { selectedId, onSelect, onDrillIn, onBack, onToggleGroup, properties } = nodeProps;
   const data: DiagramNodeData = properties?.data;
   return (
     <Node {...nodeProps} onClick={() => null} label={<></>} style={{ stroke: "none", fill: "none" }}>
@@ -397,6 +455,7 @@ const DiagramNode = (nodeProps: any) => {
               onSelect={() => onSelect(properties?.id)}
               onDrillIn={onDrillIn}
               onBack={onBack}
+              onToggleGroup={onToggleGroup ? () => onToggleGroup(properties?.id) : undefined}
             />
           </foreignObject>
         </g>
@@ -407,8 +466,14 @@ const DiagramNode = (nodeProps: any) => {
 
 // ─── Build diagram nodes/edges ────────────────────────────────────────────────
 const W = 264, H = 80, H_HANDOFF = 48;
-// Max individual nodes shown per "group" (tools or sub-agents) before collapsing
-const MAX_INLINE = 8;
+// Parallel tool-call batches with fewer than this many calls are shown individually (not collapsed)
+const COLLAPSE_THRESHOLD = 10;
+// Maximum individual nodes to render when a collapsed group is expanded.
+// When the total exceeds this, the first EXPAND_HEAD and last EXPAND_TAIL items
+// are shown with an ellipsis node in between.
+const MAX_EXPANDED = 20;
+const EXPAND_HEAD = 10;
+const EXPAND_TAIL = 10;
 
 function buildTurnNodes(
   turn: AgentTurn,
@@ -416,12 +481,90 @@ function buildTurnNodes(
   edges: EdgeData[],
   done: Set<string>,
   prevRef: { id: string },
+  expandedGroups: Set<string>,
 ) {
   const push = (id: string, data: DiagramNodeData, h = H) => {
     nodes.push({ id, width: W, height: h, data });
-    edges.push({ id: `${prevRef.id}→${id}`, from: prevRef.id, to: id });
+    // Use join junction's south port for clean outgoing routing
+    const fromPort = prevRef.id.endsWith("-join") ? `${prevRef.id}-south-port` : undefined;
+    edges.push({ id: `${prevRef.id}→${id}`, from: prevRef.id, to: id, ...(fromPort ? { fromPort } : {}) });
     if (data.ts === TaskStatus.COMPLETED) done.add(id);
     prevRef.id = id;
+  };
+
+  /**
+   * Fan-out: create a fork node → N parallel branch nodes → join node.
+   * Each branch node is displayed side-by-side horizontally.
+   */
+  const pushParallel = (
+    forkId: string,
+    branches: { id: string; data: DiagramNodeData; h?: number }[],
+    joinId: string,
+  ) => {
+    if (branches.length === 0) return;
+    const n = branches.length;
+
+    // Fork junction — indexed SOUTH ports, same pattern as debug view's FORK_JOIN.
+    // Width matches regular nodes so ELK keeps layers aligned.
+    const forkPorts: PortData[] = branches.map((_, i) => ({
+      id: `${forkId}_[key=${i}]-south-port`,
+      width: 2, height: 2, side: "SOUTH" as PortSide,
+      disabled: true, hidden: true, index: i,
+    }));
+    nodes.push({
+      id: forkId, width: W, height: 16,
+      data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED },
+      ports: forkPorts,
+    });
+    edges.push({ id: `${prevRef.id}→${forkId}`, from: prevRef.id, to: forkId });
+    done.add(forkId);
+
+    // Join junction — INVERTED indexed NORTH ports (key anti-crossing trick
+    // from the debug view: branch 0 → highest port index, branch N-1 → index 0).
+    // Plus a standard SOUTH port for the outgoing edge.
+    const joinPorts: PortData[] = [
+      { id: `${joinId}-south-port`, width: 2, height: 2,
+        side: "SOUTH" as PortSide, disabled: true, hidden: true },
+      ...branches.map((_, i) => {
+        const inv = n - 1 - i;
+        return {
+          id: `${joinId}-n${inv}-north-port`,
+          width: 2, height: 2, side: "NORTH" as PortSide,
+          disabled: true, hidden: true, index: inv,
+        };
+      }),
+    ];
+    nodes.push({
+      id: joinId, width: W, height: 16,
+      data: { kind: "junction" as Kind, label: "", ts: TaskStatus.COMPLETED },
+      ports: joinPorts,
+    });
+    done.add(joinId);
+
+    // Branch nodes — each gets a south port for the branch→join edge.
+    // Fully port-bound edges on both ends (fromPort + toPort).
+    for (let i = 0; i < n; i++) {
+      const b = branches[i];
+      const inv = n - 1 - i;
+      nodes.push({
+        id: b.id, width: W, height: b.h ?? H, data: b.data,
+        ports: [{ id: `${b.id}-south-port`, width: 2, height: 2,
+          side: "SOUTH" as PortSide, disabled: true, hidden: true }],
+      });
+      edges.push({
+        id: `${forkId}→${b.id}`,
+        from: forkId, fromPort: `${forkId}_[key=${i}]-south-port`,
+        to: b.id,
+      });
+      edges.push({
+        id: `${b.id}→${joinId}`,
+        from: b.id, fromPort: `${b.id}-south-port`,
+        to: joinId, toPort: `${joinId}-n${inv}-north-port`,
+      });
+      if (b.data.ts === TaskStatus.COMPLETED) done.add(b.id);
+    }
+
+    prevRef.id = joinId;
   };
 
   // Sequential chain turns: sub-agent FIRST, then gate event — entirely separate flow
@@ -465,21 +608,65 @@ function buildTurnNodes(
   for (const grp of groups) {
     if ("type" in grp && grp.type === "__toolGroup") {
       const batch = (grp as any).events as AgentEvent[];
-      if (batch.length === 1) {
-        const ev = batch[0];
-        const out = ev.result ? (() => { try { return JSON.stringify(ev.result).replace(/[{}"]/g, "").slice(0, 55); } catch { return undefined; } })() : undefined;
-        push(ev.id, {
-          kind: "tool", label: ev.toolName ?? "tool",
-          sublabel: out, meta: ev.durationMs ? formatDuration(ev.durationMs) : undefined,
-          ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
-          event: ev,
-        });
+      const groupId = `toolgroup-${turn.turnNumber}`;
+      const isExpanded = expandedGroups.has(groupId);
+
+      if (batch.length < COLLAPSE_THRESHOLD || isExpanded) {
+        // Build visible list: when expanded and over MAX_EXPANDED, show head + ellipsis + tail
+        let visible: AgentEvent[];
+        let ellipsisCount = 0;
+        if (isExpanded && batch.length > MAX_EXPANDED) {
+          const head = batch.slice(0, EXPAND_HEAD);
+          const tail = batch.slice(batch.length - EXPAND_TAIL);
+          ellipsisCount = batch.length - EXPAND_HEAD - EXPAND_TAIL;
+          visible = head;
+          // tail is handled separately below
+          visible = [...head]; // just head for now
+        } else {
+          visible = batch;
+        }
+
+        const makeBranch = (ev: AgentEvent) => {
+          const out = ev.result ? (() => { try { return JSON.stringify(ev.result).replace(/[{}"]/g, "").slice(0, 55); } catch { return undefined; } })() : undefined;
+          return {
+            id: ev.id,
+            data: {
+              kind: "tool" as Kind, label: ev.toolName ?? "tool",
+              sublabel: out, meta: ev.durationMs ? formatDuration(ev.durationMs) : undefined,
+              ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
+              event: ev,
+            },
+          };
+        };
+
+        if (ellipsisCount > 0) {
+          // Head + ellipsis + tail in fan-out
+          const headBranches = visible.map(makeBranch);
+          const ellipsisBranch = {
+            id: `${groupId}-ellipsis`,
+            data: { kind: "ellipsis" as Kind, label: `… ${ellipsisCount} more …`, ts: TaskStatus.COMPLETED },
+            h: 56,
+          };
+          const tailBranches = batch.slice(batch.length - EXPAND_TAIL).map(makeBranch);
+          pushParallel(`${groupId}-fork`, [...headBranches, ellipsisBranch, ...tailBranches], `${groupId}-join`);
+        } else if (visible.length === 1) {
+          const ev = visible[0];
+          const out = ev.result ? (() => { try { return JSON.stringify(ev.result).replace(/[{}"]/g, "").slice(0, 55); } catch { return undefined; } })() : undefined;
+          push(ev.id, {
+            kind: "tool", label: ev.toolName ?? "tool",
+            sublabel: out, meta: ev.durationMs ? formatDuration(ev.durationMs) : undefined,
+            ts: ev.success === false ? TaskStatus.FAILED : ev.success === undefined ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED,
+            event: ev,
+          });
+        } else {
+          pushParallel(`${groupId}-fork`, visible.map(makeBranch), `${groupId}-join`);
+        }
       } else {
         const completed = batch.filter(e => e.success === true).length;
         const failed    = batch.filter(e => e.success === false).length;
         const running   = batch.filter(e => e.success === undefined).length;
         const ts = failed > 0 ? TaskStatus.FAILED : running > 0 ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED;
-        push(`toolgroup-${turn.turnNumber}`, {
+        push(groupId, {
           kind: "group",
           label: batch[0].toolName ?? "tool calls",
           groupType: "tools", groupEvents: batch,
@@ -556,33 +743,64 @@ function buildTurnNodes(
     }
   }
 
-  // Sub-agents: single node if one, stacked group node if many
-  if (turn.subAgents.length === 1) {
-    const sub = turn.subAgents[0];
-    push(`sub-${sub.id}`, {
-      kind: "subagent", label: sub.agentName,
-      meta: sub.model, modelName: sub.model,
-      sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
-      strategy: turn.strategy,
-      ts: toTS(sub.status), subAgentRun: sub,
-    });
-  } else if (turn.subAgents.length > 1) {
-    const completed = turn.subAgents.filter(s => s.status === AgentStatus.COMPLETED).length;
-    const failed    = turn.subAgents.filter(s => s.status === AgentStatus.FAILED).length;
-    const running   = turn.subAgents.length - completed - failed;
-    const ts = failed > 0 ? TaskStatus.FAILED : running > 0 ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED;
-    push(`subgroup-${turn.turnNumber}`, {
-      kind: "group",
-      label: turn.subAgents[0].agentName,
-      strategy: turn.strategy,
-      groupType: "agents", groupAgents: turn.subAgents,
-      groupCompleted: completed, groupFailed: failed, groupRunning: running,
-      ts,
-    });
+  // Sub-agents: single node if one; inline if < threshold; collapsed group if >= threshold
+  if (turn.subAgents.length > 0) {
+    const subGroupId = `subgroup-${turn.turnNumber}`;
+    const isSubExpanded = expandedGroups.has(subGroupId);
+
+    if (turn.subAgents.length < COLLAPSE_THRESHOLD || isSubExpanded) {
+      const makeSubBranch = (sub: AgentRunData) => ({
+        id: `sub-${sub.id}`,
+        data: {
+          kind: "subagent" as Kind, label: sub.agentName,
+          meta: sub.model, modelName: sub.model,
+          sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
+          strategy: turn.strategy,
+          ts: toTS(sub.status), subAgentRun: sub,
+        },
+      });
+
+      if (isSubExpanded && turn.subAgents.length > MAX_EXPANDED) {
+        // Head + ellipsis + tail
+        const head = turn.subAgents.slice(0, EXPAND_HEAD).map(makeSubBranch);
+        const tail = turn.subAgents.slice(turn.subAgents.length - EXPAND_TAIL).map(makeSubBranch);
+        const ellipsisCount = turn.subAgents.length - EXPAND_HEAD - EXPAND_TAIL;
+        const ellipsisBranch = {
+          id: `${subGroupId}-ellipsis`,
+          data: { kind: "ellipsis" as Kind, label: `… ${ellipsisCount} more …`, ts: TaskStatus.COMPLETED },
+          h: 56,
+        };
+        pushParallel(`${subGroupId}-fork`, [...head, ellipsisBranch, ...tail], `${subGroupId}-join`);
+      } else if (turn.subAgents.length === 1) {
+        const sub = turn.subAgents[0];
+        push(`sub-${sub.id}`, {
+          kind: "subagent", label: sub.agentName,
+          meta: sub.model, modelName: sub.model,
+          sublabel: sub.output?.slice(0, 55) ?? sub.failureReason?.slice(0, 55),
+          strategy: turn.strategy,
+          ts: toTS(sub.status), subAgentRun: sub,
+        });
+      } else {
+        pushParallel(`${subGroupId}-fork`, turn.subAgents.map(makeSubBranch), `${subGroupId}-join`);
+      }
+    } else {
+      const completed = turn.subAgents.filter(s => s.status === AgentStatus.COMPLETED).length;
+      const failed    = turn.subAgents.filter(s => s.status === AgentStatus.FAILED).length;
+      const running   = turn.subAgents.length - completed - failed;
+      const ts = failed > 0 ? TaskStatus.FAILED : running > 0 ? TaskStatus.IN_PROGRESS : TaskStatus.COMPLETED;
+      push(subGroupId, {
+        kind: "group",
+        label: turn.subAgents[0].agentName,
+        strategy: turn.strategy,
+        groupType: "agents", groupAgents: turn.subAgents,
+        groupCompleted: completed, groupFailed: failed, groupRunning: running,
+        ts,
+      });
+    }
   }
 }
 
-function buildDiagram(agentRun: AgentRunData, _activeTurnNum: number, hasBack: boolean) {
+function buildDiagram(agentRun: AgentRunData, _activeTurnNum: number, hasBack: boolean, expandedGroups: Set<string>) {
   const nodes: NodeData<DiagramNodeData>[] = [];
   const edges: EdgeData[] = [];
   const done = new Set<string>();
@@ -618,7 +836,7 @@ function buildDiagram(agentRun: AgentRunData, _activeTurnNum: number, hasBack: b
       prevRef.id = ntId;
     }
 
-    buildTurnNodes(turn, nodes, edges, done, prevRef);
+    buildTurnNodes(turn, nodes, edges, done, prevRef, expandedGroups);
   }
 
   return { nodes, edges, done };
@@ -686,11 +904,23 @@ interface AgentExecutionDiagramProps {
 
 export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, selectedId, onNodeSelect, onDrillIn, onBack }: AgentExecutionDiagramProps) {
   const hasBack = !!onBack;
-  // buildDiagram doesn't use activeTurn (shows all turns always) — only re-run on agent/back change
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // Reset expanded groups when the agent changes
+  useEffect(() => { setExpandedGroups(new Set()); }, [agentRun]);
+
+  const toggleGroup = useCallback((groupId: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }, []);
+
   const { nodes, edges, done } = useMemo(
-    () => buildDiagram(agentRun, activeTurn, hasBack),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [agentRun.id, hasBack],
+    () => buildDiagram(agentRun, activeTurn, hasBack, expandedGroups),
+    [agentRun, hasBack, expandedGroups], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -942,10 +1172,11 @@ export function AgentExecutionDiagram({ agentRun, activeTurn, onSelectTurn, sele
           direction="DOWN"
           layoutOptions={{
             "org.eclipse.elk.spacing.nodeNode": "18",
+            "org.eclipse.elk.spacing.edgeEdge": "8",
             "elk.layered.spacing.nodeNodeBetweenLayers": "24",
             "org.eclipse.elk.padding": "[top=60,left=60,bottom=60,right=60]",
           }}
-          node={<DiagramNode selectedId={selectedId} onSelect={handle} onDrillIn={onDrillIn} onBack={onBack} />}
+          node={<DiagramNode selectedId={selectedId} onSelect={handle} onDrillIn={onDrillIn} onBack={onBack} onToggleGroup={toggleGroup} />}
           edge={(ed: EdgeData) => (
             <Edge {...ed} style={{
               stroke: done.has(ed.from ?? "") ? EDGE_COMPLETED : EDGE_DEFAULT,

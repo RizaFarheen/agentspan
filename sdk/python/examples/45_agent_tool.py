@@ -91,10 +91,19 @@ manager = Agent(
     tools=[agent_tool(researcher), calculate],
 )
 
-with AgentRuntime() as runtime:
-    result = runtime.run(
-        manager,
-        "Research Python and Rust, then calculate how many use cases they "
-        "have combined.",
-    )
-    result.print_result()
+
+if __name__ == "__main__":
+    with AgentRuntime() as runtime:
+        # Deploy to server. CLI alternative (recommended for CI/CD):
+        #   agentspan deploy examples.45_agent_tool
+        runtime.deploy(manager)
+        runtime.serve(manager)
+
+        # Quick test: uncomment below (and comment out serve) to run directly.
+        # result = runtime.run(
+        #     manager,
+        #     "Research Python and Rust, then calculate how many use cases they "
+        #     "have combined.",
+        # )
+        # result.print_result()
+
