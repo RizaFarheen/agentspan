@@ -119,13 +119,6 @@ export const githubAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(petAgent);
-    // await runtime.serve(petAgent);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     // Example 1: Petstore
     console.log('=== Petstore API ===');
     const result = await runtime.run(petAgent, "List all available pets with status 'available'");
@@ -135,6 +128,15 @@ async function main() {
     console.log('\n=== Mixed Tools ===');
     const result2 = await runtime.run(multiToolAgent, "What's sqrt(144)? Also find pets named 'doggie'.");
     result2.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(petAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents pet_store_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(petAgent);
   } finally {
     await runtime.shutdown();
   }

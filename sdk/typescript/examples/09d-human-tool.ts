@@ -111,11 +111,11 @@ if (process.argv[1]?.endsWith('09d-human-tool.ts') || process.argv[1]?.endsWith(
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(agent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents it_support
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(agent);
-    //
+
     // Interactive human-tool alternative:
     // const handle: AgentHandle = await runtime.start(
     //   agent,

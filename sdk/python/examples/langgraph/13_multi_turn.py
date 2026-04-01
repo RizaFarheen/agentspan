@@ -35,16 +35,7 @@ graph = create_agent(
 )
 
 if __name__ == "__main__":
-    SESSION_A = "candidate-alice"
-    SESSION_B = "candidate-bob"
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.13_multi_turn
-        # runtime.deploy(graph)
-        # runtime.serve(graph)
-
-        # Direct run for local development:
         print("=== Alice's session ===")
         r = runtime.run(
         graph,
@@ -77,3 +68,12 @@ if __name__ == "__main__":
         session_id=SESSION_B,
         )
         r.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.13_multi_turn
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

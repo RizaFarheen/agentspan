@@ -45,32 +45,17 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.09_human_in_the_loop
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
         result = runtime.run(agent, "What's the balance on ACC-789? ")
-
         result.print_result()
 
-
         # Production pattern:
-
         # 1. Deploy once during CI/CD:
-
         # runtime.deploy(agent)
-
         # CLI alternative:
-
         # agentspan deploy --package examples.09_human_in_the_loop
-
         #
-
         # 2. In a separate long-lived worker process:
-
         # runtime.serve(agent)
-
 
         # Interactive HITL alternative:
         # # stream() starts the workflow and returns an AgentStream with

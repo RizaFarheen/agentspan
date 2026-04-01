@@ -88,21 +88,17 @@ const PROMPT =
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(graph);
-    // await runtime.serve(graph);
     const result = await runtime.run(graph, PROMPT);
     result.printResult();
 
     // Production pattern:
     // 1. Deploy once during CI/CD:
-    // await runtime.deploy(agent);
+    // await runtime.deploy(graph);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents streaming_tokens
     //
     // 2. In a separate long-lived worker process:
-    // await runtime.serve(agent);
+    // await runtime.serve(graph);
 
     // Native LangGraph token-streaming alternative:
     // await streamToConsole(PROMPT);

@@ -93,18 +93,20 @@ export const support = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(support);
-    // await runtime.serve(support);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     support,
     "What's the balance on account ACC-123?",
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(support);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents support
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(support);
   } finally {
     await runtime.shutdown();
   }

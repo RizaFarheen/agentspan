@@ -270,11 +270,6 @@ export const softwareAssistant = new LlmAgent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(softwareAssistant);
-    // await runtime.serve(softwareAssistant);
-    // Direct run for local development:
     const result = await runtime.run(
     softwareAssistant,
     'Review our internal tickets and research any related Conductor issues. ' +
@@ -283,6 +278,15 @@ async function main() {
     );
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(softwareAssistant);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/adk --agents software_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(softwareAssistant);
   } finally {
     await runtime.shutdown();
   }

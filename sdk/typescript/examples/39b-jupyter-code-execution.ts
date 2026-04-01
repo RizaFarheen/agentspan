@@ -39,13 +39,6 @@ export const jupyterCoder = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(jupyterCoder);
-    // await runtime.serve(jupyterCoder);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     console.log('--- Jupyter Kernel Code Execution ---');
     const result = await runtime.run(
     jupyterCoder,
@@ -54,6 +47,15 @@ async function main() {
     "the sum of 'fibs' (it should still exist from the first call).",
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(jupyterCoder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents jupyter_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(jupyterCoder);
   } finally {
     await runtime.shutdown();
   }

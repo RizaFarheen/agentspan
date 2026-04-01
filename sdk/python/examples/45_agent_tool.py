@@ -94,16 +94,19 @@ manager = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.45_agent_tool
-        # runtime.deploy(manager)
-        # runtime.serve(manager)
-
-        # Direct run for local development:
         result = runtime.run(
             manager,
             "Research Python and Rust, then calculate how many use cases they "
             "have combined.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(manager)
+        # CLI alternative:
+        # agentspan deploy --package examples.45_agent_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(manager)
 

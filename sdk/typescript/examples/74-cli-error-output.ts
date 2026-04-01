@@ -43,6 +43,15 @@ async function main() {
       process.exit(1);
     }
     console.log('\nPASS: agent correctly reported CLI error output');
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents cli_error_tester
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

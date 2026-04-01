@@ -67,15 +67,8 @@ export const mediaAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(mediaAgent);
-    // await runtime.serve(mediaAgent);
-    // Direct run for local development:
     console.log('Media Generation Agent');
     console.log('='.repeat(60));
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     mediaAgent,
     'Create an image of a serene Japanese garden with a koi pond ' +
@@ -83,6 +76,15 @@ async function main() {
     'Use that image to generate a video with audio narration describing the image.',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(mediaAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents media_generator
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(mediaAgent);
   } finally {
     await runtime.shutdown();
   }

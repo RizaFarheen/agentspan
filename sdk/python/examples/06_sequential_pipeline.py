@@ -53,17 +53,19 @@ pipeline = researcher >> writer >> editor
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.06_sequential_pipeline
-        # runtime.deploy(pipeline)
-        # runtime.serve(pipeline)
-
-        # Direct run for local development:
         result = runtime.run(pipeline, "The impact of AI agents on software development in 2025")
         result.print_result()
 
-        # ── Option 2: Using strategy parameter (equivalent) ────────────────
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.06_sequential_pipeline
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(pipeline)
 
+        # Option 2: Using strategy parameter (equivalent)
         # pipeline = Agent(
         #     name="content_pipeline",
         #     model=settings.llm_model,

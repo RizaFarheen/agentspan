@@ -104,14 +104,17 @@ triage_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.openai.04_handoffs
-        # runtime.deploy(triage_agent)
-        # runtime.serve(triage_agent)
-
-        # Direct run for local development:
         result = runtime.run(
         triage_agent,
         "I'd like a refund for order ORD-002, the product arrived damaged.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(triage_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.openai.04_handoffs
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(triage_agent)

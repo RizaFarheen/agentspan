@@ -21,12 +21,6 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.claude_agent_sdk.02_claude_code_config
-        # runtime.deploy(reviewer)
-        # runtime.serve(reviewer)
-
-        # Direct run for local development:
         result = runtime.run(
             reviewer,
             prompt="Use Glob to find .py files in examples/claude_agent_sdk/ and Read one of them. Give a brief code review.",
@@ -37,6 +31,15 @@ def main():
         print(f"Status: {result.status}")
         if result.token_usage:
             print(f"Token usage: {result.token_usage}")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(reviewer)
+        # CLI alternative:
+        # agentspan deploy --package examples.claude_agent_sdk.02_claude_code_config
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(reviewer)
 
 
 

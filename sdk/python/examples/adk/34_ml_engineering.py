@@ -201,12 +201,6 @@ ml_pipeline = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.34_ml_engineering
-        # runtime.deploy(ml_pipeline)
-        # runtime.serve(ml_pipeline)
-
-        # Direct run for local development:
         result = runtime.run(
         ml_pipeline,
         "Build a model to predict California housing prices. The dataset has 20,640 samples "
@@ -215,3 +209,12 @@ if __name__ == "__main__":
         "Metric: RMSE. Some features have skewed distributions.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(ml_pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.34_ml_engineering
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(ml_pipeline)

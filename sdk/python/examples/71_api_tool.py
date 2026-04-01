@@ -133,12 +133,6 @@ github_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.71_api_tool
-        # runtime.deploy(pet_agent)
-        # runtime.serve(pet_agent)
-
-        # Direct run for local development:
         # Example 1: Petstore
         print("=== Petstore API ===")
         result = runtime.run(pet_agent, "List all available pets with status 'available'")
@@ -148,4 +142,13 @@ if __name__ == "__main__":
         print("\n=== Mixed Tools ===")
         result = runtime.run(multi_tool_agent, "What's sqrt(144)? Also find pets named 'doggie'.")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(pet_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.71_api_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(pet_agent)
 

@@ -83,16 +83,7 @@ config_coder = Agent(
 
 
 if __name__ == "__main__":
-    # ── Run ─────────────────────────────────────────────────────────────
-
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.39_local_code_execution
-        # runtime.deploy(simple_coder)
-        # runtime.serve(simple_coder)
-
-        # Direct run for local development:
         print("--- Simple Code Execution ---")
         result = runtime.run(
             simple_coder,
@@ -106,4 +97,13 @@ if __name__ == "__main__":
             "List the files in the current directory using bash.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(simple_coder)
+        # CLI alternative:
+        # agentspan deploy --package examples.39_local_code_execution
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(simple_coder)
 

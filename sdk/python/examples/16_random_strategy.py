@@ -55,15 +55,18 @@ brainstorm = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.16_random_strategy
-        # runtime.deploy(brainstorm)
-        # runtime.serve(brainstorm)
-
-        # Direct run for local development:
         result = runtime.run(
             brainstorm,
             "How should we approach building an AI-powered customer service platform?",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(brainstorm)
+        # CLI alternative:
+        # agentspan deploy --package examples.16_random_strategy
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(brainstorm)
 

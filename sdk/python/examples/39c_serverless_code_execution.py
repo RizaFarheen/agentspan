@@ -87,16 +87,7 @@ serverless_coder = Agent(
 
 
 if __name__ == "__main__":
-    # ── Run ───────────────────────────────────────────────────────────────
-
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.39c_serverless_code_execution
-        # runtime.deploy(serverless_coder)
-        # runtime.serve(serverless_coder)
-
-        # Direct run for local development:
         print("--- Serverless Code Execution ---")
         result = runtime.run(
             serverless_coder,
@@ -104,6 +95,14 @@ if __name__ == "__main__":
         )
         result.print_result()
 
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(serverless_coder)
+        # CLI alternative:
+        # agentspan deploy --package examples.39c_serverless_code_execution
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(serverless_coder)
 
         mock_server.shutdown()
 

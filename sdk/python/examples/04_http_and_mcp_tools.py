@@ -92,12 +92,15 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.04_http_and_mcp_tools
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
-        # Direct run for local development:
         result = runtime.run(agent, "Get the weather in London and format it as a report.")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.04_http_and_mcp_tools
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

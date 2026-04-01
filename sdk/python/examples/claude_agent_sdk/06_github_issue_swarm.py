@@ -563,12 +563,6 @@ The PR has been created and the issue has been updated with the PR link.
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.claude_agent_sdk.06_github_issue_swarm
-        # runtime.deploy(github_coding_swarm)
-        # runtime.serve(github_coding_swarm)
-
-        # Direct run for local development:
         result = runtime.run(
             github_coding_swarm,
             prompt="https://github.com/owner/repo/issues/42",
@@ -578,3 +572,12 @@ if __name__ == "__main__":
         print(f"Status: {result.status}")
         result.print_result()
         print(f"{'=' * 60}")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(github_coding_swarm)
+        # CLI alternative:
+        # agentspan deploy --package examples.claude_agent_sdk.06_github_issue_swarm
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(github_coding_swarm)

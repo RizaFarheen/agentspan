@@ -54,34 +54,15 @@ def stream_to_console(prompt: str):
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.28_streaming_tokens
-        # runtime.deploy(graph)
-        # runtime.serve(graph)
-
         result = runtime.run(graph, "Explain the concept of gradient descent in machine learning in about 150 words.")
 
         result.print_result()
 
-
         # Production pattern:
-
         # 1. Deploy once during CI/CD:
-
-        # runtime.deploy(agent)
-
+        # runtime.deploy(graph)
         # CLI alternative:
-
         # agentspan deploy --package examples.langgraph.28_streaming_tokens
-
         #
-
         # 2. In a separate long-lived worker process:
-
-        # runtime.serve(agent)
-
-
-        # Native LangGraph token-streaming alternative:
-        # stream_to_console(
-        #     "Explain the concept of gradient descent in machine learning in about 150 words."
-        # )
+        # runtime.serve(graph)

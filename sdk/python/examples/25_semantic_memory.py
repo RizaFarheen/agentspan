@@ -54,12 +54,6 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.25_semantic_memory
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
-        # Direct run for local development:
         print("--- Query 1: Billing question ---")
         result = runtime.run(
             agent,
@@ -74,9 +68,6 @@ if __name__ == "__main__":
         )
         result2.print_result()
 
-        # ── Direct memory operations ─────────────────────────────────────────
-
-
         print("\n--- Memory contents ---")
         for entry in memory.list_all():
             print(f"  [{entry.id[:8]}] {entry.content}")
@@ -84,4 +75,13 @@ if __name__ == "__main__":
         print(f"\n--- Search for 'billing' ---")
         for result in memory.search("billing invoice"):
             print(f"  → {result}")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.25_semantic_memory
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

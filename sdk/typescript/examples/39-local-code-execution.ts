@@ -72,13 +72,6 @@ export const configCoder = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(simpleCoder);
-    // await runtime.serve(simpleCoder);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     console.log('--- Simple Code Execution ---');
     const result1 = await runtime.run(
     simpleCoder,
@@ -92,6 +85,15 @@ async function main() {
     'List the files in the current directory using bash.',
     );
     result2.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(simpleCoder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents simple_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(simpleCoder);
   } finally {
     await runtime.shutdown();
   }

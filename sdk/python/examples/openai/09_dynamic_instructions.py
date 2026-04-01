@@ -73,11 +73,14 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.openai.09_dynamic_instructions
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
-        # Direct run for local development:
         result = runtime.run(agent, "Show me my todo list and add 'Prepare demo for Friday' as high priority.")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.openai.09_dynamic_instructions
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)

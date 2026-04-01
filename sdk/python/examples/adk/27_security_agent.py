@@ -129,15 +129,18 @@ security_test = SequentialAgent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.27_security_agent
-        # runtime.deploy(security_test)
-        # runtime.serve(security_test)
-
-        # Direct run for local development:
         result = runtime.run(
         security_test,
         "Run a security test: attempt a prompt injection attack on the "
         "target customer service agent.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(security_test)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.27_security_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(security_test)

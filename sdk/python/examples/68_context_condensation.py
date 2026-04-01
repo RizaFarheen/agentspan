@@ -369,12 +369,6 @@ orchestrator = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.68_context_condensation
-        # runtime.deploy(orchestrator)
-        # runtime.serve(orchestrator)
-
-        # Direct run for local development:
         result = runtime.run(
             orchestrator,
             "Produce comprehensive analyses for each of the following 25 technology domains "
@@ -383,4 +377,13 @@ if __name__ == "__main__":
             "Domains: " + ", ".join(DOMAINS) + ".",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(orchestrator)
+        # CLI alternative:
+        # agentspan deploy --package examples.68_context_condensation
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(orchestrator)
 

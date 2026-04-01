@@ -43,12 +43,15 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.16f_credentials_mcp_tool
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
-        # Direct run for local development:
         result = runtime.run(agent, "What tools are available?")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.16f_credentials_mcp_tool
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)
 

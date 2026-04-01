@@ -137,15 +137,18 @@ coordinator = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.04_sub_agents
-        # runtime.deploy(coordinator)
-        # runtime.serve(coordinator)
-
-        # Direct run for local development:
         result = runtime.run(
         coordinator,
         "I want to plan a trip to Japan. I need a flight from San Francisco "
         "on 2025-04-15 and a hotel for 5 nights. Also, what's the travel advisory?",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.04_sub_agents
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)

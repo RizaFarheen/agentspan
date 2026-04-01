@@ -37,19 +37,21 @@ export const dockerCoder = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(dockerCoder);
-    // await runtime.serve(dockerCoder);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     console.log('--- Docker Sandboxed Code Execution ---');
     const result = await runtime.run(
     dockerCoder,
     "Print Python's version and the container's hostname.",
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(dockerCoder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents docker_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(dockerCoder);
   } finally {
     await runtime.shutdown();
   }

@@ -50,11 +50,6 @@ export const preciseAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(creativeAgent);
-    // await runtime.serve(creativeAgent);
-    // Direct run for local development:
     console.log('--- Creative Agent (temp=0.9) ---');
     const creativeResult = await runtime.run(
     creativeAgent,
@@ -70,6 +65,15 @@ async function main() {
     );
     console.log('Status:', preciseResult.status);
     preciseResult.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(creativeAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents creative_writer
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(creativeAgent);
   } finally {
     await runtime.shutdown();
   }

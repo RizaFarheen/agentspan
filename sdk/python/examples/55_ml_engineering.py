@@ -92,18 +92,14 @@ ml_pipeline = data_analyst >> model_exploration >> evaluator >> refinement >> re
 
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        # Deploy: push definition to server (idempotent — safe to call every startup).
-        # Can also be done via CLI: agentspan deploy examples.production.ml_pipeline
-        # rt.deploy(ml_pipeline)
-
-        # Option A: Serve workers (production — blocks forever, run from outside)
-        # rt.serve(ml_pipeline)
-
-        # Direct run for local development:
-        # rt.run() handles deploy + workers internally, no serve needed.
         result = rt.run(ml_pipeline, "Build a model for California housing prices...", timeout=120000)
         result.print_result()
 
-        # Or run a deployed agent definition separately after deploy/serve:
-        # result = rt.run("ml_pipeline", "Build a model for California housing prices...")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # rt.deploy(ml_pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.55_ml_engineering
+        #
+        # 2. In a separate long-lived worker process:
+        # rt.serve(ml_pipeline)

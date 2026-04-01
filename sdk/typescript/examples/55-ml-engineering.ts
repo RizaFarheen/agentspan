@@ -176,13 +176,6 @@ const mlPipeline = dataAnalyst
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(mlPipeline);
-    // await runtime.serve(mlPipeline);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     mlPipeline,
     'Build a model to predict California housing prices. The dataset has 20,640 samples ' +
@@ -191,6 +184,15 @@ async function main() {
     'Metric: RMSE. Some features have skewed distributions.',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(mlPipeline);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents data_analyst_55
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(mlPipeline);
   } finally {
     await runtime.shutdown();
   }

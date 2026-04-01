@@ -114,14 +114,18 @@ const prompt = 'I need a Python code example for authenticating with the API.';
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(triage);
-    // await runtime.serve(triage);
-    // Direct run for local development:
     const result = await runtime.run(triage, prompt);
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(triage);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/openai --agents triage
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(triage);
   } finally {
     await runtime.shutdown();
   }

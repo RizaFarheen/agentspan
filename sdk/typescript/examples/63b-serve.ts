@@ -78,7 +78,7 @@ if (process.argv[1]?.endsWith('63b-serve.ts') || process.argv[1]?.endsWith('63b-
     // await runtime.deploy(docAssistant);
     // await runtime.deploy(opsBot);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(docAssistant, opsBot);

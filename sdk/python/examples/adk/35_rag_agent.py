@@ -189,12 +189,6 @@ rag_agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.35_rag_agent
-        # runtime.deploy(rag_agent)
-        # runtime.serve(rag_agent)
-
-        # Direct run for local development:
         # ── Phase 1: Index all documents into the vector database ────────
         print("=" * 60)
         print("PHASE 1: Indexing documents into vector database")
@@ -209,6 +203,16 @@ if __name__ == "__main__":
 
         result = runtime.run(rag_agent, index_prompt)
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(rag_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.35_rag_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(rag_agent)
+
 
         # ── Phase 2: Search the indexed documents ────────────────────────
         print("\n" + "=" * 60)

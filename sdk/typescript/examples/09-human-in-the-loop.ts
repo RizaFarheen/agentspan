@@ -73,11 +73,11 @@ if (process.argv[1]?.endsWith('09-human-in-the-loop.ts') || process.argv[1]?.end
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(agent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents banker
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(agent);
-    //
+
     // Interactive HITL alternative:
     // const result = runtime.stream(
     //   agent,

@@ -64,21 +64,23 @@ const prompt = 'Show me the disk usage summary and list files in the current dir
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(opsAgent);
-    // await runtime.serve(opsAgent);
-    // Direct run for local development:
     console.log('='.repeat(60));
     console.log('  CLI Tool with Guardrails');
     console.log('  Allowed: ls, cat, df, du, git, ps, uname, wc');
     console.log('  Blocked: rm -rf, sudo, mkfs, dd');
     console.log('='.repeat(60));
     console.log(`\nPrompt: ${prompt}\n`);
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(opsAgent, prompt);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(opsAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents ops_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(opsAgent);
   } finally {
     await runtime.shutdown();
   }

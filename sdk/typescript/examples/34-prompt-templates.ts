@@ -87,13 +87,6 @@ export const stableAgent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(supportAgent);
-    // await runtime.serve(supportAgent);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     // --- 1. Template-based instructions ---
     console.log('=== Support Agent (template instructions) ===');
     const result1 = await runtime.run(supportAgent, 'What are your return policies?');
@@ -114,6 +107,15 @@ async function main() {
     'Please analyze Q4 2025 earnings trends and provide key insights with recommendations.',
     );
     result3.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(supportAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents support_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(supportAgent);
   } finally {
     await runtime.shutdown();
   }

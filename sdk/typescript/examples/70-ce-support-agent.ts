@@ -304,16 +304,18 @@ const prompt = `Investigate Zendesk ticket #${ticketId} and provide a full analy
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(ceSupportAgent);
-    // await runtime.serve(ceSupportAgent);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     console.log(`\n--- Investigating ticket #${ticketId} ---\n`);
     const result = await runtime.run(ceSupportAgent, prompt);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(ceSupportAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents ce_support_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(ceSupportAgent);
   } finally {
     await runtime.shutdown();
   }

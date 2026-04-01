@@ -22,10 +22,6 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(agent);
-    // await runtime.serve(agent);
     const result = await runtime.run(agent, 'Explain how quantum computers work.');
     result.printResult();
 
@@ -33,7 +29,7 @@ async function main() {
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(agent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents streaming_agent
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(agent);
@@ -92,8 +88,6 @@ async function main() {
 
     // const result = await agentStream.getResult();
     // result.printResult();
-
-    // await runtime.shutdown();
   } finally {
     await runtime.shutdown();
   }

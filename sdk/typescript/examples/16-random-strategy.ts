@@ -51,18 +51,20 @@ export const brainstorm = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(brainstorm);
-    // await runtime.serve(brainstorm);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     brainstorm,
     'How should we approach building an AI-powered customer service platform?',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(brainstorm);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents brainstorm
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(brainstorm);
   } finally {
     await runtime.shutdown();
   }

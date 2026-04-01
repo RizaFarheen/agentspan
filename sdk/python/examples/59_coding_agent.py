@@ -85,12 +85,6 @@ if __name__ == "__main__":
 
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.59_coding_agent
-        # runtime.deploy(coder)
-        # runtime.serve(coder)
-
-        # Direct run for local development:
         result = runtime.run(coder, prompt)
 
         # Swarm output is a dict keyed by agent name
@@ -103,4 +97,13 @@ if __name__ == "__main__":
                 print(text)
         else:
             print(output)
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coder)
+        # CLI alternative:
+        # agentspan deploy --package examples.59_coding_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coder)
 

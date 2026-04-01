@@ -89,7 +89,7 @@ If good: say QA_APPROVED with REPO/BRANCH/SUMMARY.
 """,
     local_code_execution=True,
     max_tokens=60000,
-    max_turns=5,
+    max_turns=15,
 )
 
 coding_qa = Agent(
@@ -116,7 +116,7 @@ git_push_pr = Agent(
     name="git_push_pr",
     model=MODEL,
     max_tokens=8192,
-    max_turns=5,
+    max_turns=15,
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
 Create a pull request. Run this ONE command (extract REPO, BRANCH, ISSUE from context):
@@ -134,18 +134,14 @@ pipeline = git_fetch_issues >> coding_qa >> git_push_pr
 
 if __name__ == "__main__":
     with AgentRuntime() as rt:
-        # Deploy: push definition to server (idempotent — safe to call every startup).
-        # Can also be done via CLI: agentspan deploy examples.production.github_coding_agent
-        # rt.deploy(pipeline)
-
-        # Option A: Serve workers (production — blocks forever, run from outside)
-        # rt.serve(pipeline)
-
-        # Direct run for local development:
-        # rt.run() handles deploy + workers internally, no serve needed.
         result = rt.run(pipeline, "Pick an open issue and create a PR.", timeout=240000)
         result.print_result()
 
-        # Or trigger a deployed agent by name from any process:
-        # result = rt.run("github_pipeline", "Pick an open issue and create a PR.")
-        # result.print_result()
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # rt.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.61_github_coding_agent_chained
+        #
+        # 2. In a separate long-lived worker process:
+        # rt.serve(pipeline)

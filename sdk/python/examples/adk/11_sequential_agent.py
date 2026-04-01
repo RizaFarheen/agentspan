@@ -55,15 +55,18 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.11_sequential_agent
-        # runtime.deploy(pipeline)
-        # runtime.serve(pipeline)
-
-        # Direct run for local development:
         result = runtime.run(pipeline, "The history of the Internet")
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(pipeline)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.11_sequential_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(pipeline)
 
 
 

@@ -41,32 +41,17 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.09b_hitl_with_feedback
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
         result = runtime.run(agent, "Write a short blog post outline about the benefits of code review. Do not publish it.")
-
         result.print_result()
 
-
         # Production pattern:
-
         # 1. Deploy once during CI/CD:
-
         # runtime.deploy(agent)
-
         # CLI alternative:
-
         # agentspan deploy --package examples.09b_hitl_with_feedback
-
         #
-
         # 2. In a separate long-lived worker process:
-
         # runtime.serve(agent)
-
 
         # Interactive HITL alternative:
         # result = runtime.stream(

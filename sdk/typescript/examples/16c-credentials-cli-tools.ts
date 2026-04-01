@@ -183,15 +183,17 @@ const task = process.argv.slice(2).join(' ') || 'Who am I in AWS, and list my S3
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(githubAwsAgent);
-    // await runtime.serve(githubAwsAgent);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(githubAwsAgent, task);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(githubAwsAgent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents devops_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(githubAwsAgent);
   } finally {
     await runtime.shutdown();
   }

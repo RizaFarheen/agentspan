@@ -250,13 +250,6 @@ export const softwareAssistant = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(softwareAssistant);
-    // await runtime.serve(softwareAssistant);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     const result = await runtime.run(
     softwareAssistant,
     'Review the latest open issues and PRs on conductor-oss/conductor. ' +
@@ -265,6 +258,15 @@ async function main() {
     'persistence PRs. Give me a triage summary.',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(softwareAssistant);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents software_assistant_54
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(softwareAssistant);
   } finally {
     await runtime.shutdown();
   }

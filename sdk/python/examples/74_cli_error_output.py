@@ -43,3 +43,12 @@ if __name__ == "__main__":
             f"Agent did not surface CLI error output. Got: {output!r}"
         )
         print("\nPASS: agent correctly reported CLI error output")
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # rt.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.74_cli_error_output
+        #
+        # 2. In a separate long-lived worker process:
+        # rt.serve(agent)

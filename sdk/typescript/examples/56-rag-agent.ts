@@ -197,7 +197,7 @@ async function main() {
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(ragAgent);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents rag_assistant
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(ragAgent);

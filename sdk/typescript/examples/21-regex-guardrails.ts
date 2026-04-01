@@ -82,13 +82,6 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(agent);
-    // await runtime.serve(agent);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     // -- Scenario 1: Guardrail TRIGGERS -- PII in tool output -----------------
     console.log('='.repeat(60));
     console.log('  Scenario 1: Request PII -- guardrails trigger');
@@ -137,6 +130,15 @@ async function main() {
     } else {
     console.log(`[WARN] Unexpected status: ${result2.status}`);
     }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents hr_assistant
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

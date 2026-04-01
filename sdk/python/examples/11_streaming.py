@@ -25,34 +25,18 @@ if __name__ == "__main__":
     print("Streaming agent execution:")
     print("-" * 40)
 
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.11_streaming
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
         result = runtime.run(agent, "Write a haiku about Python programming")
-
         result.print_result()
 
-
         # Production pattern:
-
         # 1. Deploy once during CI/CD:
-
         # runtime.deploy(agent)
-
         # CLI alternative:
-
         # agentspan deploy --package examples.11_streaming
-
         #
-
         # 2. In a separate long-lived worker process:
-
         # runtime.serve(agent)
-
 
         # Streaming alternative:
         # for event in runtime.stream(agent, "Write a haiku about Python programming"):

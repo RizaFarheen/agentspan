@@ -122,16 +122,7 @@ def setup_templates(runtime: AgentRuntime):
 
 
 if __name__ == "__main__":
-    # ── Run ──────────────────────────────────────────────────────────────
-
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.34_prompt_templates
-        # runtime.deploy(support_agent)
-        # runtime.serve(support_agent)
-
-        # Direct run for local development:
         # Set up templates (idempotent — safe to run multiple times)
         setup_templates(runtime)
 
@@ -152,4 +143,13 @@ if __name__ == "__main__":
             PromptTemplate("analysis-request", variables={"topic": "Q4 2025 earnings trends"}),
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(support_agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.34_prompt_templates
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(support_agent)
 

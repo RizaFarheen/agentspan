@@ -54,32 +54,17 @@ team = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.18_manual_selection
-        # runtime.deploy(team)
-        # runtime.serve(team)
-
         result = runtime.run(writer, "Write a short paragraph about the history of artificial intelligence.")
-
         result.print_result()
 
-
         # Production pattern:
-
         # 1. Deploy once during CI/CD:
-
-        # runtime.deploy(agent)
-
+        # runtime.deploy(team)
         # CLI alternative:
-
         # agentspan deploy --package examples.18_manual_selection
-
         #
-
         # 2. In a separate long-lived worker process:
-
-        # runtime.serve(agent)
-
+        # runtime.serve(team)
 
         # Interactive manual-selection alternative:
         # # Start async so we can interact with the human tasks

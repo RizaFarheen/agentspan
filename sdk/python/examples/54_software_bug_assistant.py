@@ -256,12 +256,6 @@ software_assistant = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.54_software_bug_assistant
-        # runtime.deploy(software_assistant)
-        # runtime.serve(software_assistant)
-
-        # Direct run for local development:
         result = runtime.run(
             software_assistant,
             "Review the latest open issues and PRs on conductor-oss/conductor. "
@@ -270,4 +264,13 @@ if __name__ == "__main__":
             "persistence PRs. Give me a triage summary.",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(software_assistant)
+        # CLI alternative:
+        # agentspan deploy --package examples.54_software_bug_assistant
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(software_assistant)
 

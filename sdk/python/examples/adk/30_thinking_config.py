@@ -54,15 +54,18 @@ agent = Agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.30_thinking_config
-        # runtime.deploy(agent)
-        # runtime.serve(agent)
-
-        # Direct run for local development:
         result = runtime.run(
         agent,
         "If a train travels 120 km in 2 hours, then speeds up by 50% for "
         "the next 3 hours, what is the total distance traveled?",
         )
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(agent)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.30_thinking_config
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(agent)

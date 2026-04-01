@@ -25,7 +25,7 @@ if (process.argv[1]?.endsWith('63c-run-by-name.ts') || process.argv[1]?.endsWith
     // 1. Deploy once during CI/CD:
     // await runtime.deploy(docAssistant);
     // CLI alternative:
-    // agentspan deploy --package sdk/typescript/examples
+    // agentspan deploy --package sdk/typescript/examples --agents doc_assistant
     //
     // 2. In a separate long-lived worker process:
     // await runtime.serve(docAssistant);

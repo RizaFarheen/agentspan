@@ -53,11 +53,6 @@ export const agent = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(agent);
-    // await runtime.serve(agent);
-    // Direct run for local development:
     console.log(`OpenTelemetry available: ${isTracingEnabled()}`);
 
     if (isTracingEnabled()) {
@@ -66,8 +61,6 @@ async function main() {
     console.log('OTel not configured -- set OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_SERVICE_NAME to enable');
     }
 
-    // const runtime = new AgentRuntime();
-    // try {
     // The runtime automatically creates spans if OTel is configured.
     const result = await runtime.run(agent, 'Who created Python?');
     result.printResult();
@@ -75,6 +68,15 @@ async function main() {
     if (result.tokenUsage) {
     console.log(`Tokens: ${result.tokenUsage.totalTokens}`);
     }
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(agent);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents traced_agent
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(agent);
   } finally {
     await runtime.shutdown();
   }

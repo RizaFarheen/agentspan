@@ -81,15 +81,18 @@ graph = create_agent(
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.09_math_agent
-        # runtime.deploy(graph)
-        # runtime.serve(graph)
-
-        # Direct run for local development:
         result = runtime.run(
         graph,
         "Calculate: (2^10 + sqrt(144)) / 4, then compute 5! and tell me the final answers.",
         )
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.09_math_agent
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

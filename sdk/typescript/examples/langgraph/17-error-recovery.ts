@@ -117,11 +117,6 @@ const graph = builder.compile();
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(graph);
-    // await runtime.serve(graph);
-    // Direct run for local development:
     console.log('=== Happy path ===');
     let result = await runtime.run(graph, 'sales data for Q4');
     console.log('Status:', result.status);
@@ -131,6 +126,15 @@ async function main() {
     result = await runtime.run(graph, 'intentionally fail this query');
     console.log('Status:', result.status);
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(graph);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples/langgraph --agents error_recovery
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(graph);
   } finally {
     await runtime.shutdown();
   }

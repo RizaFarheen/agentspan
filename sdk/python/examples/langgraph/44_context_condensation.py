@@ -342,17 +342,7 @@ graph = create_agent(
 )
 
 if __name__ == "__main__":
-    print("Starting context condensation stress test (LangGraph / create_agent).")
-    print("Watch the Agentspan server logs for 'Condensed conversation' entries.")
-    print()
-
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.langgraph.44_context_condensation
-        # runtime.deploy(graph)
-        # runtime.serve(graph)
-
-        # Direct run for local development:
         result = runtime.run(
         graph,
         "Produce comprehensive analyses for each of the following 25 technology domains "
@@ -363,3 +353,12 @@ if __name__ == "__main__":
 
     print(f"\nStatus: {result.status}")
     result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(graph)
+        # CLI alternative:
+        # agentspan deploy --package examples.langgraph.44_context_condensation
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(graph)

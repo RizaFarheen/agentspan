@@ -129,12 +129,6 @@ def main():
     )
 
     with AgentRuntime() as runtime:
-        # Deploy to server. CLI alternative (recommended for CI/CD):
-        #   agentspan deploy examples.adk.17_financial_advisor
-        # runtime.deploy(coordinator)
-        # runtime.serve(coordinator)
-
-        # Direct run for local development:
         result = runtime.run(
         coordinator,
         "I'm client CLT-001. Review my portfolio and tell me if I should rebalance "
@@ -142,6 +136,15 @@ def main():
         )
         print(f"Status: {result.status}")
         result.print_result()
+
+        # Production pattern:
+        # 1. Deploy once during CI/CD:
+        # runtime.deploy(coordinator)
+        # CLI alternative:
+        # agentspan deploy --package examples.adk.17_financial_advisor
+        #
+        # 2. In a separate long-lived worker process:
+        # runtime.serve(coordinator)
 
 
 

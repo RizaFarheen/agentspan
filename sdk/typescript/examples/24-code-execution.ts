@@ -60,19 +60,21 @@ export const sandboxedCoder = new Agent({
 async function main() {
   const runtime = new AgentRuntime();
   try {
-    // Deploy to server. CLI alternative (recommended for CI/CD):
-    //   agentspan deploy <module>
-    // await runtime.deploy(coder);
-    // await runtime.serve(coder);
-    // Direct run for local development:
-    // const runtime = new AgentRuntime();
-    // try {
     console.log('--- Local Code Execution ---');
     const result = await runtime.run(
     coder,
     'Write a Python function to find the first 10 Fibonacci numbers and print them.',
     );
     result.printResult();
+
+    // Production pattern:
+    // 1. Deploy once during CI/CD:
+    // await runtime.deploy(coder);
+    // CLI alternative:
+    // agentspan deploy --package sdk/typescript/examples --agents local_coder
+    //
+    // 2. In a separate long-lived worker process:
+    // await runtime.serve(coder);
   } finally {
     await runtime.shutdown();
   }
