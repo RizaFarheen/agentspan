@@ -1015,11 +1015,11 @@ class AgentRuntime:
 
         # 7b. Swarm transfer tools and check_transfer workers
         if agent.strategy == "swarm" and agent.agents:
-            # Register transfer workers if any of them are needed
-            if required_workers is None or any(
-                "_transfer_to_" in w for w in required_workers
-            ):
-                self._register_swarm_transfer_workers(agent)
+            # Always register transfer workers for swarm agents — the server's
+            # requiredWorkers may not include them when the swarm is a nested
+            # registered sub-workflow (collectSimpleTaskNames doesn't recurse
+            # into separately-stored sub-workflow definitions).
+            self._register_swarm_transfer_workers(agent)
             if _server_needs(f"{agent.name}_check_transfer"):
                 self._register_check_transfer_worker(agent.name)  # parent
             for sub in agent.agents:
