@@ -10,7 +10,7 @@ Demonstrates:
     - The LLM correctly selects the right tool for each query
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -129,11 +129,11 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.langgraph.29_tool_categories
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        # runtime.deploy(graph)
+        # runtime.serve(graph)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # for query in queries:
-        # print(f"\nQuery: {query}")
-        # result = runtime.run(graph, query)
-        # result.print_result()
+        # Direct run for local development:
+        for query in queries:
+            print(f"\nQuery: {query}")
+            result = runtime.run(graph, query)
+            result.print_result()

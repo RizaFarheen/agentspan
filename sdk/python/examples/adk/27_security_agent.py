@@ -16,7 +16,7 @@ multi-agent coordination for automated red-team testing.
 Requirements:
     - pip install google-adk
     - Conductor server
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -131,13 +131,13 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.adk.27_security_agent
-        runtime.deploy(security_test)
-        runtime.serve(security_test)
+        # runtime.deploy(security_test)
+        # runtime.serve(security_test)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # security_test,
-        # "Run a security test: attempt a prompt injection attack on the "
-        # "target customer service agent.",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+        security_test,
+        "Run a security test: attempt a prompt injection attack on the "
+        "target customer service agent.",
+        )
+        result.print_result()

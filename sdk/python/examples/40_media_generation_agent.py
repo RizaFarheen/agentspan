@@ -18,7 +18,7 @@ Architecture:
 
 Requirements:
     - Conductor server with OpenAI integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
 """
 
@@ -77,17 +77,14 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.40_media_generation_agent
-        runtime.deploy(media_agent)
-        runtime.serve(media_agent)
+        # runtime.deploy(media_agent)
+        # runtime.serve(media_agent)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        #     media_agent,
-        #     (
-        #         "Create an image of a serene Japanese garden with a koi pond "
-        #         "at sunset, cherry blossoms falling gently. Use vivid style."
-        #         "use that image to generate a video with audio narration describing the image"
-        #     ),
-        # )
-        # result.print_result()
-
+        # Direct run for local development:
+        result = runtime.run(
+            media_agent,
+            "Create an image of a serene Japanese garden with a koi pond "
+            "at sunset, cherry blossoms falling gently. Use vivid style. "
+            "Then use that image to generate a video with audio narration describing it.",
+        )
+        result.print_result()

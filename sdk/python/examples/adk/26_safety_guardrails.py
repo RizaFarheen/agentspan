@@ -14,7 +14,7 @@ BasePlugin for global safety. We use guardrails + sequential agents.
 Requirements:
     - pip install google-adk
     - Conductor server
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -115,13 +115,13 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.adk.26_safety_guardrails
-        runtime.deploy(safe_pipeline)
-        runtime.serve(safe_pipeline)
+        # runtime.deploy(safe_pipeline)
+        # runtime.serve(safe_pipeline)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # safe_pipeline,
-        # "What are the contact details for our support team? "
-        # "Include email support@company.com and phone 555-123-4567.",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+        safe_pipeline,
+        "What are the contact details for our support team? "
+        "Include email support@company.com and phone 555-123-4567.",
+        )
+        result.print_result()

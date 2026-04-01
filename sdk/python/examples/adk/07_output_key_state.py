@@ -11,7 +11,7 @@ Demonstrates:
 Requirements:
     - pip install google-adk
     - Conductor server with Google Gemini LLM integration configured
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api as environment variable
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api as environment variable
     - AGENTSPAN_LLM_MODEL=google_gemini/gemini-2.0-flash as environment variable
 """
 
@@ -107,12 +107,12 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.adk.07_output_key_state
-        runtime.deploy(coordinator)
-        runtime.serve(coordinator)
+        # runtime.deploy(coordinator)
+        # runtime.serve(coordinator)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # result = runtime.run(
-        # coordinator,
-        # "Create a report on the sales_q4 dataset with visualization recommendations.",
-        # )
-        # result.print_result()
+        # Direct run for local development:
+        result = runtime.run(
+        coordinator,
+        "Create a report on the sales_q4 dataset with visualization recommendations.",
+        )
+        result.print_result()

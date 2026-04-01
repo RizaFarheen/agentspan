@@ -10,7 +10,7 @@ Demonstrates:
     - Practical use case: orchestrator dispatching to a math agent and a writing agent
 
 Requirements:
-    - AGENTSPAN_SERVER_URL=http://localhost:8080/api
+    - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
@@ -126,12 +126,12 @@ if __name__ == "__main__":
     with AgentRuntime() as runtime:
         # Deploy to server. CLI alternative (recommended for CI/CD):
         #   agentspan deploy examples.langgraph.40_agent_as_tool
-        runtime.deploy(graph)
-        runtime.serve(graph)
+        # runtime.deploy(graph)
+        # runtime.serve(graph)
 
-        # Quick test: uncomment below (and comment out serve) to run directly.
-        # for query in queries:
-        # print(f"\nQuery: {query}")
-        # result = runtime.run(graph, query)
-        # result.print_result()
-        # print("-" * 60)
+        # Direct run for local development:
+        for query in queries:
+            print(f"\nQuery: {query}")
+            result = runtime.run(graph, query)
+            result.print_result()
+            print("-" * 60)
