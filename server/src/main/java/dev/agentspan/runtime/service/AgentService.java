@@ -5,13 +5,20 @@
 
 package dev.agentspan.runtime.service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.util.*;
 import java.util.Optional;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import org.springframework.core.env.Environment;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,8 +76,15 @@ public class AgentService {
     @Autowired(required = false)
     private ExecutionTokenService executionTokenService;
 
+    @Autowired
+    private Environment environment;
+
     // Per-workflow lock for serializing concurrent signal writes (Section 17.2 of design doc)
     private final ConcurrentHashMap<String, Object> signalLocks = new ConcurrentHashMap<>();
+
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
 
     /** Package-private constructor for testing with ExecutionTokenService */
     AgentService(
@@ -1264,7 +1278,7 @@ public class AgentService {
                 updates.put("_urgent_pause_requested", true);
             }
 
-            workflowExecutor.updateVariables(executionId, updates);
+            updateWorkflowVariables(executionId, updates);
         }
 
         // Emit SSE (outside lock — best-effort)
@@ -1316,6 +1330,31 @@ public class AgentService {
         // Simple implementation: caller must provide executionId via query param.
         // For now, throw UnsupportedOperationException — full implementation in Task 8.
         throw new UnsupportedOperationException("Signal status lookup not yet implemented");
+    }
+
+    /**
+     * Updates workflow variables via Conductor's REST API:
+     * POST /workflow/{workflowId}/variables
+     */
+    private void updateWorkflowVariables(String executionId, Map<String, Object> variables) {
+        try {
+            String port = environment.getProperty("server.port", "6767");
+            String contextPath = environment.getProperty("server.servlet.context-path", "");
+            String url = "http://localhost:" + port + contextPath + "/workflow/" + executionId + "/variables";
+            String body = MAPPER.writeValueAsString(variables);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(5))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 300) {
+                log.warn("updateWorkflowVariables failed for {}: HTTP {} — {}", executionId, response.statusCode(), response.body());
+            }
+        } catch (Exception e) {
+            log.warn("updateWorkflowVariables failed for {}: {}", executionId, e.getMessage());
+        }
     }
 
     public List<String> findRunningExecutionIds(String agentName, String correlationId) {

@@ -5,6 +5,12 @@
 
 package dev.agentspan.runtime.service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +25,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.netflix.conductor.core.execution.WorkflowExecutor;
 import com.netflix.conductor.core.listener.TaskStatusListener;
@@ -51,6 +60,11 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
     private static final Set<String> AI_TASK_TYPES =
             Set.of("LLM_CHAT_COMPLETE", "GENERATE_IMAGE", "GENERATE_AUDIO", "GENERATE_VIDEO");
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+
     private final AgentStreamRegistry streamRegistry;
     private final MeterRegistry meterRegistry;
 
@@ -62,6 +76,9 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
 
     @Autowired(required = false)
     private WorkflowExecutor workflowExecutor;
+
+    @Autowired(required = false)
+    private Environment environment;
 
     private final ScheduledExecutorService urgentResumeScheduler =
         Executors.newSingleThreadScheduledExecutor(r -> {
@@ -146,8 +163,7 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
                         ? wf.getVariables().get("_urgent_pause_requested") : null;
                     if (Boolean.TRUE.equals(flag)) {
                         // Clear flag first, then pause (prevents double-pause on concurrent completions)
-                        workflowExecutor.updateVariables(wfId,
-                            Map.of("_urgent_pause_requested", false));
+                        updateWorkflowVariables(wfId, Map.of("_urgent_pause_requested", false));
                         workflowExecutor.pauseWorkflow(wfId);
                         urgentResumeScheduler.schedule(() -> {
                             try {
@@ -656,5 +672,30 @@ public class AgentEventListener implements TaskStatusListener, WorkflowStatusLis
         }
 
         return name;
+    }
+
+    /**
+     * Updates workflow variables via Conductor's REST API:
+     * POST /workflow/{workflowId}/variables
+     */
+    private void updateWorkflowVariables(String workflowId, Map<String, Object> variables) {
+        try {
+            String port = environment != null ? environment.getProperty("server.port", "6767") : "6767";
+            String contextPath = environment != null ? environment.getProperty("server.servlet.context-path", "") : "";
+            String url = "http://localhost:" + port + contextPath + "/workflow/" + workflowId + "/variables";
+            String body = MAPPER.writeValueAsString(variables);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(5))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 300) {
+                logger.warn("updateWorkflowVariables failed for {}: HTTP {}", workflowId, response.statusCode());
+            }
+        } catch (Exception e) {
+            logger.warn("updateWorkflowVariables failed for {}: {}", workflowId, e.getMessage());
+        }
     }
 }
