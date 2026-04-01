@@ -17,7 +17,7 @@
  *   - GH_TOKEN stored via `agentspan credentials set`
  */
 
-import { Agent, AgentRuntime } from '../src/index.js';
+import { Agent, AgentRuntime } from '../src';
 import { llmModel } from './settings.js';
 
 export const agent = new Agent({
