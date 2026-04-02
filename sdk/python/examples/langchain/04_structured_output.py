@@ -6,7 +6,7 @@
 Demonstrates:
     - Using with_structured_output() on a ChatOpenAI model
     - Forcing the LLM to return validated, typed responses
-    - Wrapping structured LLM in an AgentExecutor via a passthrough tool
+    - Wrapping structured LLM in a create_agent via a passthrough tool
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
@@ -16,8 +16,7 @@ Requirements:
 import json
 from typing import List
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
@@ -52,26 +51,24 @@ def recommend_book(genre: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [recommend_book]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a book recommendation assistant. Use the recommend_book tool to find books."),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="structured_output_agent")
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="structured_output_agent",
+    system_prompt="You are a book recommendation assistant. Use the recommend_book tool to find books.",
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(executor, "Recommend a great science fiction book and a good mystery novel.")
+        result = runtime.run(graph, "Recommend a great science fiction book and a good mystery novel.")
         print(f"Status: {result.status}")
         result.print_result()
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.04_structured_output
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

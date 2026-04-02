@@ -13,8 +13,7 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -104,22 +103,20 @@ def get_similar_books(title: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [find_books_by_genre, score_book_for_preferences, get_similar_books]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="recommendation_agent",
+    system_prompt=(
         "You are a personalized book recommendation assistant. Use tools to find, score, "
         "and explain book recommendations based on the user's preferences."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="recommendation_agent")
+    ),
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "I love science fiction and I'm interested in themes of technology and survival. "
             "Recommend a book and find something similar to 'Dune'.",
         )
@@ -128,9 +125,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.23_recommendation_agent
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

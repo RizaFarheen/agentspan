@@ -17,8 +17,7 @@ import ast
 import math
 import operator as op
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -96,19 +95,17 @@ def statistics(numbers: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [evaluate, convert_length, statistics]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a precise math assistant. Always use tools to compute exact answers."),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="math_calculator_agent")
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="math_calculator_agent",
+    system_prompt="You are a precise math assistant. Always use tools to compute exact answers.",
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "What is (2 ** 8) + (15 * 7)? Convert 5 miles to kilometers. "
             "What is the mean and median of 12, 7, 3, 19, 5, 8?",
         )
@@ -117,9 +114,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.09_math_calculator
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

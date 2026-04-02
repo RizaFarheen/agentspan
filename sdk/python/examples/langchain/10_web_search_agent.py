@@ -13,8 +13,7 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -82,19 +81,17 @@ def summarize_results(text: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [web_search, get_page_content, summarize_results]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a research assistant. Use search and retrieval tools to answer questions thoroughly."),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="web_search_agent")
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="web_search_agent",
+    system_prompt="You are a research assistant. Use search and retrieval tools to answer questions thoroughly.",
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "Research the history of Python programming language and give me a brief summary.",
         )
         print(f"Status: {result.status}")
@@ -102,9 +99,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.10_web_search_agent
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

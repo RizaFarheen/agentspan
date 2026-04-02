@@ -16,8 +16,7 @@ Requirements:
 import json
 from datetime import datetime
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -120,23 +119,21 @@ def generate_report_section(section_type: str, content: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [get_company_info, get_market_trends, calculate_metric, generate_report_section]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="advanced_orchestration_agent",
+    system_prompt=(
         "You are a senior business intelligence analyst. When given a research request, "
         "systematically gather company data, market trends, and compute relevant metrics. "
         "Then synthesize everything into a structured report with findings and recommendations."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="advanced_orchestration_agent")
+    ),
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "Produce a brief competitive analysis of OpenAI and Anthropic. "
             "Include AI market trends and calculate the CAGR if the AI market grows from $200B in 2024 to $1.8T by 2030.",
         )
@@ -145,9 +142,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.25_advanced_orchestration
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

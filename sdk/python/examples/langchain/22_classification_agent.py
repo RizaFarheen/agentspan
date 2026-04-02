@@ -13,8 +13,7 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -101,22 +100,20 @@ def get_category_examples(category: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [classify_topic, classify_intent, get_category_examples]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="classification_agent",
+    system_prompt=(
         "You are a text classification assistant. Analyze text for topic and intent, "
         "provide confidence-scored categories, and explain your classifications."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="classification_agent")
+    ),
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "Classify this text: 'How can I fix the broken API integration? The software keeps returning a 500 error and my team cannot deploy the code.'",
         )
         print(f"Status: {result.status}")
@@ -124,9 +121,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.22_classification_agent
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

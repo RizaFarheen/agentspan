@@ -13,8 +13,7 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -94,22 +93,20 @@ def extract_claims(text: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [check_claim, extract_claims]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="fact_checker_agent",
+    system_prompt=(
         "You are a rigorous fact-checker. Extract claims from text and verify them. "
         "Be precise about what is true, false, or nuanced. Always cite sources when available."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="fact_checker_agent")
+    ),
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "Fact-check these claims: 'You can see the Great Wall of China from space' and 'humans only use 10% of their brain'.",
         )
         print(f"Status: {result.status}")
@@ -117,9 +114,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.19_fact_checker
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

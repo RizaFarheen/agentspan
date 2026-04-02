@@ -13,8 +13,7 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -67,19 +66,12 @@ number_tool = StructuredTool.from_function(
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [temperature_tool, number_tool]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a helpful unit conversion and formatting assistant."),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="custom_tools_agent")
+graph = create_agent(llm, tools=tools, name="custom_tools_agent")
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "Convert 100°C to Fahrenheit and Kelvin. Also format 1234567.891 with 2 decimal places.",
         )
         print(f"Status: {result.status}")
@@ -87,9 +79,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.03_custom_tools
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

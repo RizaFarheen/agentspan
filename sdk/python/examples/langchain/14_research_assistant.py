@@ -13,8 +13,7 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -80,23 +79,21 @@ def get_statistics(domain: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [search_academic, search_news, get_statistics]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="research_assistant_agent",
+    system_prompt=(
         "You are a thorough research assistant. When answering questions, "
         "search academic sources, recent news, and statistics to provide well-rounded answers. "
         "Always cite your sources."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="research_assistant_agent")
+    ),
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "Research the current state of AI: what does academic literature say, what are recent news developments, and what are the market statistics?",
         )
         print(f"Status: {result.status}")
@@ -104,9 +101,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.14_research_assistant
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

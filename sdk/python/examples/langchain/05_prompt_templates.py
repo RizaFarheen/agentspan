@@ -4,17 +4,16 @@
 """Prompt Templates — custom system prompts and persona injection.
 
 Demonstrates:
-    - ChatPromptTemplate with rich system instructions
-    - Injecting persona, tone, and constraints into the prompt
-    - Using partial_variables for dynamic context
+    - Passing a rich system prompt to create_agent
+    - Injecting persona, tone, and constraints into the agent
+    - Using tools with a custom persona
 
 Requirements:
     - AGENTSPAN_SERVER_URL=http://localhost:6767/api
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -66,26 +65,19 @@ Your communication style is:
 
 Always use the available tools to look up definitions and synonyms before answering."""
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", SYSTEM_PROMPT),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="prompt_templates_agent")
+graph = create_agent(llm, tools=tools, name="prompt_templates_agent", system_prompt=SYSTEM_PROMPT)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
-        result = runtime.run(executor, "What does 'serendipity' mean? And what are some synonyms for 'happy'?")
+        result = runtime.run(graph, "What does 'serendipity' mean? And what are some synonyms for 'happy'?")
         print(f"Status: {result.status}")
         result.print_result()
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.05_prompt_templates
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

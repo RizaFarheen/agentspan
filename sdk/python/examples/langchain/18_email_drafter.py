@@ -15,8 +15,7 @@ Requirements:
 
 import re
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -103,22 +102,20 @@ def format_email_template(
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [generate_subject_lines, check_email_tone, format_email_template]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="email_drafter_agent",
+    system_prompt=(
         "You are a professional email writing assistant. Help users draft clear, "
         "appropriate, and effective emails. Always check tone and suggest subject lines."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="email_drafter_agent")
+    ),
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "Draft a professional follow-up email to a client named Sarah after a product demo yesterday. "
             "Include subject line options and check the tone.",
         )
@@ -127,9 +124,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.18_email_drafter
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

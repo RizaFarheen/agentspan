@@ -15,9 +15,8 @@ Requirements:
 
 import json
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain.agents import create_agent
 from langchain_core.output_parsers import CommaSeparatedListOutputParser
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -90,22 +89,20 @@ def extract_structured_data(text: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [get_ingredients, parse_as_list, extract_structured_data]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="output_parsers_agent",
+    system_prompt=(
         "You are a data extraction and formatting assistant. "
         "Use tools to retrieve, parse, and structure information clearly."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="output_parsers_agent")
+    ),
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             "Get the ingredients for pasta carbonara and format them as a numbered list. "
             "Also extract any structured data from: 'Invoice #1234 dated 2025-03-15, amount $249.99, contact billing@example.com'",
         )
@@ -114,9 +111,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.24_output_parsers
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

@@ -15,8 +15,7 @@ Requirements:
 
 import ast
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -86,17 +85,15 @@ def check_naming_conventions(code: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [check_syntax, measure_complexity, check_naming_conventions]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="code_review_agent",
+    system_prompt=(
         "You are an expert code reviewer. Analyze code thoroughly using the available tools. "
         "Report findings clearly and suggest improvements."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="code_review_agent")
+    ),
+)
 
 SAMPLE_CODE = """
 def ProcessUserData(UserName, UserAge):
@@ -113,7 +110,7 @@ def ProcessUserData(UserName, UserAge):
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             f"Review this Python code and identify all issues:\n```python{SAMPLE_CODE}```",
         )
         print(f"Status: {result.status}")
@@ -121,9 +118,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.11_code_review_agent
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

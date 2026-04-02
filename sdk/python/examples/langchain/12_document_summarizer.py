@@ -13,8 +13,7 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -69,17 +68,15 @@ def extract_key_sentences(text: str, n: int = 3) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [split_into_chunks, count_sentences, extract_key_sentences]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="document_summarizer_agent",
+    system_prompt=(
         "You are a document analysis assistant. Use tools to analyze document structure, "
         "then synthesize a concise summary with key takeaways."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="document_summarizer_agent")
+    ),
+)
 
 SAMPLE_DOCUMENT = """
 Artificial intelligence is transforming industries at an unprecedented pace. Machine learning
@@ -99,7 +96,7 @@ computer scientists.
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             f"Analyze and summarize this document:\n\n{SAMPLE_DOCUMENT}",
         )
         print(f"Status: {result.status}")
@@ -107,9 +104,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.12_document_summarizer
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

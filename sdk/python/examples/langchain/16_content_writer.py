@@ -15,8 +15,7 @@ Requirements:
 
 import re
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -90,18 +89,16 @@ def suggest_title_variations(topic: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [analyze_readability, check_keyword_density, suggest_title_variations]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="content_writer_agent",
+    system_prompt=(
         "You are a professional content strategist and writer. "
         "Help users create clear, engaging, SEO-friendly content. "
         "Use tools to analyze and improve content quality."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="content_writer_agent")
+    ),
+)
 
 SAMPLE_CONTENT = """
 Python programming is a versatile programming language used in many domains.
@@ -113,7 +110,7 @@ for web development. If you want to learn Python programming, start with the bas
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             f"Analyze this content for readability and keyword density for 'python programming'. "
             f"Also suggest better title options for an article about Python.\n\n{SAMPLE_CONTENT}",
         )
@@ -122,9 +119,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.16_content_writer
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

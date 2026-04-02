@@ -13,8 +13,7 @@ Requirements:
     - OPENAI_API_KEY for ChatOpenAI
 """
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -121,17 +120,15 @@ def batch_sentiment(reviews: str) -> str:
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [analyze_sentiment, detect_emotions, batch_sentiment]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="sentiment_analysis_agent",
+    system_prompt=(
         "You are a sentiment analysis assistant. Analyze text for sentiment and emotions, "
         "providing clear scores and insights. Use tools for accurate analysis."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="sentiment_analysis_agent")
+    ),
+)
 
 REVIEWS = """The product is absolutely amazing! Fast delivery and excellent quality.
 Terrible experience. The item arrived broken and customer service was unhelpful.
@@ -141,7 +138,7 @@ I'm delighted with this purchase! Best decision I made this year."""
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             f"Analyze the sentiment and emotions in these customer reviews:\n\n{REVIEWS}",
         )
         print(f"Status: {result.status}")
@@ -149,9 +146,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.21_sentiment_analysis
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)

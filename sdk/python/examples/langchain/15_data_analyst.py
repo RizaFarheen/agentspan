@@ -17,8 +17,7 @@ import csv
 import io
 import statistics as stats
 
-from langchain.agents import create_tool_calling_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.agents import create_agent
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from agentspan.agents import AgentRuntime
@@ -118,22 +117,20 @@ Super Widget,8,400.00,0.50"""
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tools = [analyze_column, find_top_rows, detect_outliers]
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", (
+graph = create_agent(
+    llm,
+    tools=tools,
+    name="data_analyst_agent",
+    system_prompt=(
         "You are a data analyst. Analyze the provided data using statistical tools "
         "and present your findings clearly with insights and recommendations."
-    )),
-    ("human", "{input}"),
-    ("placeholder", "{agent_scratchpad}"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-executor = AgentExecutor(agent=agent, tools=tools, name="data_analyst_agent")
+    ),
+)
 
 if __name__ == "__main__":
     with AgentRuntime() as runtime:
         result = runtime.run(
-            executor,
+            graph,
             f"Analyze this sales data. What are the revenue statistics, the top 3 products by revenue, and any outliers?\n\n{SALES_DATA}",
         )
         print(f"Status: {result.status}")
@@ -141,9 +138,9 @@ if __name__ == "__main__":
 
         # Production pattern:
         # 1. Deploy once during CI/CD:
-        # runtime.deploy(executor)
+        # runtime.deploy(graph)
         # CLI alternative:
         # agentspan deploy --package examples.langchain.15_data_analyst
         #
         # 2. In a separate long-lived worker process:
-        # runtime.serve(executor)
+        # runtime.serve(graph)
