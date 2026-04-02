@@ -13,7 +13,6 @@
  *   - AGENTSPAN_LLM_MODEL=openai/gpt-4o-mini as environment variable
  */
 
-import { z } from 'zod';
 import { Agent, AgentRuntime, tool } from '../src/index.js';
 import { llmModel } from './settings.js';
 
@@ -24,9 +23,6 @@ const getWeather = tool(
   {
     name: 'get_weather',
     description: 'Get the current weather for a city.',
-    inputSchema: z.object({
-      city: z.string().describe('The city to get weather for'),
-    }),
   },
 );
 
@@ -37,9 +33,6 @@ const getStockPrice = tool(
   {
     name: 'get_stock_price',
     description: 'Get the current stock price for a ticker symbol.',
-    inputSchema: z.object({
-      symbol: z.string().describe('The stock ticker symbol'),
-    }),
   },
 );
 

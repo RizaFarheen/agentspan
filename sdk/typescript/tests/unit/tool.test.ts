@@ -158,6 +158,19 @@ describe('tool() options', () => {
   });
 });
 
+// ── tool() without inputSchema ─────────────────────────────
+
+describe('tool() without inputSchema', () => {
+  it('gets default permissive schema when inputSchema omitted', () => {
+    const t = tool(async () => 'ok', {
+      name: 'no_schema_tool',
+      description: 'A tool with no input schema',
+    });
+    const def = getToolDef(t);
+    expect(def.inputSchema).toEqual({ type: 'object', properties: {} });
+  });
+});
+
 // ── getToolDef() with all 3 formats ────────────────────────
 
 describe('getToolDef()', () => {

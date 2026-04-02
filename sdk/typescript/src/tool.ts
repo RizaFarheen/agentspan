@@ -93,7 +93,7 @@ export function toJsonSchema(schema: unknown): object {
 export interface ToolOptions<TInput = unknown, TOutput = unknown> {
   name?: string;
   description: string;
-  inputSchema: unknown; // Zod schema or JSON Schema object
+  inputSchema?: unknown; // Zod schema or JSON Schema object
   outputSchema?: unknown;
   approvalRequired?: boolean;
   timeoutSeconds?: number;
@@ -114,7 +114,9 @@ export function tool<TInput = unknown, TOutput = unknown>(
   options: ToolOptions<TInput, TOutput>,
 ): ToolFunction<TInput, TOutput> {
   const name = options.name || fn.name || 'unnamed_tool';
-  const inputSchema = toJsonSchema(options.inputSchema);
+  const inputSchema = options.inputSchema
+    ? toJsonSchema(options.inputSchema)
+    : { type: 'object', properties: {} };
   const outputSchema = options.outputSchema
     ? toJsonSchema(options.outputSchema)
     : undefined;
@@ -196,9 +198,7 @@ function isRawToolDef(obj: unknown): boolean {
   const o = obj as Record<string, unknown>;
   return (
     typeof o.name === 'string' &&
-    typeof o.description === 'string' &&
-    o.inputSchema != null &&
-    typeof o.inputSchema === 'object'
+    typeof o.description === 'string'
   );
 }
 
