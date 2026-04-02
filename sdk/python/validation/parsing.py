@@ -90,10 +90,24 @@ def extract_prompt(example_name: str) -> str:
     if not example_file.exists():
         return "unknown prompt"
     source = example_file.read_text()
+
+    # Inline string literal: run(agent, "prompt") or run(agent, 'prompt')
     m = re.search(r'(?:run|stream)\s*\(\s*\w+\s*,\s*"([^"]+)"', source)
     if m:
         return m.group(1)
     m = re.search(r"(?:run|stream)\s*\(\s*\w+\s*,\s*'([^']+)'", source)
     if m:
         return m.group(1)
+
+    # Variable: run(agent, var_name) — look up var_name = "..." assignment
+    m = re.search(r'(?:run|stream)\s*\(\s*\w+\s*,\s*(\w+)', source)
+    if m:
+        var_name = m.group(1)
+        m2 = re.search(rf'{var_name}\s*=\s*"([^"]+)"', source)
+        if m2:
+            return m2.group(1)
+        m2 = re.search(rf"{var_name}\s*=\s*'([^']+)'", source)
+        if m2:
+            return m2.group(1)
+
     return "unknown prompt"
