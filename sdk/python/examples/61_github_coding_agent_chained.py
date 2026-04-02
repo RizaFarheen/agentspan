@@ -33,7 +33,7 @@ MODEL = "anthropic/claude-sonnet-4-6"
 def _fetch_done(context: dict, **kwargs) -> bool:
     """Stop when the agent has produced the structured output with issue details."""
     result = context.get("result", "")
-    return "REPO:" in result and "BRANCH:" in result and "ISSUE:" in result and "DETAILS:" in result
+    return all(tag in result for tag in ("REPO:", "BRANCH:", "ISSUE:", "AUTHOR:", "DETAILS:"))
 
 
 git_fetch_issues = Agent(
@@ -47,8 +47,11 @@ Step 1 — list open issues:
   gh issue list --repo {REPO} --state open --limit 5
 If no issues, respond: NO_OPEN_ISSUES
 
-Step 2 — pick an issue and fetch its full details:
-  gh issue view <N> --repo {REPO}
+Step 2 — pick an issue and fetch its FULL details (body, author, labels):
+  gh issue view <N> --repo {REPO} --json number,title,body,author,labels
+
+You MUST run this command — gh issue list only returns titles, not the issue body.
+Read the JSON output carefully and extract the author login and the COMPLETE body text.
 
 Step 3 — create a branch and push it (one compound command, shell=true):
   TMPDIR=$(mktemp -d) && gh repo clone {REPO} "$TMPDIR" && cd "$TMPDIR" && git checkout -b fix/issue-<N> && git push -u origin fix/issue-<N> && echo "DONE"
@@ -67,7 +70,7 @@ RULES:
 - Include the COMPLETE issue body in DETAILS — the next stage needs it to implement the fix.
 """,
     cli_config=CliConfig(
-        allowed_commands=["gh", "git", "mktemp"],
+        allowed_commands=["gh", "git", "mktemp", "ls"],
         allow_shell=True,
         timeout=60,
     ),
@@ -85,8 +88,15 @@ coder = Agent(
     max_tokens=60000,
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
-You are a senior developer. Clone the repo, check out the branch,
-implement the fix, commit, push. Then say HANDOFF_TO_QA with REPO/BRANCH/CHANGES.
+You are a senior developer. Your input contains issue details from the previous stage
+including REPO, BRANCH, ISSUE, AUTHOR, DETAILS, and SUMMARY.
+
+1. Read the DETAILS field carefully — it contains the full issue body with requirements.
+2. Clone the repo: gh repo clone <REPO> /tmp/work && cd /tmp/work
+3. Check out the branch: git checkout <BRANCH>
+4. Implement the fix according to ALL requirements in DETAILS.
+5. Commit and push your changes.
+6. Say HANDOFF_TO_QA with REPO, BRANCH, and a summary of CHANGES.
 """,
     local_code_execution=True,
 )
@@ -138,13 +148,18 @@ git_push_pr = Agent(
     max_turns=15,
     credentials=["GITHUB_TOKEN", "GH_TOKEN"],
     instructions="""\
-Create a pull request. Run this ONE command (extract REPO, BRANCH, ISSUE from context):
+Create a pull request. Extract REPO, BRANCH, and ISSUE from the previous stage output.
+
+Run this command (shell=true so quotes are handled correctly):
   gh pr create --repo <REPO> --base main --head <BRANCH> --title "Fix <ISSUE>" --body "Fixes <ISSUE>"
 
 After the command succeeds, STOP calling tools and respond with ONLY the PR URL.
 """,
-    cli_commands=True,
-    cli_allowed_commands=["gh", "git"],
+    cli_config=CliConfig(
+        allowed_commands=["gh", "git"],
+        allow_shell=True,
+        timeout=60,
+    ),
     stop_when=_pr_done,
 )
 
