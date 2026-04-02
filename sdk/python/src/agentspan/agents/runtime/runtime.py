@@ -420,8 +420,9 @@ class AgentRuntime:
             "prompt": prompt,
             "sessionId": session_id or "",
             "media": media or [],
-            "context": context or {},
         }
+        if context:
+            payload["context"] = context
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
         if timeout is not None:
@@ -470,8 +471,9 @@ class AgentRuntime:
             "prompt": prompt,
             "sessionId": session_id or "",
             "media": media or [],
-            "context": context or {},
         }
+        if context:
+            payload["context"] = context
         if idempotency_key:
             payload["idempotencyKey"] = idempotency_key
         if timeout is not None:
