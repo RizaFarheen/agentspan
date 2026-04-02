@@ -184,6 +184,10 @@ def make_claude_agent_sdk_worker(
             "subagent_count": 0,
             "tools_used": [],           # list of per-call dicts
             "_tool_use_index": {},       # tool_use_id -> list index for O(1) lookup
+            "_active_subagents": [],     # stack of {"ref_name", "sub_exec_id", "tool_use_id"}
+            "_tool_target_exec": {},     # tool_use_id -> execution_id it was injected into
+            "_pending_agent_calls": [],  # FIFO queue of deferred Agent tool PreToolUse data
+            "_agent_tool_map": {},       # tool_use_id -> {"ref_name", "sub_exec_id", "agent_id"}
             "last_tool_output": "",
             "last_progress_time": 0.0,
         }
@@ -328,23 +332,62 @@ def _build_agentspan_hooks(
             tool_name = input_data.get("tool_name", "")
             tool_input = input_data.get("tool_input", {})
             metadata["tool_call_count"] += 1
+            now_ms = int(time.time() * 1000)
+            truncated_input = _truncate_dict_values(tool_input, _TOOL_OUTPUT_MAX_CHARS)
             entry = {
                 "tool_name": tool_name,
-                "args": _truncate_dict_values(tool_input, _TOOL_OUTPUT_MAX_CHARS),
+                "args": truncated_input,
                 "status": "running",
+                "start_time": now_ms,
+                "end_time": 0,
+                "duration_ms": 0,
                 "stdout": "",
                 "stderr": "",
             }
             metadata["tools_used"].append(entry)
             if tool_use_id:
                 metadata["_tool_use_index"][tool_use_id] = len(metadata["tools_used"]) - 1
+
+            # Agent tool spawns a subagent — defer injection to SubagentStart
+            # so we produce a single SUB_WORKFLOW task instead of SIMPLE + SUB_WORKFLOW.
+            if tool_name == "Agent" and tool_use_id:
+                metadata["_pending_agent_calls"].append({
+                    "tool_use_id": tool_use_id,
+                    "tool_input": truncated_input,
+                    "start_time": now_ms,
+                })
+                _push_event_nonblocking(
+                    execution_id,
+                    {"type": "tool_call", "toolName": tool_name, "toolUseId": tool_use_id},
+                    server_url, auth_key, auth_secret,
+                )
+                return {}
+
+            # If a subagent is active, inject into the sub-workflow instead
+            active_sub = metadata["_active_subagents"]
+            target_exec = execution_id
+            if active_sub and active_sub[-1].get("sub_exec_id"):
+                target_exec = active_sub[-1]["sub_exec_id"]
+
             _push_event_nonblocking(
-                execution_id,
+                target_exec,
                 {"type": "tool_call", "toolName": tool_name, "toolUseId": tool_use_id},
                 server_url,
                 auth_key,
                 auth_secret,
             )
+
+            # Inject a display task into the workflow DAG (awaited so it
+            # exists before the tool actually runs)
+            if tool_use_id:
+                metadata["_tool_target_exec"][tool_use_id] = target_exec
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    _EVENT_PUSH_POOL,
+                    _inject_tool_task,
+                    target_exec, tool_name, tool_use_id,
+                    truncated_input, server_url, auth_key, auth_secret,
+                )
         except Exception as exc:
             logger.debug("PreToolUse hook error: %s", exc)
         return {}
@@ -353,26 +396,71 @@ def _build_agentspan_hooks(
     async def _post_tool_use(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
             tool_name = input_data.get("tool_name", "")
-            tool_output = str(input_data.get("tool_output", ""))[:_TOOL_OUTPUT_MAX_CHARS]
+            raw_response = input_data.get("tool_response") or input_data.get("tool_output", "")
+            tool_output = str(raw_response)[:_TOOL_OUTPUT_MAX_CHARS] if raw_response else ""
             metadata["last_tool_output"] = tool_output
 
             # Update the matching entry with success result
+            now_ms = int(time.time() * 1000)
+            duration_ms = 0
             idx = metadata["_tool_use_index"].get(tool_use_id)
             if idx is not None and idx < len(metadata["tools_used"]):
-                metadata["tools_used"][idx]["status"] = "success"
-                metadata["tools_used"][idx]["stdout"] = tool_output
+                entry = metadata["tools_used"][idx]
+                entry["status"] = "success"
+                entry["stdout"] = tool_output
+                entry["end_time"] = now_ms
+                entry["duration_ms"] = now_ms - entry["start_time"]
+                duration_ms = entry["duration_ms"]
 
-            _push_event_nonblocking(
-                execution_id,
-                {
-                    "type": "tool_result",
-                    "toolName": tool_name,
-                    "toolUseId": tool_use_id,
-                },
-                server_url,
-                auth_key,
-                auth_secret,
-            )
+            # Agent tool → complete the consolidated SUB_WORKFLOW task + tracking workflow
+            agent_info = metadata["_agent_tool_map"].get(tool_use_id) if tool_use_id else None
+            if agent_info:
+                ref_name = agent_info["ref_name"]
+                sub_exec_id = agent_info["sub_exec_id"]
+                output_payload: Dict[str, Any] = {"duration_ms": duration_ms}
+                if sub_exec_id:
+                    output_payload["subWorkflowId"] = sub_exec_id
+                if isinstance(raw_response, dict):
+                    output_payload["tool_response"] = raw_response
+                elif tool_output:
+                    output_payload["result"] = tool_output
+                _complete_tool_task_nonblocking(
+                    execution_id, ref_name, "COMPLETED",
+                    output_payload, server_url, auth_key, auth_secret,
+                )
+                if sub_exec_id:
+                    wf_output = {"result": tool_output} if tool_output else {}
+                    _complete_workflow_nonblocking(
+                        sub_exec_id, server_url, auth_key, auth_secret,
+                        output_data=wf_output,
+                    )
+
+                _push_event_nonblocking(
+                    execution_id,
+                    {"type": "tool_result", "toolName": tool_name, "toolUseId": tool_use_id},
+                    server_url, auth_key, auth_secret,
+                )
+            else:
+                # Regular tool — use the target execution from PreToolUse
+                target_exec = metadata["_tool_target_exec"].get(tool_use_id, execution_id)
+
+                _push_event_nonblocking(
+                    target_exec,
+                    {"type": "tool_result", "toolName": tool_name, "toolUseId": tool_use_id},
+                    server_url, auth_key, auth_secret,
+                )
+
+                # Complete the injected DAG task
+                if tool_use_id:
+                    output_payload2: Dict[str, Any] = {"duration_ms": duration_ms}
+                    if isinstance(raw_response, dict):
+                        output_payload2["tool_response"] = raw_response
+                    else:
+                        output_payload2["stdout"] = tool_output
+                    _complete_tool_task_nonblocking(
+                        target_exec, tool_use_id, "COMPLETED",
+                        output_payload2, server_url, auth_key, auth_secret,
+                    )
 
             # Throttled IN_PROGRESS task update
             now = time.monotonic()
@@ -395,22 +483,53 @@ def _build_agentspan_hooks(
             metadata["last_tool_output"] = f"ERROR: {error_msg}"
 
             # Update the matching entry with error result
+            now_ms = int(time.time() * 1000)
+            duration_ms = 0
             idx = metadata["_tool_use_index"].get(tool_use_id)
             if idx is not None and idx < len(metadata["tools_used"]):
-                metadata["tools_used"][idx]["status"] = "error"
-                metadata["tools_used"][idx]["stderr"] = error_msg
+                entry = metadata["tools_used"][idx]
+                entry["status"] = "error"
+                entry["stderr"] = error_msg
+                entry["end_time"] = now_ms
+                entry["duration_ms"] = now_ms - entry["start_time"]
+                duration_ms = entry["duration_ms"]
 
-            _push_event_nonblocking(
-                execution_id,
-                {
-                    "type": "tool_error",
-                    "toolName": tool_name,
-                    "toolUseId": tool_use_id,
-                },
-                server_url,
-                auth_key,
-                auth_secret,
-            )
+            # Agent tool failure → fail the consolidated SUB_WORKFLOW task
+            agent_info = metadata["_agent_tool_map"].get(tool_use_id) if tool_use_id else None
+            if agent_info:
+                ref_name = agent_info["ref_name"]
+                sub_exec_id = agent_info["sub_exec_id"]
+                _complete_tool_task_nonblocking(
+                    execution_id, ref_name, "FAILED",
+                    {"stderr": error_msg, "duration_ms": duration_ms},
+                    server_url, auth_key, auth_secret,
+                )
+                if sub_exec_id:
+                    _complete_workflow_nonblocking(
+                        sub_exec_id, server_url, auth_key, auth_secret,
+                        output_data={"error": error_msg},
+                    )
+                _push_event_nonblocking(
+                    execution_id,
+                    {"type": "tool_error", "toolName": tool_name, "toolUseId": tool_use_id},
+                    server_url, auth_key, auth_secret,
+                )
+            else:
+                # Regular tool failure
+                target_exec = metadata["_tool_target_exec"].get(tool_use_id, execution_id)
+
+                _push_event_nonblocking(
+                    target_exec,
+                    {"type": "tool_error", "toolName": tool_name, "toolUseId": tool_use_id},
+                    server_url, auth_key, auth_secret,
+                )
+
+                if tool_use_id:
+                    _complete_tool_task_nonblocking(
+                        target_exec, tool_use_id, "FAILED",
+                        {"stderr": error_msg, "duration_ms": duration_ms},
+                        server_url, auth_key, auth_secret,
+                    )
 
             # Throttled IN_PROGRESS task update
             now = time.monotonic()
@@ -424,19 +543,129 @@ def _build_agentspan_hooks(
             logger.debug("PostToolUseFailure hook error: %s", exc)
         return {}
 
-    # -- SubagentStop hook: track subagent completions --
-    async def _subagent_stop(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
+    # -- SubagentStart hook: inject a single SUB_WORKFLOW task for the subagent --
+    async def _subagent_start(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
         try:
+            agent_id = input_data.get("agent_id", "")
+            agent_name = input_data.get("agent_name", "") or input_data.get("agent_type", "") or "subagent"
             metadata["subagent_count"] += 1
+
+            # Pop the deferred Agent tool call (PreToolUse fires before SubagentStart)
+            pending = metadata["_pending_agent_calls"]
+            agent_call = pending.pop(0) if pending else None
+            # Use the Agent tool's tool_use_id as ref_name so we produce one task
+            ref_name = (agent_call["tool_use_id"] if agent_call else None) or agent_id or f"subagent_{metadata['subagent_count'] - 1}"
+            # The actual prompt/args the user gave the subagent
+            agent_input = agent_call["tool_input"] if agent_call else {}
+
             _push_event_nonblocking(
                 execution_id,
-                {"type": "subagent_stop"},
+                {"type": "subagent_start", "agentId": agent_id},
+                server_url, auth_key, auth_secret,
+            )
+
+            # Create a tracking sub-workflow and inject as SUB_WORKFLOW task
+            loop = asyncio.get_event_loop()
+            workflow_name = f"Agent({agent_name})"
+            sub_exec_id = await loop.run_in_executor(
+                _EVENT_PUSH_POOL,
+                lambda: _create_tracking_workflow(
+                    workflow_name, agent_input,
+                    server_url, auth_key, auth_secret,
+                    parent_workflow_id=execution_id,
+                ),
+            )
+            sub_wf_param = None
+            if sub_exec_id:
+                sub_wf_param = {
+                    "name": workflow_name,
+                    "version": 1,
+                    "executionId": sub_exec_id,
+                }
+                # Push onto active subagent stack so subsequent tool calls
+                # get injected into the sub-workflow
+                metadata["_active_subagents"].append({
+                    "ref_name": ref_name,
+                    "sub_exec_id": sub_exec_id,
+                    "tool_use_id": agent_call["tool_use_id"] if agent_call else None,
+                })
+                # Map the Agent tool's tool_use_id for PostToolUse completion
+                if agent_call:
+                    metadata["_agent_tool_map"][agent_call["tool_use_id"]] = {
+                        "ref_name": ref_name,
+                        "sub_exec_id": sub_exec_id,
+                        "agent_id": agent_id,
+                    }
+
+            # Store sub_exec_id on the tools_used entry created by PreToolUse
+            if agent_call:
+                idx = metadata["_tool_use_index"].get(agent_call["tool_use_id"])
+                if idx is not None and idx < len(metadata["tools_used"]):
+                    metadata["tools_used"][idx]["_sub_exec_id"] = sub_exec_id
+                    metadata["tools_used"][idx]["tool_name"] = workflow_name
+
+            await loop.run_in_executor(
+                _EVENT_PUSH_POOL,
+                lambda: _inject_tool_task(
+                    execution_id, workflow_name, ref_name,
+                    agent_input, server_url, auth_key, auth_secret,
+                    task_type="SUB_WORKFLOW",
+                    sub_workflow_param=sub_wf_param,
+                ),
+            )
+        except Exception as exc:
+            logger.debug("SubagentStart hook error: %s", exc)
+        return {}
+
+    # -- SubagentStop hook: pop the active stack (completion deferred to PostToolUse) --
+    async def _subagent_stop(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
+        try:
+            agent_id = input_data.get("agent_id", "")
+
+            _push_event_nonblocking(
+                execution_id,
+                {"type": "subagent_stop", "agentId": agent_id},
+                server_url, auth_key, auth_secret,
+            )
+
+            # Pop the subagent from the active stack so subsequent tool calls
+            # go back to the parent (or outer subagent).
+            active_sub = metadata["_active_subagents"]
+            if active_sub:
+                active_sub.pop()
+        except Exception as exc:
+            logger.debug("SubagentStop hook error: %s", exc)
+        return {}
+
+    # -- Notification hook: inject an info task --
+    async def _notification(input_data: dict, tool_use_id: str | None, context: Any) -> dict:
+        try:
+            message = input_data.get("message", "")
+            ref_name = f"notification_{int(time.time() * 1000)}"
+            _push_event_nonblocking(
+                execution_id,
+                {"type": "notification", "message": message},
                 server_url,
                 auth_key,
                 auth_secret,
             )
+            # Inject and immediately complete a notification task
+            loop = asyncio.get_event_loop()
+            injected = await loop.run_in_executor(
+                _EVENT_PUSH_POOL,
+                _inject_tool_task,
+                execution_id, "Notification", ref_name,
+                {"message": str(message)[:_TOOL_OUTPUT_MAX_CHARS]},
+                server_url, auth_key, auth_secret,
+            )
+            if injected:
+                _complete_tool_task_nonblocking(
+                    execution_id, ref_name, "COMPLETED",
+                    {"message": str(message)[:_TOOL_OUTPUT_MAX_CHARS]},
+                    server_url, auth_key, auth_secret,
+                )
         except Exception as exc:
-            logger.debug("SubagentStop hook error: %s", exc)
+            logger.debug("Notification hook error: %s", exc)
         return {}
 
     # -- Stop hook: signal agent completion --
@@ -457,7 +686,9 @@ def _build_agentspan_hooks(
         "PreToolUse": [SdkHookMatcher(hooks=[_pre_tool_use])],
         "PostToolUse": [SdkHookMatcher(hooks=[_post_tool_use])],
         "PostToolUseFailure": [SdkHookMatcher(hooks=[_post_tool_use_failure])],
+        "SubagentStart": [SdkHookMatcher(hooks=[_subagent_start])],
         "SubagentStop": [SdkHookMatcher(hooks=[_subagent_stop])],
+        "Notification": [SdkHookMatcher(hooks=[_notification])],
         "Stop": [SdkHookMatcher(hooks=[_stop])],
     }
 
@@ -534,8 +765,6 @@ def _update_task_progress_nonblocking(
     so the server (and any polling clients) can see real-time progress from
     this long-running Claude Code worker.
     """
-
-    # Snapshot mutable metadata to avoid races with the hook thread
     all_calls = metadata.get("tools_used", [])
     progress_data: Dict[str, Any] = {
         "tool_call_count": metadata.get("tool_call_count", 0),
@@ -569,6 +798,161 @@ def _update_task_progress_nonblocking(
             )
 
     _EVENT_PUSH_POOL.submit(_do_update)
+
+
+# ---------------------------------------------------------------------------
+# DAG task injection (display tasks for each tool call)
+# ---------------------------------------------------------------------------
+
+
+def _create_tracking_workflow(
+    workflow_name: str,
+    input_data: Dict[str, Any],
+    server_url: str,
+    auth_key: str,
+    auth_secret: str,
+    parent_workflow_id: str | None = None,
+    parent_workflow_task_id: str | None = None,
+) -> str | None:
+    """Create a bare tracking workflow for a subagent.
+
+    Returns the execution ID of the new workflow, or None on failure.
+    Uses POST /api/agent/execution (Agentspan custom endpoint).
+    """
+    try:
+        import requests
+
+        url = f"{server_url}/agent/execution"
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if auth_key:
+            headers["X-Auth-Key"] = auth_key
+        if auth_secret:
+            headers["X-Auth-Secret"] = auth_secret
+        body: Dict[str, Any] = {"workflowName": workflow_name, "input": input_data}
+        if parent_workflow_id:
+            body["parentWorkflowId"] = parent_workflow_id
+        if parent_workflow_task_id:
+            body["parentWorkflowTaskId"] = parent_workflow_task_id
+        resp = requests.post(url, json=body, headers=headers, timeout=5)
+        if resp.status_code < 400:
+            return resp.json().get("executionId")
+        return None
+    except Exception as exc:
+        logger.debug("Create tracking workflow failed: %s", exc)
+        return None
+
+
+def _inject_tool_task(
+    execution_id: str,
+    tool_name: str,
+    ref_name: str,
+    input_data: Dict[str, Any],
+    server_url: str,
+    auth_key: str,
+    auth_secret: str,
+    task_type: str = "SIMPLE",
+    sub_workflow_param: Dict[str, Any] | None = None,
+) -> bool:
+    """Inject a display-only task into the running workflow execution.
+
+    Called synchronously from PreToolUse so the task exists before the tool runs.
+    Uses POST /api/agent/{executionId}/tasks (Agentspan custom endpoint).
+
+    For SUB_WORKFLOW tasks, pass sub_workflow_param with keys:
+      name, version, executionId (the tracking sub-workflow).
+    """
+    try:
+        import requests
+
+        url = f"{server_url}/agent/{execution_id}/tasks"
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if auth_key:
+            headers["X-Auth-Key"] = auth_key
+        if auth_secret:
+            headers["X-Auth-Secret"] = auth_secret
+        body: Dict[str, Any] = {
+            "taskDefName": tool_name,
+            "referenceTaskName": ref_name,
+            "type": task_type,
+            "inputData": input_data,
+        }
+        if sub_workflow_param:
+            body["subWorkflowParam"] = sub_workflow_param
+        resp = requests.post(url, json=body, headers=headers, timeout=5)
+        return resp.status_code < 400
+    except Exception as exc:
+        logger.debug(
+            "Inject tool task failed (execution_id=%s, ref=%s): %s",
+            execution_id, ref_name, exc,
+        )
+        return False
+
+
+def _complete_tool_task_nonblocking(
+    execution_id: str,
+    ref_name: str,
+    status: str,
+    output_data: Dict[str, Any],
+    server_url: str,
+    auth_key: str,
+    auth_secret: str,
+) -> None:
+    """Fire-and-forget update of an injected task's status.
+
+    Uses POST /api/agent/tasks/{executionId}/{refTaskName}/{status}.
+    """
+
+    def _do_complete():
+        try:
+            import requests
+
+            url = f"{server_url}/agent/tasks/{execution_id}/{ref_name}/{status}"
+            headers: Dict[str, str] = {"Content-Type": "application/json"}
+            if auth_key:
+                headers["X-Auth-Key"] = auth_key
+            if auth_secret:
+                headers["X-Auth-Secret"] = auth_secret
+            requests.post(url, json=output_data, headers=headers, timeout=5)
+        except Exception as exc:
+            logger.debug(
+                "Complete tool task failed (execution_id=%s, ref=%s): %s",
+                execution_id, ref_name, exc,
+            )
+
+    _EVENT_PUSH_POOL.submit(_do_complete)
+
+
+def _complete_workflow_nonblocking(
+    workflow_execution_id: str,
+    server_url: str,
+    auth_key: str,
+    auth_secret: str,
+    output_data: Dict[str, Any] | None = None,
+) -> None:
+    """Fire-and-forget: mark a tracking sub-workflow as COMPLETED.
+
+    Uses POST /api/agent/execution/{executionId}/complete.
+    """
+
+    def _do_complete():
+        try:
+            import requests
+
+            url = f"{server_url}/agent/execution/{workflow_execution_id}/complete"
+            headers: Dict[str, str] = {"Content-Type": "application/json"}
+            if auth_key:
+                headers["X-Auth-Key"] = auth_key
+            if auth_secret:
+                headers["X-Auth-Secret"] = auth_secret
+            requests.post(url, json=output_data or {}, headers=headers, timeout=5)
+        except Exception as exc:
+            logger.debug(
+                "Complete workflow failed (execution_id=%s): %s",
+                workflow_execution_id, exc,
+            )
+
+    _EVENT_PUSH_POOL.submit(_do_complete)
+
 
 
 # ---------------------------------------------------------------------------

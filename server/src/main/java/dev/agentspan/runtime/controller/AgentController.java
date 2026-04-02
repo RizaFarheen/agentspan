@@ -31,6 +31,7 @@ import dev.agentspan.runtime.model.InjectTaskRequest;
 import dev.agentspan.runtime.model.InjectTaskResponse;
 import dev.agentspan.runtime.model.StartRequest;
 import dev.agentspan.runtime.model.StartResponse;
+import dev.agentspan.runtime.model.TaskListResponse;
 import dev.agentspan.runtime.service.AgentDagService;
 import dev.agentspan.runtime.service.AgentService;
 
@@ -209,11 +210,18 @@ public class AgentController {
     /**
      * Create a bare tracking execution for sub-agent display.
      * The execution has no tasks in its definition; tasks are injected via injectTask.
-     * Stays RUNNING permanently — completion is a future enhancement.
      */
     @PostMapping("/execution")
     public CreateTrackingWorkflowResponse createTrackingExecution(@RequestBody CreateTrackingWorkflowRequest req) {
         return agentDagService.createTrackingWorkflow(req);
+    }
+
+    /** Mark a tracking execution as COMPLETED. */
+    @PostMapping("/execution/{executionId}/complete")
+    public void completeTrackingExecution(
+            @PathVariable String executionId,
+            @RequestBody(required = false) Map<String, Object> output) {
+        agentDagService.completeTrackingWorkflow(executionId, output);
     }
 
     // ── Execution lifecycle (UI) ────────────────────────────────────
@@ -252,7 +260,7 @@ public class AgentController {
 
     /** Get paginated task list for an execution. */
     @GetMapping("/executions/{executionId}/tasks")
-    public List<Task> getExecutionTasks(
+    public TaskListResponse getExecutionTasks(
             @PathVariable String executionId,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "15") int count,

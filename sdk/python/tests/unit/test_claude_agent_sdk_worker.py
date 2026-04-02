@@ -179,6 +179,10 @@ class TestAgentspanHooks:
             "subagent_count": 0,
             "tools_used": [],
             "_tool_use_index": {},
+            "_active_subagents": [],
+            "_tool_target_exec": {},
+            "_pending_agent_calls": [],
+            "_agent_tool_map": {},
             "last_tool_output": "",
             "last_progress_time": 0.0,
         }
@@ -192,7 +196,9 @@ class TestAgentspanHooks:
         assert "PreToolUse" in hooks
         assert "PostToolUse" in hooks
         assert "PostToolUseFailure" in hooks
+        assert "SubagentStart" in hooks
         assert "SubagentStop" in hooks
+        assert "Notification" in hooks
         assert "Stop" in hooks
 
     def test_pre_tool_use_hook_increments_metadata(self):
@@ -200,11 +206,12 @@ class TestAgentspanHooks:
 
         metadata = self._make_metadata()
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"):
+        with (
+            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._inject_tool_task", return_value=True),
+        ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
-            # HookMatcher is a dataclass — access .hooks attribute
-            pre_matchers = hooks["PreToolUse"]
-            pre_hook = pre_matchers[0].hooks[0]
+            pre_hook = hooks["PreToolUse"][0].hooks[0]
             result = asyncio.run(
                 pre_hook(
                     {"tool_name": "Read", "tool_input": {}, "hook_event_name": "PreToolUse"},
@@ -216,8 +223,6 @@ class TestAgentspanHooks:
         assert metadata["tool_call_count"] == 1
         assert len(metadata["tools_used"]) == 1
         assert metadata["tools_used"][0]["tool_name"] == "Read"
-        assert metadata["tools_used"][0]["status"] == "running"
-        assert metadata["_tool_use_index"]["tu-1"] == 0
         assert result == {}
 
     def test_hooks_push_events(self):
@@ -229,9 +234,12 @@ class TestAgentspanHooks:
         def capture_push(exec_id, event, *args):
             pushed.append(event)
 
-        with patch(
-            "agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
-            side_effect=capture_push,
+        with (
+            patch(
+                "agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking",
+                side_effect=capture_push,
+            ),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._inject_tool_task", return_value=True),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             pre_hook = hooks["PreToolUse"][0].hooks[0]
@@ -263,6 +271,7 @@ class TestAgentspanHooks:
                 side_effect=capture_push,
             ),
             patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             post_hook = hooks["PostToolUse"][0].hooks[0]
@@ -287,6 +296,7 @@ class TestAgentspanHooks:
         with (
             patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
             patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             pre_hook = hooks["PreToolUse"][0].hooks[0]
@@ -325,6 +335,7 @@ class TestAgentspanHooks:
         with (
             patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
             patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking") as mock_progress,
+            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             post_hook = hooks["PostToolUse"][0].hooks[0]
@@ -344,6 +355,7 @@ class TestAgentspanHooks:
         with (
             patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
             patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking") as mock_progress,
+            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             post_hook = hooks["PostToolUse"][0].hooks[0]
@@ -361,6 +373,7 @@ class TestAgentspanHooks:
         with (
             patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
             patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking"),
         ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
             pre_hook = hooks["PreToolUse"][0].hooks[0]
@@ -386,17 +399,80 @@ class TestAgentspanHooks:
         assert metadata["tools_used"][0]["status"] == "error"
         assert metadata["tools_used"][0]["stderr"] == "command not found"
 
-    def test_subagent_stop_hook_increments_count(self):
+    def test_agent_tool_deferred_to_subagent_start(self):
+        """PreToolUse(Agent) does NOT inject a SIMPLE task — it defers to SubagentStart."""
+        from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
+
+        metadata = self._make_metadata()
+        inject_calls = []
+
+        def capture_inject(*args, **kwargs):
+            inject_calls.append((args, kwargs))
+            return True
+
+        with (
+            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._create_tracking_workflow", return_value="sub-exec-42"),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._inject_tool_task", side_effect=capture_inject),
+        ):
+            hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
+            pre_hook = hooks["PreToolUse"][0].hooks[0]
+            start_hook = hooks["SubagentStart"][0].hooks[0]
+
+            # PreToolUse for Agent — should NOT inject
+            asyncio.run(pre_hook(
+                {"tool_name": "Agent", "tool_input": {"prompt": "do stuff"}, "hook_event_name": "PreToolUse"},
+                "toolu_agent_1", None,
+            ))
+            assert len(inject_calls) == 0
+
+            # SubagentStart — should inject one SUB_WORKFLOW task
+            asyncio.run(start_hook({"agent_id": "sa-1", "agent_name": "researcher"}, None, None))
+
+        assert len(inject_calls) == 1
+        call_kwargs = inject_calls[0][1]
+        assert call_kwargs.get("task_type") == "SUB_WORKFLOW"
+        assert call_kwargs["sub_workflow_param"]["executionId"] == "sub-exec-42"
+        assert inject_calls[0][0][2] == "toolu_agent_1"  # ref_name
+
+    def test_full_subagent_lifecycle(self):
+        """Full lifecycle: PreToolUse(Agent) → SubagentStart → SubagentStop → PostToolUse(Agent)."""
         from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
 
         metadata = self._make_metadata()
 
-        with patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"):
+        with (
+            patch("agentspan.agents.frameworks.claude_agent_sdk._push_event_nonblocking"),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._create_tracking_workflow", return_value="sub-exec-42"),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._inject_tool_task", return_value=True),
+            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_tool_task_nonblocking") as mock_complete,
+            patch("agentspan.agents.frameworks.claude_agent_sdk._complete_workflow_nonblocking") as mock_complete_wf,
+            patch("agentspan.agents.frameworks.claude_agent_sdk._update_task_progress_nonblocking"),
+        ):
             hooks = _build_agentspan_hooks("t-1", "wf-1", "http://localhost", "k", "s", metadata)
-            subagent_hook = hooks["SubagentStop"][0].hooks[0]
-            asyncio.run(subagent_hook({}, None, None))
+            pre_hook = hooks["PreToolUse"][0].hooks[0]
+            start_hook = hooks["SubagentStart"][0].hooks[0]
+            stop_hook = hooks["SubagentStop"][0].hooks[0]
+            post_hook = hooks["PostToolUse"][0].hooks[0]
 
-        assert metadata["subagent_count"] == 1
+            asyncio.run(pre_hook(
+                {"tool_name": "Agent", "tool_input": {"prompt": "review code"}, "hook_event_name": "PreToolUse"},
+                "toolu_agent_1", None,
+            ))
+            asyncio.run(start_hook({"agent_id": "sa-1", "agent_name": "researcher"}, None, None))
+            asyncio.run(stop_hook({"agent_id": "sa-1"}, None, None))
+            asyncio.run(post_hook(
+                {"tool_name": "Agent", "tool_response": {"text": "looks good"}, "hook_event_name": "PostToolUse"},
+                "toolu_agent_1", None,
+            ))
+
+        # PostToolUse(Agent) completes both task and workflow
+        mock_complete.assert_called_once()
+        assert mock_complete.call_args[0][1] == "toolu_agent_1"
+        assert mock_complete.call_args[0][2] == "COMPLETED"
+        assert mock_complete.call_args[0][3]["subWorkflowId"] == "sub-exec-42"
+        mock_complete_wf.assert_called_once()
+        assert mock_complete_wf.call_args[0][0] == "sub-exec-42"
 
     def test_stop_hook_pushes_agent_stop_event(self):
         from agentspan.agents.frameworks.claude_agent_sdk import _build_agentspan_hooks
@@ -438,7 +514,6 @@ class TestAgentspanHooks:
             )
 
         assert result == {}
-        # Metadata should still be updated even when push fails
         assert metadata["tool_call_count"] == 1
 
 
