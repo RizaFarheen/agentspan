@@ -85,6 +85,19 @@ class TestHelpers:
         assert guidance == ""
         assert timeout_seconds == 600
 
+    def test_parse_args_enables_review_branch_mode(self):
+        from repo_url_issue_pr_agent import parse_args
+
+        argv = [
+            "repo_url_issue_pr_agent.py",
+            "https://github.com/pytest-dev/pytest-asyncio",
+            "--review-branch",
+        ]
+        with patch.object(sys, "argv", argv):
+            with patch.dict(os.environ, {}, clear=True):
+                parse_args()
+                assert os.environ["AGENTSPAN_REVIEW_BRANCH_ONLY"] == "true"
+
     def test_resolve_workdir_recovers_latest_matching_workspace(self, tmp_path):
         from repo_url_issue_pr_agent import resolve_workdir
 
@@ -257,6 +270,24 @@ class TestBranchAndPublicationTools:
             )
 
         assert result["status"] == "dry_run"
+
+    def test_push_review_branch_dry_run(self):
+        from repo_url_issue_pr_agent import push_review_branch
+
+        with patch.dict(os.environ, {"AGENTSPAN_DRY_RUN": "true"}):
+            result = push_review_branch.__wrapped__(
+                repo="pytest-dev/pytest-asyncio",
+                workdir="/tmp/test",
+                branch="agentspan/issue-1334-test",
+            )
+
+        assert result["status"] == "dry_run"
+        assert result["would_push"]["branch"] == "agentspan/issue-1334-test"
+
+    def test_push_review_branch_declares_github_token(self):
+        from repo_url_issue_pr_agent import push_review_branch
+
+        assert push_review_branch._tool_def.credentials == ["GITHUB_TOKEN"]
 
     def test_sync_branch_with_base_success(self):
         from repo_url_issue_pr_agent import sync_branch_with_base
@@ -435,6 +466,7 @@ class TestPipelineStructure:
         publisher = pipeline.agents[4]
         tool_names = [tool._tool_def.name for tool in publisher.tools]
         assert "approve_publication" in tool_names
+        assert "push_review_branch" in tool_names
 
     def test_stage_instructions_forbid_placeholder_repo_paths(self):
         from repo_url_issue_pr_agent import build_pipeline
@@ -458,3 +490,15 @@ class TestPipelineStructure:
         assert "PUBLICATION_BLOCKED" in publisher.instructions
         assert "do not call any tools" in publisher.instructions
         assert "Never answer conversationally" in publisher.instructions
+
+    def test_review_branch_mode_changes_publisher_contract(self):
+        from repo_url_issue_pr_agent import build_pipeline
+
+        with patch.dict(os.environ, {"AGENTSPAN_REVIEW_BRANCH_ONLY": "true"}, clear=True):
+            pipeline = build_pipeline(
+                "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
+            )
+
+        publisher = pipeline.agents[4]
+        assert "REVIEW_BRANCH_PUSHED" in publisher.instructions
+        assert "do not open a PR and do not comment on the issue" in publisher.instructions

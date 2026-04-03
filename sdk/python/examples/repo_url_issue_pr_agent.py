@@ -44,6 +44,7 @@ from repo_url_issue_pr_shared import (
     get_server_url,
     is_draft_pr,
     is_dry_run,
+    is_review_branch_only,
 )
 
 
@@ -97,6 +98,14 @@ def git_identity() -> tuple[str, str]:
         f"{expected_github_login()}@users.noreply.github.com",
     )
     return git_user, git_email
+
+
+def publication_mode_label() -> str:
+    if is_dry_run():
+        return "dry_run"
+    if is_review_branch_only():
+        return "review_branch"
+    return "live_pr"
 
 
 def stage_max_tokens(default: int = 12000) -> int:
@@ -190,6 +199,11 @@ def run_github_cmd(cmd: list[str], **kwargs):
 def credentialed_remote_url(login: str, repo_name: str) -> str:
     token = quote(github_token(), safe="")
     return f"https://x-access-token:{token}@github.com/{login}/{repo_name}.git"
+
+
+def fork_branch_url(login: str, repo: str, branch: str) -> str:
+    repo_name = repo.split("/", 1)[1]
+    return f"https://github.com/{login}/{repo_name}/tree/{quote(branch, safe='')}"
 
 
 def current_github_login() -> str:
@@ -610,6 +624,64 @@ def configure_git_identity(
 
 
 @tool(credentials=["GITHUB_TOKEN"])
+def push_review_branch(
+    repo: str,
+    workdir: str,
+    branch: str,
+    remote_name: str = "agentspan",
+) -> dict:
+    """Push the issue branch to the authenticated user's fork for manual review."""
+    try:
+        workdir = resolve_workdir(workdir, repo=repo)
+    except RuntimeError as exc:
+        return {"error": str(exc), "workdir": workdir, "repo": repo}
+
+    if is_dry_run():
+        return {
+            "status": "dry_run",
+            "would_push": {
+                "repo": repo,
+                "branch": branch,
+                "remote_name": remote_name,
+            },
+        }
+
+    expected_login = expected_github_login()
+    try:
+        login = current_github_login()
+    except RuntimeError as exc:
+        return {"error": str(exc)}
+
+    if expected_login and login != expected_login:
+        return {
+            "error": (
+                f"Stored GITHUB_TOKEN resolves to '{login}', expected '{expected_login}'. "
+                f"Update the stored GITHUB_TOKEN before pushing the review branch."
+            )
+        }
+
+    try:
+        ensure_fork_remote(repo, workdir, remote_name, login)
+    except RuntimeError as exc:
+        return {"error": str(exc)}
+
+    push = run_cmd(
+        ["git", "-C", workdir, "push", "-u", remote_name, branch],
+        env=github_env(),
+        timeout=180,
+    )
+    if push.returncode != 0:
+        return {"error": f"Push failed: {push.stderr[:500]}"}
+
+    return {
+        "status": "pushed",
+        "branch": branch,
+        "branch_url": fork_branch_url(login, repo, branch),
+        "login": login,
+    }
+
+
+@tool(credentials=["GITHUB_TOKEN"])
 def create_pull_request(
     repo: str,
     workdir: str,
@@ -737,6 +809,11 @@ def build_pipeline(
     model = get_model()
     dry_run_note = (
         " (DRY RUN - do not publish PRs or issue comments)" if is_dry_run() else ""
+    )
+    review_branch_note = (
+        " (REVIEW BRANCH MODE - push a fork branch for manual review, do not open a PR or issue comment)"
+        if is_review_branch_only()
+        else ""
     )
     forced_issue_note = (
         f"Forced issue: #{issue_number}." if issue_number else "No forced issue."
@@ -1030,6 +1107,7 @@ Rules:
 4. APPROVED_FOR_PUBLICATION ends the loop.
 5. Maximum 3 review rounds.
 6. If quality never reaches publication level, stop without opening a PR.
+7. When stopping without approval, preserve the latest handoff content verbatim so downstream review-branch mode still has WORKDIR and BRANCH.
 """,
         agents=[fixer, reviewer],
         strategy=Strategy.SWARM,
@@ -1046,16 +1124,20 @@ Rules:
         name="publisher",
         model=model,
         instructions=f"""\
-You publish the approved fix to GitHub.{dry_run_note}
+You publish the approved fix to GitHub.{dry_run_note}{review_branch_note}
 
 Publication requirements:
-1. Only proceed if reviewer emitted APPROVED_FOR_PUBLICATION.
-2. Rebase the issue branch onto the latest upstream default branch.
-3. Pause on approve_publication so a human reviews the final tested diff before anything is sent.
-4. Configure git identity so commits clearly show AgentSpan in history.
-5. Commit only the issue-relevant changes.
-6. Use create_pull_request so the PR is opened from the authenticated GitHub fork.
-7. Use comment_on_issue to leave a brief comment with the PR link.
+1. In normal mode, only proceed if reviewer emitted APPROVED_FOR_PUBLICATION.
+2. In review-branch mode, you may proceed whenever the input contains REPO, WORKDIR, BRANCH, and ISSUE, even if reviewer did not approve publication.
+3. In review-branch mode, do not open a PR and do not comment on the issue. Push the branch for manual inspection instead.
+4. In review-branch mode, skip approve_publication entirely.
+5. Rebase the issue branch onto the latest upstream default branch.
+6. Pause on approve_publication so a human reviews the final tested diff before anything is sent.
+7. Configure git identity so commits clearly show AgentSpan in history.
+8. Commit only the issue-relevant changes.
+9. In normal mode, use create_pull_request so the PR is opened from the authenticated GitHub fork.
+10. In normal mode, use comment_on_issue to leave a brief comment with the PR link.
+11. In review-branch mode, use push_review_branch and stop after reporting the branch URL.
 
 Important:
 - PR and issue comment authorship comes from the stored GITHUB_TOKEN credential.
@@ -1067,9 +1149,20 @@ Important:
 - Never ask the user for the repo path.
 - Never answer conversationally or thank the user.
 
-If the input does NOT contain APPROVED_FOR_PUBLICATION, do not call any tools. Output EXACTLY:
+If review-branch mode is OFF and the input does NOT contain APPROVED_FOR_PUBLICATION, do not call any tools. Output EXACTLY:
 PUBLICATION_BLOCKED
 REASON: reviewer did not approve publication-ready changes
+
+If review-branch mode is ON and the input does not contain enough context to push a branch, output EXACTLY:
+PUBLICATION_BLOCKED
+REASON: review-branch mode needs REPO, WORKDIR, BRANCH, and ISSUE details from the prior stage
+
+If review-branch mode is ON and you successfully push the branch, output EXACTLY:
+REVIEW_BRANCH_PUSHED
+BRANCH_URL: <url or dry-run summary>
+BRANCH: <branch name>
+REVIEW_STATUS: approved|blocked
+REASON: <approved for publication or concise reviewer feedback summary>
 
 If any publication tool returns an error, output EXACTLY:
 PUBLICATION_BLOCKED
@@ -1088,6 +1181,7 @@ ISSUE_COMMENT: <status>
             sync_branch_with_base,
             approve_publication,
             configure_git_identity,
+            push_review_branch,
             create_pull_request,
             comment_on_issue,
         ],
@@ -1124,6 +1218,13 @@ def parse_args() -> tuple[str, int, str, int]:
         "--dry-run", action="store_true", help="Skip PR and issue publication"
     )
     parser.add_argument(
+        "--review-branch",
+        "--private-branch",
+        action="store_true",
+        dest="review_branch",
+        help="Push a fork branch for manual review instead of opening a PR/comment",
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         default=0,
@@ -1132,6 +1233,8 @@ def parse_args() -> tuple[str, int, str, int]:
     args = parser.parse_args()
     if args.dry_run:
         os.environ["AGENTSPAN_DRY_RUN"] = "true"
+    if args.review_branch:
+        os.environ["AGENTSPAN_REVIEW_BRANCH_ONLY"] = "true"
     if args.timeout and args.timeout > 0:
         os.environ["AGENTSPAN_AGENT_TIMEOUT"] = str(args.timeout)
     return args.repo_url, args.issue, args.guidance.strip(), runtime_timeout_seconds()
@@ -1145,6 +1248,7 @@ def main() -> None:
     print(f"  Repo URL: {repo_url}")
     print(f"  Expected GitHub token owner: {expected_github_login()}")
     print(f"  Draft PR: {is_draft_pr()}")
+    print(f"  Publication mode: {publication_mode_label()}")
     print()
 
     forced_issue = (

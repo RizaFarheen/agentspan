@@ -50,6 +50,14 @@ def is_draft_pr() -> bool:
     return os.environ.get("AGENTSPAN_DRAFT_PR", "true").lower() != "false"
 
 
+def is_review_branch_only() -> bool:
+    return os.environ.get("AGENTSPAN_REVIEW_BRANCH_ONLY", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+
 # ── Workspace Management ──────────────────────────────────────────
 
 _workspaces: list[str] = []
