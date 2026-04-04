@@ -457,6 +457,17 @@ class TestPipelineStructure:
         assert swarm.strategy in (Strategy.SWARM, "swarm")
         assert len(swarm.handoffs) == 2
 
+    def test_coding_loop_subagents_use_fresh_handoff_context(self):
+        from repo_url_issue_pr_agent import build_pipeline
+
+        pipeline = build_pipeline(
+            "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
+        )
+        fixer = pipeline.agents[3].agents[0]
+        reviewer = pipeline.agents[3].agents[1]
+        assert fixer.include_contents == "none"
+        assert reviewer.include_contents == "none"
+
     def test_publisher_has_human_approval_tool(self):
         from repo_url_issue_pr_agent import build_pipeline
 
