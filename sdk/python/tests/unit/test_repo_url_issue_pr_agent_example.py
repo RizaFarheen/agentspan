@@ -515,7 +515,7 @@ class TestPipelineStructure:
         pipeline = build_pipeline(
             "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
         )
-        publisher = pipeline.agents[4]
+        publisher = pipeline.agents[-1]
         tool_names = [tool._tool_def.name for tool in publisher.tools]
         assert "approve_publication" in tool_names
         assert "push_review_branch" in tool_names
@@ -552,7 +552,7 @@ class TestPipelineStructure:
         pipeline = build_pipeline(
             "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
         )
-        publisher = pipeline.agents[4]
+        publisher = pipeline.agents[-1]
         assert "PUBLICATION_BLOCKED" in publisher.instructions
         assert "do not call any tools" in publisher.instructions
         assert "Never answer conversationally" in publisher.instructions
@@ -565,7 +565,7 @@ class TestPipelineStructure:
                 "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
             )
 
-        publisher = pipeline.agents[4]
+        publisher = pipeline.agents[-1]
         assert "REVIEW_BRANCH_PUSHED" in publisher.instructions
         assert "Do not open a PR and do not comment on the issue" in publisher.instructions
         assert "Call push_review_branch() immediately as your first action" in publisher.instructions
@@ -576,7 +576,7 @@ class TestPipelineStructure:
         tool_names = [tool._tool_def.name for tool in publisher.tools]
         assert tool_names == ["push_review_branch"]
 
-    def test_review_branch_mode_tightens_fix_review_loop(self):
+    def test_review_branch_mode_routes_directly_to_fixer_and_publisher(self):
         from repo_url_issue_pr_agent import build_pipeline
 
         with patch.dict(os.environ, {"AGENTSPAN_REVIEW_BRANCH_ONLY": "true"}, clear=True):
@@ -584,18 +584,20 @@ class TestPipelineStructure:
                 "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
             )
 
-        repo_analyst = pipeline.agents[2]
-        fixer = pipeline.agents[3]
-        publisher = pipeline.agents[4]
+        agent_names = [agent.name for agent in pipeline.agents]
+        issue_scout = pipeline.agents[1]
+        fixer = pipeline.agents[2]
+        publisher = pipeline.agents[3]
 
+        assert agent_names == ["repo_intake", "issue_scout", "fixer", "publisher"]
         assert "never try to create it again" in fixer.instructions
         assert "Prefer small Python scripts for code edits" in fixer.instructions
         assert "hand off to reviewer with honest results" in fixer.instructions
-        assert "Keep analysis tight and practical" in repo_analyst.instructions
         assert fixer.name == "fixer"
         assert publisher.name == "publisher"
+        assert all(agent.name != "repo_analyst" for agent in pipeline.agents)
         assert all(agent.name != "coding_review_loop" for agent in pipeline.agents)
-        assert repo_analyst.max_turns == 8
+        assert issue_scout.max_turns == 8
         assert fixer.max_turns == 12
 
     def test_forced_issue_skips_issue_search(self):

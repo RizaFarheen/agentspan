@@ -858,16 +858,9 @@ def build_pipeline(
         if is_review_branch_only()
         else ""
     )
-    review_branch_analysis_note = (
-        "\n\nReview-branch mode rules:\n"
-        "- Keep analysis tight and practical; stop once you can identify the likely file(s), smallest test target, and root-cause hypothesis.\n"
-        "- Prefer one or two focused repo-inspection commands over broad recursive searches.\n"
-        "- Do not spend turns repeating the same search with different shell syntax.\n"
-        if is_review_branch_only()
-        else ""
-    )
     review_branch_fixer_note = (
         "\n\nReview-branch mode rules:\n"
+        "- You may receive TARGET_ISSUE_READY directly instead of IMPLEMENTATION_DOSSIER. If so, do a quick local analysis yourself before editing.\n"
         "- The issue branch from IMPLEMENTATION_DOSSIER already exists. Use `git checkout <BRANCH>` if needed, but never try to create it again.\n"
         "- Prefer targeted tests from TEST_STRATEGY before running the full TEST_CMD.\n"
         "- Prefer small Python scripts for code edits over fragile `sed`/`xargs` one-liners when changing source or tests.\n"
@@ -1034,7 +1027,7 @@ SUCCESS_CRITERIA: <observable acceptance criteria>
     repo_analyst = Agent(
         name="repo_analyst",
         model=model,
-        instructions=f"""\
+        instructions="""\
 You are doing a deep implementation analysis before any edits happen.
 
 You receive TARGET_ISSUE_READY with the cloned repository path.
@@ -1057,7 +1050,6 @@ Execution rules:
 - The execute_code tool input must be executable code only: no prose, no markdown fences, no labels like WORKDIR:, run:, content:, or def:.
 - Do not start bash snippets with variable-assignment lines like WORKDIR=...; inline the real path directly in commands.
 - Default to bash for repo inspection. Use python only for actual Python scripts.
-{review_branch_analysis_note}
 
 Output EXACTLY:
 
@@ -1087,7 +1079,7 @@ RISK_NOTES: <what could easily go wrong>
         instructions=f"""\
 You are implementing the issue fix.
 
-You receive IMPLEMENTATION_DOSSIER with repo context, target files, and a test strategy.
+You receive IMPLEMENTATION_DOSSIER or TARGET_ISSUE_READY with repo context, branch details, and available validation commands.
 
 Rules:
 1. Make the smallest correct change that fully resolves the issue.
@@ -1322,7 +1314,7 @@ ISSUE_COMMENT: <status>
         )
 
     if is_review_branch_only():
-        return repo_intake >> issue_scout >> repo_analyst >> fixer >> publisher
+        return repo_intake >> issue_scout >> fixer >> publisher
 
     return repo_intake >> issue_scout >> repo_analyst >> coding_review_loop >> publisher
 
