@@ -1015,7 +1015,7 @@ SUCCESS_CRITERIA: <observable acceptance criteria>
             if issue_number
             else [search_repo_issues, read_issue_detail, create_issue_branch]
         ),
-        local_code_execution=True,
+        local_code_execution=not bool(issue_number),
         allowed_languages=["python", "bash", "javascript", "typescript"],
         allowed_commands=code_commands,
         gate=TextGate("NO_CANDIDATE_ISSUES"),

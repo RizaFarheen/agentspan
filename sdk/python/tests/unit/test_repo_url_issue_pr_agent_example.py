@@ -431,7 +431,7 @@ class TestPipelineStructure:
         from repo_url_issue_pr_agent import build_pipeline
 
         pipeline = build_pipeline(
-            "https://github.com/pytest-dev/pytest-asyncio", 1334, ""
+            "https://github.com/pytest-dev/pytest-asyncio", 0, ""
         )
         issue_scout = pipeline.agents[1]
         assert issue_scout.code_execution_config is not None
@@ -612,6 +612,7 @@ class TestPipelineStructure:
         assert "search_repo_issues" not in tool_names
         assert "read_issue_detail" in tool_names
         assert "create_issue_branch" in tool_names
+        assert "issue_scout_execute_code" not in tool_names
         assert "Do not call search_repo_issues" in issue_scout.instructions
         assert "Call read_issue_detail exactly once" in issue_scout.instructions
         assert issue_scout.max_turns == 8
