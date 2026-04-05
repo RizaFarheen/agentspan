@@ -206,6 +206,11 @@ def fork_branch_url(login: str, repo: str, branch: str) -> str:
     return f"https://github.com/{login}/{repo_name}/tree/{quote(branch, safe='')}"
 
 
+def fork_commit_url(login: str, repo: str, commit_sha: str) -> str:
+    repo_name = repo.split("/", 1)[1]
+    return f"https://github.com/{login}/{repo_name}/commit/{quote(commit_sha, safe='')}"
+
+
 def current_github_login() -> str:
     result = run_github_cmd(["gh", "api", "user", "--jq", ".login"], timeout=15)
     if result.returncode != 0:
@@ -699,10 +704,22 @@ def push_review_branch(
     if push.returncode != 0:
         return {"error": f"Push failed: {push.stderr[:500]}"}
 
+    head = run_cmd(["git", "-C", workdir, "rev-parse", "HEAD"], timeout=15)
+    commit_sha = (head.stdout or "").strip()
+    if head.returncode != 0 or not commit_sha:
+        return {
+            "error": "Review branch pushed, but current commit SHA could not be determined",
+            "branch": branch,
+            "branch_url": fork_branch_url(login, repo, branch),
+            "login": login,
+        }
+
     return {
         "status": "pushed",
         "branch": branch,
         "branch_url": fork_branch_url(login, repo, branch),
+        "commit_sha": commit_sha,
+        "commit_url": fork_commit_url(login, repo, commit_sha),
         "login": login,
     }
 
@@ -1197,8 +1214,10 @@ REASON: review-branch mode could not recover a reviewable branch from the latest
 
 If review-branch mode is ON and you successfully push the branch, output EXACTLY:
 REVIEW_BRANCH_PUSHED
-BRANCH_URL: <url or dry-run summary>
 BRANCH: <branch name>
+BRANCH_URL: <url or dry-run summary>
+COMMIT_SHA: <full sha>
+COMMIT_URL: <url>
 REVIEW_STATUS: approved|blocked
 REASON: <approved for publication or concise reviewer feedback summary>
 

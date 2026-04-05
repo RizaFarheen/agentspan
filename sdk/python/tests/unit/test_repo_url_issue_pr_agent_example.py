@@ -303,7 +303,16 @@ class TestBranchAndPublicationTools:
                                     stdout="agentspan/issue-1334-test\n",
                                     stderr="",
                                 ),
-                                MagicMock(returncode=0, stdout="", stderr=""),
+                                MagicMock(
+                                    returncode=0,
+                                    stdout="",
+                                    stderr="",
+                                ),
+                                MagicMock(
+                                    returncode=0,
+                                    stdout="0123456789abcdef0123456789abcdef01234567\n",
+                                    stderr="",
+                                ),
                             ]
                             result = push_review_branch.__wrapped__()
 
@@ -311,6 +320,10 @@ class TestBranchAndPublicationTools:
         assert result["status"] == "pushed"
         assert result["branch"] == "agentspan/issue-1334-test"
         assert result["branch_url"].endswith("/agentspan/pytest-asyncio/tree/agentspan%2Fissue-1334-test")
+        assert result["commit_sha"] == "0123456789abcdef0123456789abcdef01234567"
+        assert result["commit_url"].endswith(
+            "/agentspan/pytest-asyncio/commit/0123456789abcdef0123456789abcdef01234567"
+        )
 
     def test_push_review_branch_declares_github_token(self):
         from repo_url_issue_pr_agent import push_review_branch
@@ -556,3 +569,5 @@ class TestPipelineStructure:
         assert "REVIEW_BRANCH_PUSHED" in publisher.instructions
         assert "do not open a PR and do not comment on the issue" in publisher.instructions
         assert "push_review_branch directly" in publisher.instructions
+        assert "COMMIT_SHA:" in publisher.instructions
+        assert "COMMIT_URL:" in publisher.instructions
