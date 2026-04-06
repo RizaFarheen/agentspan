@@ -61,17 +61,17 @@ TASKS = [
 
 with AgentRuntime() as runtime:
     handle = runtime.start(agent, "Begin. Wait for your first instruction.")
-    print(f"Agent started: {handle.workflow_id}\n")
+    print(f"Agent started: {handle.execution_id}\n")
 
     # Push messages from a background thread while we stream events on the main thread
     def sender():
         for task in TASKS:
             time.sleep(3)
             print(f"\n  [caller] sending -> {task!r}")
-            runtime.send_message(handle.workflow_id, {"task": task})
+            runtime.send_message(handle.execution_id, {"task": task})
         # Give the agent time to finish the last task then cancel
         time.sleep(10)
-        runtime.cancel(handle.workflow_id, reason="example complete")
+        runtime.cancel(handle.execution_id, reason="example complete")
 
     threading.Thread(target=sender, daemon=True).start()
 

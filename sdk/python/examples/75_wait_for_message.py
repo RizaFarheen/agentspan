@@ -55,15 +55,15 @@ agent = Agent(
 
 with AgentRuntime() as runtime:
     handle = runtime.start(agent, "Start listening for messages.")
-    print(f"Agent started: {handle.workflow_id}")
+    print(f"Agent started: {handle.execution_id}")
     print("Sending messages...\n")
 
     for msg in ["summarize quarterly report", "draft release notes", "check system health"]:
         time.sleep(2)
         print(f"  -> sending: {msg!r}")
-        runtime.send_message(handle.workflow_id, {"task": msg})
+        runtime.send_message(handle.execution_id, {"task": msg})
 
     # Let the agent process all messages before exiting
     time.sleep(10)
-    runtime.cancel(handle.workflow_id)
+    runtime.cancel(handle.execution_id)
     print("\nDone.")

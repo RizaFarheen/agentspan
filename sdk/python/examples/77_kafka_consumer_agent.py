@@ -62,7 +62,7 @@ agent = Agent(
 
 with AgentRuntime() as runtime:
     handle = runtime.start(agent, "Start consuming messages from Kafka.")
-    print(f"Agent started: {handle.workflow_id}")
+    print(f"Agent started: {handle.execution_id}")
 
     consumer = Consumer(
         {
@@ -82,7 +82,7 @@ with AgentRuntime() as runtime:
                     continue
                 raise RuntimeError(f"Kafka error: {msg.error()}")
             runtime.send_message(
-                handle.workflow_id,
+                handle.execution_id,
                 {
                     "topic": msg.topic(),
                     "partition": msg.partition(),
