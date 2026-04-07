@@ -712,6 +712,7 @@ function _findSubgraphViaRuntime(
 
   // Temporarily patch the shared Pregel prototype invoke
   pregel.proto.invoke = function (this: unknown, input: unknown) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- intentional: capturing call-site receiver
     captured = this;
     throw new _CapturedSubgraphCall(input);
   };

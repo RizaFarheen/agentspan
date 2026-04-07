@@ -17,7 +17,7 @@ export default tseslint.config(
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "@typescript-eslint/no-unsafe-function-type": "warn",
-      "@typescript-eslint/no-this-alias": "warn",
+      "@typescript-eslint/no-this-alias": "error",
       "@typescript-eslint/no-require-imports": "error",
       "no-prototype-builtins": "error",
       "no-useless-assignment": "error",
