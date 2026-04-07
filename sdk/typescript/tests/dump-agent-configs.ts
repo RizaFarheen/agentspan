@@ -57,7 +57,7 @@ function dump_01() {
 
 function dump_02() {
   const getWeather = tool(
-    async (args: { city: string }) => {
+    async (_args: { city: string }) => {
       return {};
     },
     {
@@ -70,7 +70,7 @@ function dump_02() {
   );
 
   const calculate = tool(
-    async (args: { expression: string }) => {
+    async (_args: { expression: string }) => {
       return {};
     },
     {
@@ -83,7 +83,7 @@ function dump_02() {
   );
 
   const sendEmail = tool(
-    async (args: { to: string; subject: string; body: string }) => {
+    async (_args: { to: string; subject: string; body: string }) => {
       return {};
     },
     {
@@ -120,7 +120,7 @@ function dump_03() {
   });
 
   const getWeather = tool(
-    async (args: { city: string }) => {
+    async (_args: { city: string }) => {
       return {};
     },
     {
@@ -146,7 +146,7 @@ function dump_03() {
 
 function dump_05() {
   const checkBalance = tool(
-    async (args: { accountId: string }) => {
+    async (_args: { accountId: string }) => {
       return {};
     },
     {
@@ -159,7 +159,7 @@ function dump_05() {
   );
 
   const lookupOrder = tool(
-    async (args: { orderId: string }) => {
+    async (_args: { orderId: string }) => {
       return {};
     },
     {
@@ -172,7 +172,7 @@ function dump_05() {
   );
 
   const getPricing = tool(
-    async (args: { product: string }) => {
+    async (_args: { product: string }) => {
       return {};
     },
     {
@@ -321,7 +321,7 @@ function dump_08() {
 
 function dump_10() {
   const getOrderStatus = tool(
-    async (args: { orderId: string }) => {
+    async (_args: { orderId: string }) => {
       return {};
     },
     {
@@ -334,7 +334,7 @@ function dump_10() {
   );
 
   const getCustomerInfo = tool(
-    async (args: { customerId: string }) => {
+    async (_args: { customerId: string }) => {
       return {};
     },
     {
@@ -499,7 +499,7 @@ function dump_17() {
 
 function dump_19() {
   const search = tool(
-    async (args: { query: string }) => {
+    async (_args: { query: string }) => {
       return "";
     },
     {
@@ -579,7 +579,7 @@ function dump_21() {
   });
 
   const getUserProfile = tool(
-    async (args: { user_id: string }) => {
+    async (_args: { user_id: string }) => {
       return {};
     },
     {
@@ -642,7 +642,7 @@ function dump_22() {
 
 function dump_45() {
   const searchKnowledgeBase = tool(
-    async (args: { query: string }) => {
+    async (_args: { query: string }) => {
       return {};
     },
     {
@@ -655,7 +655,7 @@ function dump_45() {
   );
 
   const calculate = tool(
-    async (args: { expression: string }) => {
+    async (_args: { expression: string }) => {
       return {};
     },
     {
@@ -701,7 +701,7 @@ function dump_47() {
   };
 
   const getFacts = tool(
-    async (args: { topic: string }) => {
+    async (_args: { topic: string }) => {
       return {};
     },
     {

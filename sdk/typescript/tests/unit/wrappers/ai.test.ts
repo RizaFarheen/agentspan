@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { extractModelString, mapFinishReason } from "../../../src/wrappers/ai.js";
 
 describe("Vercel AI SDK wrapper", () => {
@@ -138,7 +138,7 @@ describe("Vercel AI SDK wrapper", () => {
           weather: {
             description: "Get weather",
             parameters: { type: "object", properties: { city: { type: "string" } } },
-            execute: async (args: { city: string }) => ({ temp: 72 }),
+            execute: async (_args: { city: string }) => ({ temp: 72 }),
           },
         },
         system: "You are a helpful assistant.",

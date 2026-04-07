@@ -317,7 +317,7 @@ describe("@Guardrail decorator", () => {
   it("applies defaults when no options are provided to @Guardrail()", () => {
     class Defaults {
       @Guardrail()
-      myGuard(content: string): GuardrailResult {
+      myGuard(_content: string): GuardrailResult {
         return { passed: true };
       }
     }

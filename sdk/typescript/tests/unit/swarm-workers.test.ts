@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { Agent } from "../../src/agent.js";
 import { AgentRuntime } from "../../src/runtime.js";
 import { OnToolResult, OnTextMention, OnCondition } from "../../src/handoff.js";

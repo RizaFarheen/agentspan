@@ -239,7 +239,7 @@ describe("AgentRuntime", () => {
     it("constructs SSE URL as /agent/stream/{executionId}", async () => {
       const fetchCalls: string[] = [];
 
-      global.fetch = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      global.fetch = vi.fn().mockImplementation(async (url: string, _init?: RequestInit) => {
         fetchCalls.push(url);
 
         if (url.includes("/agent/start")) {

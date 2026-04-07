@@ -89,7 +89,7 @@ describe("LangChain wrapper", () => {
         model = "gpt-4o-mini";
       }
       const llm = new ChatOpenAI();
-      const myFunc = async (input: { input: string }) => ({ output: "result" });
+      const myFunc = async (_input: { input: string }) => ({ output: "result" });
       const tools = [{ name: "search", description: "Search", func: async () => "results" }];
 
       const runnable = createRunnableWithMetadata({
@@ -113,7 +113,7 @@ describe("LangChain wrapper", () => {
 
   describe("serializeLangChain with _agentspan metadata", () => {
     it("uses wrapper metadata for serialization when present", () => {
-      const searchFunc = async (args: Record<string, unknown>) => "results";
+      const searchFunc = async (_args: Record<string, unknown>) => "results";
 
       const mockExecutor = {
         invoke: () => {},

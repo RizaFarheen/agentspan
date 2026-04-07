@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractModelFromLLM, createReactAgent } from "../../../src/wrappers/langgraph.js";
+import { extractModelFromLLM } from "../../../src/wrappers/langgraph.js";
 import { serializeLangGraph } from "../../../src/frameworks/langgraph-serializer.js";
 
 describe("LangGraph wrapper", () => {
@@ -125,8 +125,8 @@ describe("LangGraph wrapper", () => {
 
   describe("serializeLangGraph with _agentspan metadata", () => {
     it("uses wrapper metadata for serialization when present", () => {
-      const searchFunc = async (args: Record<string, unknown>) => "results";
-      const calcFunc = async (args: Record<string, unknown>) => "42";
+      const searchFunc = async (_args: Record<string, unknown>) => "results";
+      const calcFunc = async (_args: Record<string, unknown>) => "42";
 
       const mockGraph = {
         invoke: () => {},

@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { serializeFrameworkAgent } from "../../../src/frameworks/serializer.js";
-import type { WorkerInfo } from "../../../src/frameworks/serializer.js";
 
 describe("serializeFrameworkAgent", () => {
   describe("OpenAI Agent shape", () => {
@@ -388,7 +387,7 @@ describe("serializeFrameworkAgent", () => {
         tools: [agentTool],
       };
 
-      const [config, workers] = serializeFrameworkAgent(mockAgent);
+      const [config, _workers] = serializeFrameworkAgent(mockAgent);
       const tools = config.tools as unknown[];
       expect(tools).toHaveLength(1);
       const tool = tools[0] as Record<string, unknown>;
@@ -403,13 +402,13 @@ describe("serializeFrameworkAgent", () => {
   describe("edge cases", () => {
     it("handles null input", () => {
       // null should produce a simple result
-      const [config, workers] = serializeFrameworkAgent(null);
+      const [_config, workers] = serializeFrameworkAgent(null);
       // It gets wrapped since null is not an object
       expect(workers).toHaveLength(0);
     });
 
     it("handles string input", () => {
-      const [config, workers] = serializeFrameworkAgent("just a string");
+      const [_config, workers] = serializeFrameworkAgent("just a string");
       expect(workers).toHaveLength(0);
     });
 

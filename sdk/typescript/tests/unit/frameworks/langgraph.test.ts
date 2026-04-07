@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { serializeLangGraph } from "../../../src/frameworks/langgraph-serializer.js";
-import { ConfigurationError } from "../../../src/errors.js";
 
 describe("serializeLangGraph", () => {
   describe("full extraction (createReactAgent-style)", () => {
@@ -156,11 +155,11 @@ describe("serializeLangGraph", () => {
 
   describe("graph-structure (custom StateGraph)", () => {
     it("extracts nodes and edges from a custom graph", () => {
-      function planStep(state: any) {
-        return state;
+      function planStep(_state: any) {
+        return _state;
       }
-      function executeStep(state: any) {
-        return state;
+      function executeStep(_state: any) {
+        return _state;
       }
 
       const mockGraph = {
@@ -213,10 +212,10 @@ describe("serializeLangGraph", () => {
     });
 
     it("extracts conditional edges with router workers", () => {
-      function processStep(state: any) {
-        return state;
+      function processStep(_state: any) {
+        return _state;
       }
-      function routeDecision(state: any) {
+      function routeDecision(_state: any) {
         return "approve";
       }
 
@@ -269,12 +268,11 @@ describe("serializeLangGraph", () => {
       const mockLLM = {
         model: "gpt-4o-mini",
         constructor: { name: "ChatOpenAI" },
-        invoke: async (messages: any[]) => ({ content: "mock" }),
+        invoke: async (_messages: any[]) => ({ content: "mock" }),
       };
 
       // Use a function whose toString() contains '.invoke(' and Message patterns
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      function agentNode(state: any) {
+      function agentNode(_state: any) {
         // This references llm.invoke() and SystemMessage — triggers LLM detection
         return mockLLM.invoke([{ role: "system", content: "test" }]);
       }
@@ -327,10 +325,10 @@ describe("serializeLangGraph", () => {
       const mockLLM = {
         model: "gpt-4o-mini",
         constructor: { name: "ChatOpenAI" },
-        invoke: async (messages: any[]) => ({ content: "real response" }),
+        invoke: async (_messages: any[]) => ({ content: "real response" }),
       };
 
-      function debateNode(state: any) {
+      function debateNode(_state: any) {
         return mockLLM.invoke([{ role: "system", content: "You are a debater" }]);
       }
 
@@ -397,7 +395,7 @@ describe("serializeLangGraph", () => {
       const closureLLM = new MockChatModel({});
 
       // Node function captures closureLLM via closure — just like user code
-      function proNode(state: any) {
+      function proNode(_state: any) {
         return closureLLM.invoke([{ role: "system", content: "debate prompt" }]);
       }
 
@@ -434,7 +432,7 @@ describe("serializeLangGraph", () => {
     it("prep worker captures messages via fetch interception when prototype patching fails", async () => {
       // Simulate a closure-captured LLM that makes a real fetch call.
       // The fetch interceptor should capture messages from the HTTP request body.
-      const origFetch = globalThis.fetch;
+      const _origFetch = globalThis.fetch;
 
       // Create a fake LLM that calls fetch (simulating OpenAI SDK behavior)
       function makeFakeLLM() {
@@ -554,10 +552,10 @@ describe("serializeLangGraph", () => {
       const mockLLM = {
         model: "gpt-4o-mini",
         constructor: { name: "ChatOpenAI" },
-        invoke: async (messages: any[]) => ({ content: "mock" }),
+        invoke: async (_messages: any[]) => ({ content: "mock" }),
       };
 
-      function llmNode(state: any) {
+      function llmNode(_state: any) {
         return mockLLM.invoke([{ role: "system", content: "prompt" }]);
       }
 
