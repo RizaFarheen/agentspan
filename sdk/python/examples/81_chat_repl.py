@@ -51,10 +51,14 @@ Requirements:
 
 import argparse
 import json
+import os
 import shutil
 import tempfile
 import time
 from pathlib import Path
+
+# Keep conductor worker startup logs silent by default; set AGENTSPAN_LOG_LEVEL=INFO to see them.
+os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
 
 from settings import settings
 
@@ -254,13 +258,9 @@ try:
             print(f"Agent started: {execution_id}")
             print(f"Domain (run_id): {handle.run_id}")
             print(f"Session saved to {args.session_file}")
-            time.sleep(4)
 
         print("\n" + "=" * 60)
-        if args.resume:
-            print("Chat REPL (resumed) — type 'help' for commands, 'quit' to exit")
-        else:
-            print("Chat REPL — type 'help' for commands, 'quit' to exit")
+        print("Chat REPL — type 'help' for commands, 'quit' to exit")
         print("=" * 60 + "\n")
 
         while True:
