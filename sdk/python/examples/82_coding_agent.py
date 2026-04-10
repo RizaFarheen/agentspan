@@ -46,6 +46,197 @@ _MAX_SHELL_DISPLAY = 2_000    # truncate shell output shown in the terminal
 
 
 # ---------------------------------------------------------------------------
+# Terminal display
+# ---------------------------------------------------------------------------
+
+_HELP_TEXT = """
+Commands:
+  <message>            Send a task to the coding agent
+  /signal <text>       Inject a persistent signal into agent context mid-task
+  /signal              Clear the current signal
+  /stop                Gracefully stop the agent (current task finishes, COMPLETED)
+  /cancel              Immediately terminate the agent (TERMINATED)
+  /disconnect          Exit without stopping — resume later with --resume
+  /cwd                 Show the current working directory
+  /timeout <secs>      Change shell command timeout (default: 30s)
+  /status              Show session ID and current settings
+  /help                Show this message
+  quit / exit          Gracefully stop the agent and exit
+
+Resume a previous session:
+  python 82_coding_agent.py --resume
+
+Tip: use /signal to redirect the agent mid-task without interrupting it.
+     e.g.  /signal focus on fixing the failing test, skip the refactor
+"""
+
+
+def _display_event(event) -> None:
+    """Print a single stream event to the terminal."""
+    etype = event.type
+    args = event.args or {}
+
+    if etype == EventType.TOOL_CALL:
+        tool_name = event.tool_name or ""
+
+        if tool_name == "reply_to_user":
+            msg = args.get("message", "")
+            print(f"\nAgent: {msg}\n")
+
+        elif tool_name == "wait_for_message":
+            pass  # silent — WAITING event handles the prompt
+
+        elif tool_name == "run_shell":
+            print(f"  $ {args.get('command', '')}")
+
+        elif tool_name == "read_file":
+            print(f"  [read]  {args.get('path', '')}")
+
+        elif tool_name == "write_file":
+            content = args.get("content", "")
+            print(f"  [write] {args.get('path', '')}  ({len(content):,} bytes)")
+
+        elif tool_name == "list_dir":
+            print(f"  [ls]    {args.get('path', '.')}")
+
+        elif tool_name == "find_files":
+            print(f"  [find]  {args.get('pattern', '')}  in {args.get('path', '.')}")
+
+        elif tool_name == "search_in_files":
+            print(f"  [grep]  {args.get('regex', '')}  in {args.get('path', '.')}")
+
+        else:
+            print(f"  [{tool_name}] {args}")
+
+    elif etype == EventType.TOOL_RESULT:
+        tool_name = event.tool_name or ""
+        # Show shell output inline so the user can follow along.
+        if tool_name == "run_shell" and event.result:
+            raw = str(event.result)
+            # Strip the "[exit N]" line we prepend — show only the command output.
+            output_lines = [ln for ln in raw.splitlines() if not ln.startswith("[exit ")]
+            display = "\n".join(output_lines)
+            if len(display) > _MAX_SHELL_DISPLAY:
+                display = display[:_MAX_SHELL_DISPLAY] + "\n  ... (truncated)"
+            if display.strip():
+                for line in display.splitlines():
+                    print(f"  {line}")
+
+    elif etype == EventType.ERROR:
+        print(f"\n[ERROR] {event.content}\n")
+
+    # THINKING, HANDOFF, GUARDRAIL_* events are suppressed.
+
+
+# ---------------------------------------------------------------------------
+# REPL loop
+# ---------------------------------------------------------------------------
+
+
+def _run_repl(
+    runtime: AgentRuntime,
+    handle,
+    execution_id: str,
+    working_dir: str,
+    shell_timeout: int,
+) -> None:
+    """Stream events → display → wait for WAITING → prompt → send → repeat."""
+
+    # Mutable settings that REPL commands can change at runtime.
+    _shell_timeout = [shell_timeout]
+
+    print(f"\n{'=' * 62}")
+    print("Coding Agent REPL")
+    print(f"  Working dir : {working_dir}")
+    print(f"  Session ID  : {execution_id}")
+    print(f"  Type /help for commands, 'quit' to stop and exit")
+    print(f"{'=' * 62}\n")
+
+    while True:
+        # Stream until the agent calls wait_for_message (WAITING event).
+        for event in handle.stream():
+            if event.type == EventType.WAITING:
+                break
+            if event.type == EventType.DONE:
+                output = event.output
+                if output:
+                    print(f"\nAgent: {output}\n")
+                print("Session ended.")
+                return
+            _display_event(event)
+
+        # Agent is in WAITING state — get next user input.
+        try:
+            raw = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            continue
+
+        if not raw:
+            continue
+
+        lower = raw.lower()
+
+        if lower in ("quit", "exit"):
+            print("Stopping agent...")
+            handle.stop()
+            handle.join(timeout=30)
+            return
+
+        if lower == "/disconnect":
+            print("Disconnected. Resume with: python 82_coding_agent.py --resume")
+            return
+
+        if lower in ("/stop", "stop"):
+            print("Stopping agent gracefully...")
+            handle.stop()
+            handle.join(timeout=30)
+            return
+
+        if lower == "/cancel":
+            print("Cancelling agent immediately...")
+            handle.cancel()
+            return
+
+        if lower in ("/help", "help"):
+            print(_HELP_TEXT)
+            continue
+
+        if lower == "/cwd":
+            print(f"  {working_dir}")
+            continue
+
+        if lower == "/status":
+            print(f"  execution_id  : {execution_id}")
+            print(f"  working_dir   : {working_dir}")
+            print(f"  shell_timeout : {_shell_timeout[0]}s")
+            continue
+
+        if lower.startswith("/timeout "):
+            try:
+                secs = int(raw[9:].strip())
+                _shell_timeout[0] = secs
+                print(f"  Shell timeout → {secs}s")
+            except ValueError:
+                print("  Usage: /timeout <seconds>")
+            continue
+
+        if lower.startswith("/signal "):
+            msg = raw[8:].strip()
+            runtime.signal(execution_id, msg)
+            print(f"  Signal injected: {msg!r}")
+            continue
+
+        if lower == "/signal":
+            runtime.signal(execution_id, "")
+            print("  Signal cleared.")
+            continue
+
+        # Normal user message.
+        runtime.send_message(execution_id, {"text": raw})
+
+
+# ---------------------------------------------------------------------------
 # Agent builder
 # ---------------------------------------------------------------------------
 
@@ -234,3 +425,90 @@ Repeat indefinitely:
 5. Return to step 1 immediately.
 """,
     )
+
+
+# ---------------------------------------------------------------------------
+# CLI + main
+# ---------------------------------------------------------------------------
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Coding Agent REPL — coding assistant on Conductor.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume the last session from the session file.",
+    )
+    parser.add_argument(
+        "--session-file",
+        type=Path,
+        default=SESSION_FILE,
+        metavar="PATH",
+        help=f"Session file path (default: {SESSION_FILE}).",
+    )
+    parser.add_argument(
+        "--cwd",
+        type=str,
+        default=None,
+        metavar="DIR",
+        help="Working directory for the agent (default: current directory).",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=_DEFAULT_SHELL_TIMEOUT,
+        metavar="SECS",
+        help=f"Shell command timeout in seconds (default: {_DEFAULT_SHELL_TIMEOUT}).",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = _parse_args()
+    working_dir = os.path.abspath(args.cwd or os.getcwd())
+    agent = build_agent(working_dir, shell_timeout=args.timeout)
+
+    # Track whether a graceful stop has been requested so a second Ctrl+C
+    # force-exits without waiting.
+    _stop_pending = [False]
+
+    with AgentRuntime() as runtime:
+        if args.resume:
+            if not args.session_file.exists():
+                print(f"No session file found at {args.session_file}.")
+                print("Start a new session first (without --resume).")
+                raise SystemExit(1)
+            saved_eid = args.session_file.read_text().strip()
+            print(f"Resuming session: {saved_eid}")
+            handle = runtime.resume(saved_eid, agent)
+            execution_id = handle.execution_id
+        else:
+            handle = runtime.start(
+                agent,
+                f"Begin. Working directory: {working_dir}. Wait for the user's first task.",
+            )
+            execution_id = handle.execution_id
+            args.session_file.write_text(execution_id)
+            print(f"Session saved to {args.session_file}")
+
+        def _sigint(sig, frame):
+            if _stop_pending[0]:
+                print("\nForce exit.")
+                raise SystemExit(1)
+            _stop_pending[0] = True
+            print(
+                "\n\nCtrl+C received — stopping agent gracefully "
+                "(Ctrl+C again to force exit)..."
+            )
+            handle.stop()
+
+        signal.signal(signal.SIGINT, _sigint)
+
+        _run_repl(runtime, handle, execution_id, working_dir, args.timeout)
+
+
+if __name__ == "__main__":
+    main()
