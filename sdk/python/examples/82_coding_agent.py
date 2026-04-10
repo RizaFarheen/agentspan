@@ -183,7 +183,10 @@ def _run_repl(
             while True:
                 try:
                     raw = input("You: ").strip()
-                except (EOFError, KeyboardInterrupt):
+                except EOFError:
+                    print()
+                    return
+                except KeyboardInterrupt:
                     print()
                     continue
 
