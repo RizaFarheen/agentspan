@@ -25,8 +25,10 @@ Requirements:
 
 import argparse
 import os
+import queue
 import signal
 import subprocess
+import threading
 from pathlib import Path
 
 os.environ.setdefault("AGENTSPAN_LOG_LEVEL", "WARNING")
@@ -140,10 +142,21 @@ def _run_repl(
     working_dir: str,
     shell_timeout: int,
 ) -> None:
-    """Stream events → display → wait for WAITING → prompt → send → repeat."""
+    """Stream events → display → wait for WAITING → prompt → send → repeat.
+
+    Uses a single long-lived stream (background thread) to avoid the SSE
+    replay-on-reconnect problem: if handle.stream() is called more than once,
+    the server replays all buffered events from the beginning (no Last-Event-ID
+    on a fresh connection), causing the WAITING event to fire again immediately
+    and swallowing all subsequent TOOL_CALL output.
+
+    Pattern: stream thread fills a queue; main thread drains the queue and
+    blocks on input() only when WAITING arrives.
+    """
 
     # Mutable settings that REPL commands can change at runtime.
     _shell_timeout = [shell_timeout]
+    _event_queue: "queue.Queue" = queue.Queue()
 
     print(f"\n{'=' * 62}")
     print("Coding Agent REPL")
@@ -152,88 +165,101 @@ def _run_repl(
     print(f"  Type /help for commands, 'quit' to stop and exit")
     print(f"{'=' * 62}\n")
 
-    while True:
-        # Stream until the agent calls wait_for_message (WAITING event).
+    # ── Stream thread: one connection, runs until DONE/ERROR ─────────
+    def _stream_events() -> None:
         for event in handle.stream():
-            if event.type == EventType.WAITING:
+            _event_queue.put(event)
+
+    threading.Thread(target=_stream_events, daemon=True).start()
+
+    # ── Main thread: process events; block on input() at WAITING ─────
+    while True:
+        event = _event_queue.get()
+
+        if event.type == EventType.WAITING:
+            # Agent is blocked on wait_for_message — prompt user in a
+            # tight inner loop so commands that don't send a message
+            # (e.g. /help, /cwd) re-prompt without waiting for more events.
+            while True:
+                try:
+                    raw = input("You: ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print()
+                    continue
+
+                if not raw:
+                    continue
+
+                lower = raw.lower()
+
+                if lower in ("quit", "exit"):
+                    print("Stopping agent...")
+                    handle.stop()
+                    handle.join(timeout=30)
+                    return
+
+                if lower == "/disconnect":
+                    print("Disconnected. Resume with: python 82_coding_agent.py --resume")
+                    return
+
+                if lower in ("/stop", "stop"):
+                    print("Stopping agent gracefully...")
+                    handle.stop()
+                    handle.join(timeout=30)
+                    return
+
+                if lower == "/cancel":
+                    print("Cancelling agent immediately...")
+                    handle.cancel()
+                    return
+
+                if lower in ("/help", "help"):
+                    print(_HELP_TEXT)
+                    continue
+
+                if lower == "/cwd":
+                    print(f"  {working_dir}")
+                    continue
+
+                if lower == "/status":
+                    print(f"  execution_id  : {execution_id}")
+                    print(f"  working_dir   : {working_dir}")
+                    print(f"  shell_timeout : {_shell_timeout[0]}s")
+                    continue
+
+                if lower.startswith("/timeout "):
+                    try:
+                        secs = int(raw[9:].strip())
+                        _shell_timeout[0] = secs
+                        print(f"  Shell timeout → {secs}s")
+                    except ValueError:
+                        print("  Usage: /timeout <seconds>")
+                    continue
+
+                if lower.startswith("/signal "):
+                    msg = raw[8:].strip()
+                    runtime.signal(execution_id, msg)
+                    print(f"  Signal injected: {msg!r}")
+                    continue
+
+                if lower == "/signal":
+                    runtime.signal(execution_id, "")
+                    print("  Signal cleared.")
+                    continue
+
+                # Normal message → send and break inner loop.
+                runtime.send_message(execution_id, {"text": raw})
                 break
-            if event.type == EventType.DONE:
-                output = event.output
-                if output:
-                    print(f"\nAgent: {output}\n")
-                print("Session ended.")
-                return
+
+        elif event.type == EventType.DONE:
+            output = event.output
+            if output:
+                print(f"\nAgent: {output}\n")
+            print("Session ended.")
+            return
+
+        else:
             _display_event(event)
-
-        # Agent is in WAITING state — get next user input.
-        try:
-            raw = input("You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            continue
-
-        if not raw:
-            continue
-
-        lower = raw.lower()
-
-        if lower in ("quit", "exit"):
-            print("Stopping agent...")
-            handle.stop()
-            handle.join(timeout=30)
-            return
-
-        if lower == "/disconnect":
-            print("Disconnected. Resume with: python 82_coding_agent.py --resume")
-            return
-
-        if lower in ("/stop", "stop"):
-            print("Stopping agent gracefully...")
-            handle.stop()
-            handle.join(timeout=30)
-            return
-
-        if lower == "/cancel":
-            print("Cancelling agent immediately...")
-            handle.cancel()
-            return
-
-        if lower in ("/help", "help"):
-            print(_HELP_TEXT)
-            continue
-
-        if lower == "/cwd":
-            print(f"  {working_dir}")
-            continue
-
-        if lower == "/status":
-            print(f"  execution_id  : {execution_id}")
-            print(f"  working_dir   : {working_dir}")
-            print(f"  shell_timeout : {_shell_timeout[0]}s")
-            continue
-
-        if lower.startswith("/timeout "):
-            try:
-                secs = int(raw[9:].strip())
-                _shell_timeout[0] = secs
-                print(f"  Shell timeout → {secs}s")
-            except ValueError:
-                print("  Usage: /timeout <seconds>")
-            continue
-
-        if lower.startswith("/signal "):
-            msg = raw[8:].strip()
-            runtime.signal(execution_id, msg)
-            print(f"  Signal injected: {msg!r}")
-            continue
-
-        if lower == "/signal":
-            runtime.signal(execution_id, "")
-            print("  Signal cleared.")
-            continue
-
-        # Normal user message.
-        runtime.send_message(execution_id, {"text": raw})
 
 
 # ---------------------------------------------------------------------------
