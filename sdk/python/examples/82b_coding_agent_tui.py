@@ -455,10 +455,15 @@ def _run_tui_repl(
 
     # ── Event consumer thread ──────────────────────────────────────
     def _consume_events():
-        while not _stop_requested[0]:
+        while True:
             try:
-                event = _event_queue.get(timeout=0.5)
+                event = _event_queue.get(timeout=1.0)
             except queue.Empty:
+                # After stop, if no events arrive within 1s, exit the app.
+                if _stop_requested[0]:
+                    if app.is_running:
+                        app.exit()
+                    return
                 continue
 
             if event.type == EventType.WAITING:
